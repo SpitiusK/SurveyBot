@@ -20,6 +20,7 @@ public class SurveyCommandHandler : ICommandHandler
     private readonly ISurveyRepository _surveyRepository;
     private readonly IResponseRepository _responseRepository;
     private readonly IConversationStateManager _stateManager;
+    private readonly CompletionHandler _completionHandler;
     private readonly ILogger<SurveyCommandHandler> _logger;
     private readonly Dictionary<Core.Entities.QuestionType, IQuestionHandler> _questionHandlers;
 
@@ -30,6 +31,7 @@ public class SurveyCommandHandler : ICommandHandler
         ISurveyRepository surveyRepository,
         IResponseRepository responseRepository,
         IConversationStateManager stateManager,
+        CompletionHandler completionHandler,
         IEnumerable<IQuestionHandler> questionHandlers,
         ILogger<SurveyCommandHandler> logger)
     {
@@ -37,6 +39,7 @@ public class SurveyCommandHandler : ICommandHandler
         _surveyRepository = surveyRepository ?? throw new ArgumentNullException(nameof(surveyRepository));
         _responseRepository = responseRepository ?? throw new ArgumentNullException(nameof(responseRepository));
         _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
+        _completionHandler = completionHandler ?? throw new ArgumentNullException(nameof(completionHandler));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         // Build dictionary of question handlers by type
@@ -190,6 +193,38 @@ public class SurveyCommandHandler : ICommandHandler
         // For now, only support numeric IDs
 
         return null;
+    }
+
+    /// <summary>
+    /// Checks if all questions have been answered and triggers completion if needed.
+    /// Should be called after each answer is processed.
+    /// </summary>
+    public async Task<bool> CheckAndHandleCompletionAsync(
+        long chatId,
+        long userId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var isAllAnswered = await _stateManager.IsAllAnsweredAsync(userId);
+
+            if (isAllAnswered)
+            {
+                _logger.LogInformation(
+                    "All questions answered for user {TelegramId}, triggering completion",
+                    userId);
+
+                await _completionHandler.HandleCompletionAsync(chatId, userId, cancellationToken);
+                return true;
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking completion status for user {TelegramId}", userId);
+            return false;
+        }
     }
 
     /// <summary>

@@ -31,6 +31,9 @@ public static class BotServiceExtensions
         services.AddTransient<IQuestionHandler, MultipleChoiceQuestionHandler>();
         services.AddTransient<IQuestionHandler, RatingQuestionHandler>();
 
+        // Register completion handler
+        services.AddTransient<CompletionHandler>();
+
         // Register command router
         services.AddSingleton<CommandRouter>();
 
