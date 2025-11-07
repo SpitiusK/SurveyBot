@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using SurveyBot.Bot.Handlers.Commands;
+using SurveyBot.Bot.Handlers.Questions;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
 
@@ -22,6 +23,13 @@ public static class BotServiceExtensions
         services.AddTransient<ICommandHandler, HelpCommandHandler>();
         services.AddTransient<ICommandHandler, MySurveysCommandHandler>();
         services.AddTransient<ICommandHandler, SurveysCommandHandler>();
+        services.AddTransient<ICommandHandler, SurveyCommandHandler>();
+
+        // Register question handlers
+        services.AddTransient<IQuestionHandler, TextQuestionHandler>();
+        services.AddTransient<IQuestionHandler, SingleChoiceQuestionHandler>();
+        services.AddTransient<IQuestionHandler, MultipleChoiceQuestionHandler>();
+        services.AddTransient<IQuestionHandler, RatingQuestionHandler>();
 
         // Register command router
         services.AddSingleton<CommandRouter>();
