@@ -29,6 +29,9 @@ public static class BotServiceExtensions
         // Register update handler
         services.AddSingleton<IUpdateHandler, UpdateHandler>();
 
+        // Register conversation state manager (singleton for in-memory storage)
+        services.AddSingleton<IConversationStateManager, ConversationStateManager>();
+
         return services;
     }
 }
