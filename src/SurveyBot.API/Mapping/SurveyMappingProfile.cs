@@ -1,0 +1,52 @@
+using AutoMapper;
+using SurveyBot.API.Mapping.ValueResolvers;
+using SurveyBot.Core.DTOs.Survey;
+using SurveyBot.Core.Entities;
+
+namespace SurveyBot.API.Mapping;
+
+/// <summary>
+/// AutoMapper profile for Survey entity and related DTOs.
+/// </summary>
+public class SurveyMappingProfile : Profile
+{
+    public SurveyMappingProfile()
+    {
+        // Survey -> SurveyDto (Entity to DTO for reading)
+        CreateMap<Survey, SurveyDto>()
+            .ForMember(dest => dest.TotalResponses,
+                opt => opt.MapFrom<SurveyTotalResponsesResolver>())
+            .ForMember(dest => dest.CompletedResponses,
+                opt => opt.MapFrom<SurveyCompletedResponsesResolver>());
+
+        // Survey -> SurveyListDto (Entity to DTO for list view)
+        CreateMap<Survey, SurveyListDto>()
+            .ForMember(dest => dest.QuestionCount,
+                opt => opt.MapFrom(src => src.Questions.Count))
+            .ForMember(dest => dest.TotalResponses,
+                opt => opt.MapFrom<SurveyListTotalResponsesResolver>())
+            .ForMember(dest => dest.CompletedResponses,
+                opt => opt.MapFrom<SurveyListCompletedResponsesResolver>());
+
+        // CreateSurveyDto -> Survey (DTO to Entity for creation)
+        CreateMap<CreateSurveyDto, Survey>()
+            .ForMember(dest => dest.Id, opt => opt.Ignore())
+            .ForMember(dest => dest.CreatorId, opt => opt.Ignore()) // Will be set by service
+            .ForMember(dest => dest.Creator, opt => opt.Ignore())
+            .ForMember(dest => dest.Questions, opt => opt.Ignore())
+            .ForMember(dest => dest.Responses, opt => opt.Ignore())
+            .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
+            .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
+
+        // UpdateSurveyDto -> Survey (DTO to Entity for update)
+        CreateMap<UpdateSurveyDto, Survey>()
+            .ForMember(dest => dest.Id, opt => opt.Ignore())
+            .ForMember(dest => dest.CreatorId, opt => opt.Ignore())
+            .ForMember(dest => dest.IsActive, opt => opt.Ignore()) // Use ToggleSurveyStatusDto instead
+            .ForMember(dest => dest.Creator, opt => opt.Ignore())
+            .ForMember(dest => dest.Questions, opt => opt.Ignore())
+            .ForMember(dest => dest.Responses, opt => opt.Ignore())
+            .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
+            .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
+    }
+}

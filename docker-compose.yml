@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: surveybot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: surveybot_db
+      POSTGRES_USER: surveybot_user
+      POSTGRES_PASSWORD: surveybot_dev_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U surveybot_user -d surveybot_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: surveybot-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@surveybot.local
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local

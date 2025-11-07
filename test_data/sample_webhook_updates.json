@@ -1,0 +1,179 @@
+{
+  "sample_updates": {
+    "start_command": {
+      "update_id": 123456789,
+      "message": {
+        "message_id": 1,
+        "from": {
+          "id": 123456789,
+          "is_bot": false,
+          "first_name": "John",
+          "last_name": "Doe",
+          "username": "johndoe",
+          "language_code": "en"
+        },
+        "chat": {
+          "id": 123456789,
+          "first_name": "John",
+          "last_name": "Doe",
+          "username": "johndoe",
+          "type": "private"
+        },
+        "date": 1699999999,
+        "text": "/start",
+        "entities": [
+          {
+            "offset": 0,
+            "length": 6,
+            "type": "bot_command"
+          }
+        ]
+      }
+    },
+    "surveys_command": {
+      "update_id": 123456790,
+      "message": {
+        "message_id": 2,
+        "from": {
+          "id": 123456789,
+          "is_bot": false,
+          "first_name": "John",
+          "username": "johndoe"
+        },
+        "chat": {
+          "id": 123456789,
+          "type": "private"
+        },
+        "date": 1699999999,
+        "text": "/surveys",
+        "entities": [
+          {
+            "offset": 0,
+            "length": 8,
+            "type": "bot_command"
+          }
+        ]
+      }
+    },
+    "help_command": {
+      "update_id": 123456791,
+      "message": {
+        "message_id": 3,
+        "from": {
+          "id": 123456789,
+          "is_bot": false,
+          "first_name": "John",
+          "username": "johndoe"
+        },
+        "chat": {
+          "id": 123456789,
+          "type": "private"
+        },
+        "date": 1699999999,
+        "text": "/help",
+        "entities": [
+          {
+            "offset": 0,
+            "length": 5,
+            "type": "bot_command"
+          }
+        ]
+      }
+    },
+    "text_message": {
+      "update_id": 123456792,
+      "message": {
+        "message_id": 4,
+        "from": {
+          "id": 123456789,
+          "is_bot": false,
+          "first_name": "John",
+          "username": "johndoe"
+        },
+        "chat": {
+          "id": 123456789,
+          "type": "private"
+        },
+        "date": 1699999999,
+        "text": "Hello, I need help with surveys"
+      }
+    },
+    "callback_survey_select": {
+      "update_id": 123456793,
+      "callback_query": {
+        "id": "987654321",
+        "from": {
+          "id": 123456789,
+          "is_bot": false,
+          "first_name": "John",
+          "username": "johndoe"
+        },
+        "message": {
+          "message_id": 5,
+          "from": {
+            "id": 987654321,
+            "is_bot": true,
+            "first_name": "SurveyBot",
+            "username": "surveybot"
+          },
+          "chat": {
+            "id": 123456789,
+            "type": "private"
+          },
+          "date": 1699999999,
+          "text": "Available surveys:\n\n1. Customer Satisfaction Survey"
+        },
+        "chat_instance": "123456789",
+        "data": "survey:1"
+      }
+    },
+    "callback_command_help": {
+      "update_id": 123456794,
+      "callback_query": {
+        "id": "987654322",
+        "from": {
+          "id": 123456789,
+          "is_bot": false,
+          "first_name": "John",
+          "username": "johndoe"
+        },
+        "message": {
+          "message_id": 6,
+          "from": {
+            "id": 987654321,
+            "is_bot": true,
+            "first_name": "SurveyBot",
+            "username": "surveybot"
+          },
+          "chat": {
+            "id": 123456789,
+            "type": "private"
+          },
+          "date": 1699999999,
+          "text": "Main menu"
+        },
+        "chat_instance": "123456789",
+        "data": "cmd:help"
+      }
+    },
+    "unsupported_update_type": {
+      "update_id": 123456795,
+      "edited_message": {
+        "message_id": 7,
+        "from": {
+          "id": 123456789,
+          "is_bot": false,
+          "first_name": "John",
+          "username": "johndoe"
+        },
+        "chat": {
+          "id": 123456789,
+          "type": "private"
+        },
+        "date": 1699999999,
+        "edit_date": 1700000010,
+        "text": "Corrected message"
+      }
+    }
+  }
+}

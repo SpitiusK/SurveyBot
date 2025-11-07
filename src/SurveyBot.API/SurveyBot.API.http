@@ -1,0 +1,6 @@
+@SurveyBot.API_HostAddress = http://localhost:5296
+
+GET {{SurveyBot.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,115 @@
+namespace SurveyBot.Bot.Configuration;
+
+/// <summary>
+/// Configuration settings for the Telegram Bot.
+/// </summary>
+public class BotConfiguration
+{
+    /// <summary>
+    /// Configuration section name in appsettings.json
+    /// </summary>
+    public const string SectionName = "BotConfiguration";
+
+    /// <summary>
+    /// Telegram Bot API token from BotFather.
+    /// Should be stored in user secrets for development and secure configuration for production.
+    /// </summary>
+    public string BotToken { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Base URL for webhook endpoint (e.g., "https://yourdomain.com").
+    /// Required for webhook mode.
+    /// </summary>
+    public string WebhookUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Webhook endpoint path (e.g., "/api/bot/webhook").
+    /// Will be appended to WebhookUrl.
+    /// </summary>
+    public string WebhookPath { get; set; } = "/api/bot/webhook";
+
+    /// <summary>
+    /// Secret token for webhook validation.
+    /// Used to verify that requests are coming from Telegram.
+    /// </summary>
+    public string WebhookSecret { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Maximum number of connections for webhook.
+    /// Default: 40 (Telegram's default).
+    /// </summary>
+    public int MaxConnections { get; set; } = 40;
+
+    /// <summary>
+    /// The base URL of the SurveyBot API (e.g., "https://localhost:5001").
+    /// Used by the bot to make API calls.
+    /// </summary>
+    public string ApiBaseUrl { get; set; } = "http://localhost:5000";
+
+    /// <summary>
+    /// Enable or disable webhook mode.
+    /// If false, bot will use long polling (for development).
+    /// </summary>
+    public bool UseWebhook { get; set; } = false;
+
+    /// <summary>
+    /// Bot username (without @).
+    /// Used for logging and display purposes.
+    /// </summary>
+    public string BotUsername { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Timeout for API requests in seconds.
+    /// Default: 30 seconds.
+    /// </summary>
+    public int RequestTimeout { get; set; } = 30;
+
+    /// <summary>
+    /// Gets the full webhook URL by combining WebhookUrl and WebhookPath.
+    /// </summary>
+    public string FullWebhookUrl => $"{WebhookUrl.TrimEnd('/')}{WebhookPath}";
+
+    /// <summary>
+    /// Validates the configuration settings.
+    /// </summary>
+    /// <returns>True if configuration is valid, false otherwise.</returns>
+    public bool IsValid(out List<string> errors)
+    {
+        errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(BotToken))
+        {
+            errors.Add("BotToken is required");
+        }
+
+        if (UseWebhook)
+        {
+            if (string.IsNullOrWhiteSpace(WebhookUrl))
+            {
+                errors.Add("WebhookUrl is required when UseWebhook is enabled");
+            }
+
+            if (!string.IsNullOrWhiteSpace(WebhookUrl) && !Uri.TryCreate(WebhookUrl, UriKind.Absolute, out _))
+            {
+                errors.Add("WebhookUrl must be a valid absolute URL");
+            }
+
+            if (string.IsNullOrWhiteSpace(WebhookSecret))
+            {
+                errors.Add("WebhookSecret is required when UseWebhook is enabled");
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(ApiBaseUrl))
+        {
+            errors.Add("ApiBaseUrl is required");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ApiBaseUrl) && !Uri.TryCreate(ApiBaseUrl, UriKind.Absolute, out _))
+        {
+            errors.Add("ApiBaseUrl must be a valid absolute URL");
+        }
+
+        return errors.Count == 0;
+    }
+}

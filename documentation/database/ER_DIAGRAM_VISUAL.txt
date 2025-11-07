@@ -1,0 +1,480 @@
+================================================================================
+TELEGRAM SURVEY BOT - ENTITY RELATIONSHIP DIAGRAM (VISUAL)
+================================================================================
+Version: 1.0.0
+Database: PostgreSQL 14+
+Last Updated: 2025-11-05
+
+================================================================================
+FULL DATABASE SCHEMA - VISUAL REPRESENTATION
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│                          TELEGRAM SURVEY BOT DATABASE                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+                        ┌──────────────────────────┐
+                        │        USERS             │
+                        ├──────────────────────────┤
+                        │ PK  id (SERIAL)          │
+                        │ UQ  telegram_id (BIGINT) │
+                        │     username (VARCHAR)   │
+                        │     first_name (VARCHAR) │
+                        │     last_name (VARCHAR)  │
+                        │     created_at (TSTZ)    │
+                        │     updated_at (TSTZ)    │
+                        └──────────────────────────┘
+                                    │
+                                    │ creates
+                                    │ (1:N)
+                                    │
+                                    ▼
+            ┌───────────────────────────────────────────────────┐
+            │                  SURVEYS                          │
+            ├───────────────────────────────────────────────────┤
+            │ PK  id (SERIAL)                                   │
+            │     title (VARCHAR 500)                           │
+            │     description (TEXT)                            │
+            │ FK  creator_id → users.id                         │
+            │     is_active (BOOLEAN)                           │
+            │     allow_multiple_responses (BOOLEAN)            │
+            │     show_results (BOOLEAN)                        │
+            │     created_at (TSTZ)                             │
+            │     updated_at (TSTZ)                             │
+            └───────────────────────────────────────────────────┘
+                    │                           │
+                    │ has                       │ receives
+                    │ (1:N)                     │ (1:N)
+                    │                           │
+                    ▼                           ▼
+    ┌────────────────────────────────┐   ┌────────────────────────────────┐
+    │        QUESTIONS               │   │         RESPONSES              │
+    ├────────────────────────────────┤   ├────────────────────────────────┤
+    │ PK  id (SERIAL)                │   │ PK  id (SERIAL)                │
+    │ FK  survey_id → surveys.id     │   │ FK  survey_id → surveys.id     │
+    │     question_text (TEXT)       │   │     respondent_telegram_id     │
+    │     question_type (VARCHAR 50) │   │     (BIGINT, not FK)           │
+    │     order_index (INTEGER)      │   │     is_complete (BOOLEAN)      │
+    │     is_required (BOOLEAN)      │   │     started_at (TSTZ)          │
+    │     options_json (JSONB)       │   │     submitted_at (TSTZ)        │
+    │     created_at (TSTZ)          │   └────────────────────────────────┘
+    └────────────────────────────────┘                │
+                    │                                 │ has
+                    │                                 │ (1:N)
+                    │                                 │
+                    │                                 ▼
+                    │               ┌────────────────────────────────────┐
+                    │               │           ANSWERS                  │
+                    │               ├────────────────────────────────────┤
+                    │               │ PK  id (SERIAL)                    │
+                    │               │ FK  response_id → responses.id     │
+                    └──────────────►│ FK  question_id → questions.id     │
+                      answered by   │     answer_text (TEXT)             │
+                         (1:N)      │     answer_json (JSONB)            │
+                                    │     created_at (TSTZ)              │
+                                    └────────────────────────────────────┘
+
+
+================================================================================
+RELATIONSHIP DETAILS
+================================================================================
+
+R1: USERS → SURVEYS (One-to-Many)
+───────────────────────────────────
+  Parent:    users.id
+  Child:     surveys.creator_id
+  Type:      One creator, many surveys
+  On Delete: CASCADE (delete user deletes their surveys)
+  Indexes:   idx_surveys_creator_id, idx_surveys_creator_active
+
+
+R2: SURVEYS → QUESTIONS (One-to-Many)
+──────────────────────────────────────
+  Parent:    surveys.id
+  Child:     questions.survey_id
+  Type:      One survey, many questions
+  On Delete: CASCADE (delete survey deletes questions)
+  Indexes:   idx_questions_survey_id, idx_questions_survey_order
+  Unique:    (survey_id, order_index) - no duplicate order
+
+
+R3: SURVEYS → RESPONSES (One-to-Many)
+──────────────────────────────────────
+  Parent:    surveys.id
+  Child:     responses.survey_id
+  Type:      One survey, many responses
+  On Delete: CASCADE (delete survey deletes responses)
+  Indexes:   idx_responses_survey_id, idx_responses_survey_respondent
+
+
+R4: RESPONSES → ANSWERS (One-to-Many)
+──────────────────────────────────────
+  Parent:    responses.id
+  Child:     answers.response_id
+  Type:      One response, many answers
+  On Delete: CASCADE (delete response deletes answers)
+  Indexes:   idx_answers_response_id, idx_answers_response_question
+  Unique:    (response_id, question_id) - one answer per question
+
+
+R5: QUESTIONS → ANSWERS (One-to-Many)
+──────────────────────────────────────
+  Parent:    questions.id
+  Child:     answers.question_id
+  Type:      One question, many answers (across all responses)
+  On Delete: CASCADE (delete question deletes its answers)
+  Indexes:   idx_answers_question_id
+
+
+================================================================================
+DATA FLOW EXAMPLES
+================================================================================
+
+CREATE SURVEY WORKFLOW:
+───────────────────────
+
+1. User creates survey
+   INSERT INTO surveys (creator_id, title, ...) VALUES (...);
+
+2. Add questions to survey
+   INSERT INTO questions (survey_id, question_text, order_index, ...)
+   VALUES (survey_id, 'Question 1', 0, ...),
+          (survey_id, 'Question 2', 1, ...),
+          (survey_id, 'Question 3', 2, ...);
+
+3. Activate survey
+   UPDATE surveys SET is_active = true WHERE id = survey_id;
+
+
+SUBMIT RESPONSE WORKFLOW:
+──────────────────────────
+
+1. User starts survey
+   INSERT INTO responses (survey_id, respondent_telegram_id, ...)
+   VALUES (789, 123456789, ...);
+
+2. User answers questions
+   INSERT INTO answers (response_id, question_id, answer_text/answer_json)
+   VALUES (response_id, q1_id, 'Text answer', NULL),
+          (response_id, q2_id, NULL, '["Option A", "Option B"]'::jsonb),
+          (response_id, q3_id, NULL, '{"rating": 4}'::jsonb);
+
+3. User submits response
+   UPDATE responses
+   SET is_complete = true, submitted_at = NOW()
+   WHERE id = response_id;
+
+
+VIEW ANALYTICS WORKFLOW:
+────────────────────────
+
+1. Get survey statistics
+   SELECT COUNT(DISTINCT r.id) FROM responses r
+   WHERE r.survey_id = 789 AND r.is_complete = true;
+
+2. Get question answer distribution
+   SELECT answer_text, COUNT(*) as frequency
+   FROM answers
+   WHERE question_id = 777
+   GROUP BY answer_text;
+
+3. Get multiple choice statistics
+   SELECT jsonb_array_elements_text(answer_json) as option,
+          COUNT(*) as count
+   FROM answers
+   WHERE question_id = 888
+   GROUP BY option;
+
+
+================================================================================
+CARDINALITY MATRIX
+================================================================================
+
+           │ User │ Survey │ Question │ Response │ Answer │
+───────────┼──────┼────────┼──────────┼──────────┼────────┤
+User       │  -   │  1:N   │    -     │    -     │   -    │
+Survey     │  N:1 │   -    │   1:N    │   1:N    │   -    │
+Question   │  -   │  N:1   │    -     │    -     │  1:N   │
+Response   │  -   │  N:1   │    -     │    -     │  1:N   │
+Answer     │  -   │   -    │   N:1    │   N:1    │   -    │
+
+Legend:
+  1:N  = One-to-Many
+  N:1  = Many-to-One
+  -    = No direct relationship
+
+
+================================================================================
+CASCADE DELETE VISUALIZATION
+================================================================================
+
+DELETE USER (id=123)
+    │
+    └─► DELETE SURVEYS (creator_id=123)
+            │
+            ├─► DELETE QUESTIONS (survey_id in (...))
+            │       │
+            │       └─► DELETE ANSWERS (question_id in (...))
+            │
+            └─► DELETE RESPONSES (survey_id in (...))
+                    │
+                    └─► DELETE ANSWERS (response_id in (...))
+
+Result: Complete removal of user and all associated data
+
+
+DELETE SURVEY (id=789)
+    │
+    ├─► DELETE QUESTIONS (survey_id=789)
+    │       │
+    │       └─► DELETE ANSWERS (question_id in (...))
+    │
+    └─► DELETE RESPONSES (survey_id=789)
+            │
+            └─► DELETE ANSWERS (response_id in (...))
+
+Result: Complete removal of survey and all response data
+
+
+DELETE RESPONSE (id=999)
+    │
+    └─► DELETE ANSWERS (response_id=999)
+
+Result: Removal of single user's response
+
+
+DELETE QUESTION (id=555)
+    │
+    └─► DELETE ANSWERS (question_id=555)
+
+Result: Removal of answers across ALL responses
+WARNING: This can break completed responses!
+
+
+================================================================================
+INDEXES VISUAL MAP
+================================================================================
+
+USERS Table:
+  └─ idx_users_telegram_id (telegram_id) [UNIQUE] ★★★★★
+  └─ idx_users_username (username) [PARTIAL] ★★
+
+SURVEYS Table:
+  └─ idx_surveys_creator_id (creator_id) ★★★★
+  └─ idx_surveys_is_active (is_active) [PARTIAL] ★★★
+  └─ idx_surveys_creator_active (creator_id, is_active) ★★★★★
+  └─ idx_surveys_created_at (created_at DESC) ★★
+
+QUESTIONS Table:
+  └─ idx_questions_survey_id (survey_id) ★★★★
+  └─ idx_questions_survey_order (survey_id, order_index) ★★★★★
+  └─ idx_questions_survey_order_unique (survey_id, order_index) [UNIQUE] ★★★★★
+  └─ idx_questions_type (question_type) ★
+  └─ idx_questions_options_json (options_json) [GIN] ★
+
+RESPONSES Table:
+  └─ idx_responses_survey_id (survey_id) ★★★★
+  └─ idx_responses_respondent (respondent_telegram_id) ★★★
+  └─ idx_responses_survey_respondent (survey_id, respondent_telegram_id) ★★★★★
+  └─ idx_responses_complete (is_complete) [PARTIAL] ★★★
+  └─ idx_responses_submitted_at (submitted_at DESC) [PARTIAL] ★★
+
+ANSWERS Table:
+  └─ idx_answers_response_id (response_id) ★★★★★
+  └─ idx_answers_question_id (question_id) ★★★★
+  └─ idx_answers_response_question (response_id, question_id) [UNIQUE] ★★★★★
+  └─ idx_answers_answer_json (answer_json) [GIN] ★★★
+
+Legend:
+  ★★★★★ = CRITICAL (must have)
+  ★★★★  = HIGH (strongly recommended)
+  ★★★   = MEDIUM (recommended)
+  ★★    = LOW (optional)
+  ★     = VERY LOW (defer or skip)
+
+
+================================================================================
+QUERY PATTERNS VISUAL
+================================================================================
+
+Pattern: User Dashboard (Creator's Surveys)
+───────────────────────────────────────────
+
+    ┌─────────┐
+    │  USERS  │
+    └────┬────┘
+         │
+         │ JOIN creator_id
+         ▼
+    ┌─────────┐     ┌───────────┐
+    │ SURVEYS ├────►│ QUESTIONS │  COUNT(DISTINCT q.id)
+    └────┬────┘     └───────────┘
+         │
+         │          ┌───────────┐
+         └─────────►│ RESPONSES │  COUNT(DISTINCT r.id)
+                    └───────────┘
+
+  Index: idx_surveys_creator_active
+  Target: < 10ms
+
+
+Pattern: Display Survey to User
+────────────────────────────────
+
+    ┌─────────┐
+    │ SURVEYS │
+    └────┬────┘
+         │
+         │ JOIN survey_id
+         ▼
+    ┌───────────┐
+    │ QUESTIONS │  ORDER BY order_index
+    └───────────┘
+
+  Index: idx_questions_survey_order
+  Target: < 5ms
+
+
+Pattern: Submit Response
+────────────────────────
+
+    ┌───────────┐
+    │  SURVEYS  │
+    └─────┬─────┘
+          │
+          │ Validate survey
+          ▼
+    ┌───────────┐
+    │ RESPONSES │  INSERT
+    └─────┬─────┘
+          │
+          │ INSERT multiple
+          ▼
+    ┌───────────┐
+    │  ANSWERS  │
+    └───────────┘
+
+  Index: idx_responses_survey_respondent (duplicate check)
+  Target: < 50ms (including validation)
+
+
+Pattern: Question Analytics
+────────────────────────────
+
+    ┌───────────┐
+    │ QUESTIONS │
+    └─────┬─────┘
+          │
+          │ JOIN question_id
+          ▼
+    ┌───────────┐
+    │  ANSWERS  │  GROUP BY, COUNT(*)
+    └─────┬─────┘
+          │
+          │ Optional: JOIN for respondent info
+          ▼
+    ┌───────────┐
+    │ RESPONSES │
+    └───────────┘
+
+  Index: idx_answers_question_id, idx_answers_answer_json (GIN)
+  Target: < 100ms
+
+
+================================================================================
+CONSTRAINT SUMMARY
+================================================================================
+
+PRIMARY KEYS (5):
+  ✓ users(id)
+  ✓ surveys(id)
+  ✓ questions(id)
+  ✓ responses(id)
+  ✓ answers(id)
+
+FOREIGN KEYS (5):
+  ✓ surveys.creator_id → users.id [CASCADE]
+  ✓ questions.survey_id → surveys.id [CASCADE]
+  ✓ responses.survey_id → surveys.id [CASCADE]
+  ✓ answers.response_id → responses.id [CASCADE]
+  ✓ answers.question_id → questions.id [CASCADE]
+
+UNIQUE CONSTRAINTS (3):
+  ✓ users(telegram_id)
+  ✓ questions(survey_id, order_index)
+  ✓ answers(response_id, question_id)
+
+CHECK CONSTRAINTS (4):
+  ✓ questions.question_type IN ('text', 'multiple_choice', 'single_choice',
+                                 'rating', 'yes_no')
+  ✓ questions.order_index >= 0
+  ✓ responses.submitted_at >= started_at (if not null)
+  ✓ answers: answer_text IS NOT NULL OR answer_json IS NOT NULL
+
+NOT NULL CONSTRAINTS:
+  ✓ All primary keys
+  ✓ All foreign keys
+  ✓ users.telegram_id
+  ✓ surveys.title, is_active
+  ✓ questions.question_text, question_type, order_index, is_required
+  ✓ responses.is_complete
+  ✓ All created_at timestamps
+
+
+================================================================================
+DATA TYPES REFERENCE
+================================================================================
+
+┌──────────────┬───────────────────┬──────────────────────────────────────┐
+│ Type         │ PostgreSQL        │ Usage                                │
+├──────────────┼───────────────────┼──────────────────────────────────────┤
+│ ID           │ SERIAL            │ Auto-incrementing primary keys       │
+│ Telegram ID  │ BIGINT            │ Large integers from Telegram API     │
+│ Short Text   │ VARCHAR(N)        │ Titles, usernames (limited length)   │
+│ Long Text    │ TEXT              │ Descriptions, questions, answers     │
+│ Boolean      │ BOOLEAN           │ Flags (is_active, is_required, etc.) │
+│ Timestamp    │ TIMESTAMP + TZ    │ All date/time fields                 │
+│ JSON         │ JSONB             │ Options, complex answers             │
+└──────────────┴───────────────────┴──────────────────────────────────────┘
+
+
+================================================================================
+ESTIMATED ROW COUNTS (MVP)
+================================================================================
+
+  USERS:       1,000 - 10,000 rows
+    │
+    └─► SURVEYS:      10,000 - 100,000 rows (10-100 per user)
+            │
+            ├─► QUESTIONS:   50,000 - 2,000,000 rows (5-20 per survey)
+            │
+            └─► RESPONSES:   100,000 - 10,000,000 rows (10-1000 per survey)
+                    │
+                    └─► ANSWERS:     500,000 - 200,000,000 rows (5-20 per response)
+
+Largest table: ANSWERS (grows fastest)
+Storage estimate (10k surveys, 100 responses each):
+  - Users:     1 MB
+  - Surveys:   10 MB
+  - Questions: 50 MB
+  - Responses: 100 MB
+  - Answers:   1 GB
+  - Indexes:   400 MB
+  Total:       ~1.6 GB
+
+
+================================================================================
+END OF VISUAL ER DIAGRAM
+================================================================================
+
+For detailed documentation see:
+  - schema.sql               (SQL schema definition)
+  - ER_DIAGRAM.md            (Detailed entity descriptions)
+  - RELATIONSHIPS.md         (Relationship mapping and queries)
+  - INDEX_OPTIMIZATION.md    (Performance optimization)
+  - README.md                (Overview and quick start)
+
+================================================================================
