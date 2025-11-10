@@ -96,4 +96,13 @@ public interface ISurveyService
     /// <param name="userId">The ID of the user.</param>
     /// <returns>True if the user owns the survey.</returns>
     Task<bool> UserOwnsSurveyAsync(int surveyId, int userId);
+
+    /// <summary>
+    /// Gets a survey by its unique code (public endpoint - no authentication required).
+    /// Returns basic survey information and questions.
+    /// </summary>
+    /// <param name="code">The survey code.</param>
+    /// <returns>The survey details with questions.</returns>
+    /// <exception cref="SurveyNotFoundException">Thrown when the survey with the specified code is not found.</exception>
+    Task<SurveyDto> GetSurveyByCodeAsync(string code);
 }

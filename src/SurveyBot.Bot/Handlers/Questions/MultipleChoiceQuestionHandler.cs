@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Bot.Interfaces;
+using SurveyBot.Bot.Services;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 using Telegram.Bot;
@@ -13,11 +14,14 @@ namespace SurveyBot.Bot.Handlers.Questions;
 /// <summary>
 /// Handles multiple choice questions where users can select multiple options.
 /// Uses inline keyboard with checkable buttons and a "Done" button to confirm selections.
+/// Includes comprehensive validation and error handling.
 /// </summary>
 public class MultipleChoiceQuestionHandler : IQuestionHandler
 {
     private readonly IBotService _botService;
     private readonly IConversationStateManager _stateManager;
+    private readonly IAnswerValidator _validator;
+    private readonly QuestionErrorHandler _errorHandler;
     private readonly ILogger<MultipleChoiceQuestionHandler> _logger;
 
     // Track user selections in memory (temporary until they click Done)
@@ -28,10 +32,14 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
     public MultipleChoiceQuestionHandler(
         IBotService botService,
         IConversationStateManager stateManager,
+        IAnswerValidator validator,
+        QuestionErrorHandler errorHandler,
         ILogger<MultipleChoiceQuestionHandler> logger)
     {
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
         _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+        _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -276,15 +284,25 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
 
         buttons.Add(new[] { doneButton });
 
-        // Add Skip button for optional questions
+        // Add navigation row (Back and Skip buttons)
+        var navigationRow = new List<InlineKeyboardButton>();
+
+        // Back button (always show)
+        navigationRow.Add(InlineKeyboardButton.WithCallbackData(
+            text: "⬅️ Back",
+            callbackData: $"nav_back_q{question.Id}"));
+
+        // Skip button for optional questions
         if (!question.IsRequired)
         {
-            buttons.Add(new[]
-            {
-                InlineKeyboardButton.WithCallbackData(
-                    text: "⏭ Skip this question",
-                    callbackData: $"skip_q{question.Id}")
-            });
+            navigationRow.Add(InlineKeyboardButton.WithCallbackData(
+                text: "⏭ Skip",
+                callbackData: $"nav_skip_q{question.Id}"));
+        }
+
+        if (navigationRow.Count > 0)
+        {
+            buttons.Add(navigationRow.ToArray());
         }
 
         return new InlineKeyboardMarkup(buttons);
@@ -320,6 +338,24 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
 
         // Create answer JSON
         var answerJson = JsonSerializer.Serialize(new { selectedOptions });
+
+        // Validate the answer
+        var validationResult = _validator.ValidateAnswer(answerJson, question);
+        if (!validationResult.IsValid)
+        {
+            _logger.LogWarning(
+                "Multiple choice answer validation failed for question {QuestionId}: {ErrorMessage}",
+                question.Id,
+                validationResult.ErrorMessage);
+
+            await _botService.Client.AnswerCallbackQuery(
+                callbackQueryId: callbackQuery.Id,
+                text: validationResult.ErrorMessage!,
+                showAlert: true,
+                cancellationToken: cancellationToken);
+
+            return null;
+        }
 
         _logger.LogDebug(
             "Multiple choice answer finalized for question {QuestionId}: {SelectedCount} options",

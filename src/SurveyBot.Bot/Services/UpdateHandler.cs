@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using SurveyBot.Bot.Handlers;
 using SurveyBot.Bot.Interfaces;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -9,54 +10,70 @@ namespace SurveyBot.Bot.Services;
 /// <summary>
 /// Handles incoming updates from Telegram.
 /// Routes updates to appropriate handlers based on update type.
+/// Includes performance monitoring to ensure < 2 second response times.
 /// </summary>
 public class UpdateHandler : IUpdateHandler
 {
     private readonly IBotService _botService;
     private readonly CommandRouter _commandRouter;
+    private readonly NavigationHandler _navigationHandler;
+    private readonly CancelCallbackHandler _cancelCallbackHandler;
+    private readonly BotPerformanceMonitor _performanceMonitor;
     private readonly ILogger<UpdateHandler> _logger;
 
     public UpdateHandler(
         IBotService botService,
         CommandRouter commandRouter,
+        NavigationHandler navigationHandler,
+        CancelCallbackHandler cancelCallbackHandler,
+        BotPerformanceMonitor performanceMonitor,
         ILogger<UpdateHandler> logger)
     {
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
         _commandRouter = commandRouter ?? throw new ArgumentNullException(nameof(commandRouter));
+        _navigationHandler = navigationHandler ?? throw new ArgumentNullException(nameof(navigationHandler));
+        _cancelCallbackHandler = cancelCallbackHandler ?? throw new ArgumentNullException(nameof(cancelCallbackHandler));
+        _performanceMonitor = performanceMonitor ?? throw new ArgumentNullException(nameof(performanceMonitor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task HandleUpdateAsync(Update update, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            _logger.LogInformation(
-                "Received update {UpdateId} of type {UpdateType}",
-                update.Id,
-                update.Type);
+        await _performanceMonitor.TrackOperationAsync(
+            "HandleUpdate",
+            async () =>
+            {
+                try
+                {
+                    _logger.LogInformation(
+                        "Received update {UpdateId} of type {UpdateType}",
+                        update.Id,
+                        update.Type);
 
-            var handled = update.Type switch
-            {
-                UpdateType.Message => await HandleMessageAsync(update.Message!, cancellationToken),
-                UpdateType.CallbackQuery => await HandleCallbackQueryAsync(update.CallbackQuery!, cancellationToken),
-                UpdateType.EditedMessage => await HandleEditedMessageAsync(update.EditedMessage!, cancellationToken),
-                _ => await HandleUnsupportedUpdateAsync(update, cancellationToken)
-            };
+                    var handled = update.Type switch
+                    {
+                        UpdateType.Message => await HandleMessageAsync(update.Message!, cancellationToken),
+                        UpdateType.CallbackQuery => await HandleCallbackQueryAsync(update.CallbackQuery!, cancellationToken),
+                        UpdateType.EditedMessage => await HandleEditedMessageAsync(update.EditedMessage!, cancellationToken),
+                        _ => await HandleUnsupportedUpdateAsync(update, cancellationToken)
+                    };
 
-            if (handled)
-            {
-                _logger.LogInformation("Update {UpdateId} handled successfully", update.Id);
-            }
-            else
-            {
-                _logger.LogDebug("Update {UpdateId} was not handled", update.Id);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error handling update {UpdateId}", update.Id);
-            await HandleErrorAsync(ex, cancellationToken);
-        }
+                    if (handled)
+                    {
+                        _logger.LogInformation("Update {UpdateId} handled successfully", update.Id);
+                    }
+                    else
+                    {
+                        _logger.LogDebug("Update {UpdateId} was not handled", update.Id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error handling update {UpdateId}", update.Id);
+                    await HandleErrorAsync(ex, cancellationToken);
+                }
+            },
+            context: $"UpdateId={update.Id}, Type={update.Type}");
     }
 
     public async Task HandleErrorAsync(Exception exception, CancellationToken cancellationToken = default)
@@ -137,62 +154,81 @@ public class UpdateHandler : IUpdateHandler
 
     private async Task<bool> HandleCallbackQueryAsync(CallbackQuery callbackQuery, CancellationToken cancellationToken)
     {
-        if (callbackQuery.Data == null || callbackQuery.Message == null)
-        {
-            _logger.LogWarning("Callback query has no data or message");
-            return false;
-        }
-
-        _logger.LogInformation(
-            "Processing callback query from user {TelegramId}: {CallbackData}",
-            callbackQuery.From.Id,
-            callbackQuery.Data);
-
-        try
-        {
-            // Parse callback data
-            var parts = callbackQuery.Data.Split(':');
-            var action = parts.Length > 0 ? parts[0] : string.Empty;
-
-            // Route callback to appropriate handler
-            var handled = action switch
+        return await _performanceMonitor.TrackOperationAsync(
+            "HandleCallbackQuery",
+            async () =>
             {
-                "cmd" => await HandleCallbackCommandAsync(callbackQuery, parts, cancellationToken),
-                "survey" => await HandleSurveyCallbackAsync(callbackQuery, parts, cancellationToken),
-                "action" => await HandleActionCallbackAsync(callbackQuery, parts, cancellationToken),
-                _ => await HandleUnknownCallbackAsync(callbackQuery, cancellationToken)
-            };
+                if (callbackQuery.Data == null || callbackQuery.Message == null)
+                {
+                    _logger.LogWarning("Callback query has no data or message");
+                    return false;
+                }
 
-            // Answer callback query to remove loading state
-            await _botService.Client.AnswerCallbackQuery(
-                callbackQueryId: callbackQuery.Id,
-                cancellationToken: cancellationToken);
+                _logger.LogInformation(
+                    "Processing callback query from user {TelegramId}: {CallbackData}",
+                    callbackQuery.From.Id,
+                    callbackQuery.Data);
 
-            return handled;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Error handling callback query from user {TelegramId}",
-                callbackQuery.From.Id);
+                try
+                {
+                    // Check if callback is a navigation action (nav_back_q{id} or nav_skip_q{id})
+                    if (callbackQuery.Data.StartsWith("nav_"))
+                    {
+                        return await HandleNavigationCallbackAsync(callbackQuery, cancellationToken);
+                    }
 
-            // Try to answer callback query even if there was an error
-            try
-            {
-                await _botService.Client.AnswerCallbackQuery(
-                    callbackQueryId: callbackQuery.Id,
-                    text: "An error occurred. Please try again.",
-                    showAlert: true,
-                    cancellationToken: cancellationToken);
-            }
-            catch
-            {
-                // Ignore errors when answering callback query
-            }
+                    // Check if callback is a cancel action (cancel_confirm or cancel_dismiss)
+                    if (callbackQuery.Data.StartsWith("cancel_"))
+                    {
+                        return await HandleCancelCallbackAsync(callbackQuery, cancellationToken);
+                    }
 
-            return false;
-        }
+                    // Parse callback data
+                    var parts = callbackQuery.Data.Split(':');
+                    var action = parts.Length > 0 ? parts[0] : string.Empty;
+
+                    // Route callback to appropriate handler
+                    var handled = action switch
+                    {
+                        "cmd" => await HandleCallbackCommandAsync(callbackQuery, parts, cancellationToken),
+                        "survey" => await HandleSurveyCallbackAsync(callbackQuery, parts, cancellationToken),
+                        "action" => await HandleActionCallbackAsync(callbackQuery, parts, cancellationToken),
+                        "listsurveys" => await HandleActionCallbackAsync(callbackQuery, parts, cancellationToken), // Pagination
+                        _ => await HandleUnknownCallbackAsync(callbackQuery, cancellationToken)
+                    };
+
+                    // Answer callback query to remove loading state (fast response < 100ms target)
+                    await _botService.Client.AnswerCallbackQuery(
+                        callbackQueryId: callbackQuery.Id,
+                        cancellationToken: cancellationToken);
+
+                    return handled;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Error handling callback query from user {TelegramId}",
+                        callbackQuery.From.Id);
+
+                    // Try to answer callback query even if there was an error
+                    try
+                    {
+                        await _botService.Client.AnswerCallbackQuery(
+                            callbackQueryId: callbackQuery.Id,
+                            text: "An error occurred. Please try again.",
+                            showAlert: true,
+                            cancellationToken: cancellationToken);
+                    }
+                    catch
+                    {
+                        // Ignore errors when answering callback query
+                    }
+
+                    return false;
+                }
+            },
+            context: $"UserId={callbackQuery.From.Id}, Data={callbackQuery.Data}");
     }
 
     private async Task<bool> HandleCallbackCommandAsync(
@@ -263,6 +299,22 @@ public class UpdateHandler : IUpdateHandler
         string[] parts,
         CancellationToken cancellationToken)
     {
+        // Handle listsurveys pagination: listsurveys:page:2
+        if (parts.Length >= 3 && parts[0] == "listsurveys" && parts[1] == "page")
+        {
+            return await HandleListSurveysPaginationAsync(callbackQuery, parts, cancellationToken);
+        }
+
+        // Handle noop callbacks (page indicator button)
+        if (parts.Length >= 2 && parts[0] == "listsurveys" && parts[1] == "noop")
+        {
+            // Just answer the callback, don't do anything
+            await _botService.Client.AnswerCallbackQuery(
+                callbackQueryId: callbackQuery.Id,
+                cancellationToken: cancellationToken);
+            return true;
+        }
+
         // Generic actions: create_survey, etc.
         // This will be implemented in future tasks
 
@@ -275,6 +327,46 @@ public class UpdateHandler : IUpdateHandler
             text: "This feature is coming soon!",
             showAlert: true,
             cancellationToken: cancellationToken);
+
+        return true;
+    }
+
+    private async Task<bool> HandleListSurveysPaginationAsync(
+        CallbackQuery callbackQuery,
+        string[] parts,
+        CancellationToken cancellationToken)
+    {
+        if (parts.Length < 3 || !int.TryParse(parts[2], out var pageNumber))
+        {
+            _logger.LogWarning("Invalid pagination callback: {CallbackData}", callbackQuery.Data);
+            return false;
+        }
+
+        _logger.LogInformation(
+            "Processing listsurveys pagination callback: page {Page}",
+            pageNumber);
+
+        // Get the listsurveys command handler
+        var handler = _commandRouter.GetAllHandlers()
+            .FirstOrDefault(h => h.Command.Equals("listsurveys", StringComparison.OrdinalIgnoreCase));
+
+        if (handler == null)
+        {
+            _logger.LogWarning("ListSurveysCommandHandler not found");
+            return false;
+        }
+
+        // Create a fake message with the page number to simulate command
+        var fakeMessage = new Message
+        {
+            Chat = callbackQuery.Message!.Chat,
+            From = callbackQuery.From,
+            Text = $"/listsurveys {pageNumber}",
+            MessageId = callbackQuery.Message.MessageId
+        };
+
+        // Execute the handler
+        await handler.HandleAsync(fakeMessage, cancellationToken);
 
         return true;
     }
@@ -317,5 +409,65 @@ public class UpdateHandler : IUpdateHandler
             update.Id);
 
         return await Task.FromResult(false);
+    }
+
+    private async Task<bool> HandleCancelCallbackAsync(
+        CallbackQuery callbackQuery,
+        CancellationToken cancellationToken)
+    {
+        // Parse cancel callback: "cancel_confirm" or "cancel_dismiss"
+        var data = callbackQuery.Data;
+
+        if (data == "cancel_confirm")
+        {
+            return await _cancelCallbackHandler.HandleConfirmAsync(callbackQuery, cancellationToken);
+        }
+        else if (data == "cancel_dismiss")
+        {
+            return await _cancelCallbackHandler.HandleDismissAsync(callbackQuery, cancellationToken);
+        }
+        else
+        {
+            _logger.LogWarning("Unknown cancel callback format: {CallbackData}", data);
+            return false;
+        }
+    }
+
+    private async Task<bool> HandleNavigationCallbackAsync(
+        CallbackQuery callbackQuery,
+        CancellationToken cancellationToken)
+    {
+        // Parse navigation callback: "nav_back_q{questionId}" or "nav_skip_q{questionId}"
+        var data = callbackQuery.Data;
+        var isBack = data.StartsWith("nav_back_");
+        var isSkip = data.StartsWith("nav_skip_");
+
+        if (!isBack && !isSkip)
+        {
+            _logger.LogWarning("Invalid navigation callback format: {CallbackData}", data);
+            return false;
+        }
+
+        // Extract question ID
+        var prefix = isBack ? "nav_back_q" : "nav_skip_q";
+        var questionIdStr = data.Substring(prefix.Length);
+
+        if (!int.TryParse(questionIdStr, out var questionId))
+        {
+            _logger.LogWarning(
+                "Failed to parse question ID from callback: {CallbackData}",
+                data);
+            return false;
+        }
+
+        // Route to navigation handler
+        if (isBack)
+        {
+            return await _navigationHandler.HandleBackAsync(callbackQuery, questionId, cancellationToken);
+        }
+        else
+        {
+            return await _navigationHandler.HandleSkipAsync(callbackQuery, questionId, cancellationToken);
+        }
     }
 }

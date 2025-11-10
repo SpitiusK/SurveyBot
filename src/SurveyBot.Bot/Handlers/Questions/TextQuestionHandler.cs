@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Bot.Interfaces;
+using SurveyBot.Bot.Services;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 using Telegram.Bot;
@@ -11,19 +12,28 @@ namespace SurveyBot.Bot.Handlers.Questions;
 
 /// <summary>
 /// Handles text-based questions that accept free-form text input.
+/// Includes comprehensive validation and error handling.
 /// </summary>
 public class TextQuestionHandler : IQuestionHandler
 {
+    private const int MAX_TEXT_LENGTH = 4000; // Telegram's message limit
+
     private readonly IBotService _botService;
+    private readonly IAnswerValidator _validator;
+    private readonly QuestionErrorHandler _errorHandler;
     private readonly ILogger<TextQuestionHandler> _logger;
 
     public QuestionType QuestionType => QuestionType.Text;
 
     public TextQuestionHandler(
         IBotService botService,
+        IAnswerValidator validator,
+        QuestionErrorHandler errorHandler,
         ILogger<TextQuestionHandler> logger)
     {
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+        _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -40,10 +50,17 @@ public class TextQuestionHandler : IQuestionHandler
         var progressText = $"Question {currentIndex + 1} of {totalQuestions}";
         var requiredText = question.IsRequired ? "(Required)" : "(Optional - reply /skip to skip)";
 
+        // Build navigation help text
+        var navigationHelp = currentIndex > 0 ? "\n\nType /back to go to previous question" : "";
+        if (!question.IsRequired)
+        {
+            navigationHelp += "\nType /skip to skip this question";
+        }
+
         var message = $"{progressText}\n\n" +
                       $"*{question.QuestionText}*\n\n" +
                       $"{requiredText}\n\n" +
-                      $"Please type your answer below:";
+                      $"Please type your answer below:{navigationHelp}";
 
         _logger.LogDebug(
             "Displaying text question {QuestionId} in chat {ChatId}",
@@ -60,7 +77,7 @@ public class TextQuestionHandler : IQuestionHandler
     }
 
     /// <summary>
-    /// Processes text answer from user's message.
+    /// Processes text answer from user's message with comprehensive validation.
     /// </summary>
     public async Task<string?> ProcessAnswerAsync(
         Message? message,
@@ -77,35 +94,64 @@ public class TextQuestionHandler : IQuestionHandler
         }
 
         var text = message.Text.Trim();
+        var chatId = message.Chat.Id;
 
         // Check if user is trying to skip
         if (text.Equals("/skip", StringComparison.OrdinalIgnoreCase))
         {
             if (question.IsRequired)
             {
-                await _botService.Client.SendMessage(
-                    chatId: message.Chat.Id,
-                    text: "This question is required. Please provide an answer.",
-                    cancellationToken: cancellationToken);
+                await _errorHandler.ShowValidationErrorAsync(
+                    chatId,
+                    "This question is required and cannot be skipped. Please provide an answer.",
+                    cancellationToken);
                 return null;
             }
 
             // Allow skip for optional questions - return empty answer
+            _logger.LogDebug("User {UserId} skipped optional text question {QuestionId}", userId, question.Id);
             return JsonSerializer.Serialize(new { text = "" });
         }
 
-        // Validate minimum length (at least 1 character)
-        if (string.IsNullOrWhiteSpace(text))
+        // Validate text length
+        if (text.Length > MAX_TEXT_LENGTH)
         {
-            await _botService.Client.SendMessage(
-                chatId: message.Chat.Id,
-                text: "Please provide a text answer.",
-                cancellationToken: cancellationToken);
+            await _errorHandler.ShowValidationErrorAsync(
+                chatId,
+                $"Your answer is too long. Maximum {MAX_TEXT_LENGTH} characters allowed (you entered {text.Length}).\n\n" +
+                "Please provide a shorter answer.",
+                cancellationToken);
+            return null;
+        }
+
+        // Validate minimum content for required questions
+        if (question.IsRequired && string.IsNullOrWhiteSpace(text))
+        {
+            await _errorHandler.ShowValidationErrorAsync(
+                chatId,
+                "This question is required. Please provide an answer.",
+                cancellationToken);
             return null;
         }
 
         // Create answer JSON
         var answerJson = JsonSerializer.Serialize(new { text });
+
+        // Final validation using the validator
+        var validationResult = _validator.ValidateAnswer(answerJson, question);
+        if (!validationResult.IsValid)
+        {
+            _logger.LogWarning(
+                "Text answer validation failed for question {QuestionId}: {ErrorMessage}",
+                question.Id,
+                validationResult.ErrorMessage);
+
+            await _errorHandler.ShowValidationErrorAsync(
+                chatId,
+                validationResult.ErrorMessage!,
+                cancellationToken);
+            return null;
+        }
 
         _logger.LogDebug(
             "Text answer processed for question {QuestionId} from user {UserId}: length={Length}",

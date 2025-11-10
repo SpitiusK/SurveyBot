@@ -65,6 +65,12 @@ public class BotConfiguration
     public int RequestTimeout { get; set; } = 30;
 
     /// <summary>
+    /// List of Telegram user IDs that have admin privileges.
+    /// These users can execute admin commands like /createsurvey, /listsurveys, etc.
+    /// </summary>
+    public long[] AdminUserIds { get; set; } = Array.Empty<long>();
+
+    /// <summary>
     /// Gets the full webhook URL by combining WebhookUrl and WebhookPath.
     /// </summary>
     public string FullWebhookUrl => $"{WebhookUrl.TrimEnd('/')}{WebhookPath}";

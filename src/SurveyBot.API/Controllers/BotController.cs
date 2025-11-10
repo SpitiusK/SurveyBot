@@ -62,7 +62,7 @@ public class BotController : ControllerBase
                 return Unauthorized(new ErrorResponse
                 {
                     Success = false,
-                    Error = "Unauthorized",
+                    StatusCode = StatusCodes.Status401Unauthorized,
                     Message = "Invalid webhook secret"
                 });
             }
@@ -74,7 +74,7 @@ public class BotController : ControllerBase
                 return BadRequest(new ErrorResponse
                 {
                     Success = false,
-                    Error = "BadRequest",
+                    StatusCode = StatusCodes.Status400BadRequest,
                     Message = "Update cannot be null"
                 });
             }

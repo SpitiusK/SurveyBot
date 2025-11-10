@@ -7,6 +7,7 @@ using SurveyBot.Core.DTOs.Survey;
 using SurveyBot.Core.Entities;
 using SurveyBot.Core.Exceptions;
 using SurveyBot.Core.Interfaces;
+using SurveyBot.Core.Utilities;
 using System.Text.Json;
 
 namespace SurveyBot.Infrastructure.Services;
@@ -52,10 +53,17 @@ public class SurveyService : ISurveyService
         survey.CreatorId = userId;
         survey.IsActive = false; // Always create as inactive, user must explicitly activate
 
+        // Generate unique survey code
+        survey.Code = await SurveyCodeGenerator.GenerateUniqueCodeAsync(
+            _surveyRepository.CodeExistsAsync);
+
+        _logger.LogInformation("Generated unique code {Code} for survey", survey.Code);
+
         // Save to database
         var createdSurvey = await _surveyRepository.CreateAsync(survey);
 
-        _logger.LogInformation("Survey {SurveyId} created successfully by user {UserId}", createdSurvey.Id, userId);
+        _logger.LogInformation("Survey {SurveyId} created successfully by user {UserId} with code {Code}",
+            createdSurvey.Id, userId, createdSurvey.Code);
 
         // Map to DTO
         var result = _mapper.Map<SurveyDto>(createdSurvey);
@@ -406,6 +414,47 @@ public class SurveyService : ISurveyService
     {
         var survey = await _surveyRepository.GetByIdAsync(surveyId);
         return survey != null && survey.CreatorId == userId;
+    }
+
+    /// <inheritdoc/>
+    public async Task<SurveyDto> GetSurveyByCodeAsync(string code)
+    {
+        _logger.LogInformation("Getting survey by code: {Code}", code);
+
+        // Validate code format
+        if (!SurveyCodeGenerator.IsValidCode(code))
+        {
+            _logger.LogWarning("Invalid survey code format: {Code}", code);
+            throw new SurveyNotFoundException($"Survey with code '{code}' not found");
+        }
+
+        // Get survey with questions
+        var survey = await _surveyRepository.GetByCodeWithQuestionsAsync(code);
+        if (survey == null)
+        {
+            _logger.LogWarning("Survey with code {Code} not found", code);
+            throw new SurveyNotFoundException($"Survey with code '{code}' not found");
+        }
+
+        // Only return active surveys for public access
+        if (!survey.IsActive)
+        {
+            _logger.LogWarning("Survey {SurveyId} with code {Code} is not active", survey.Id, code);
+            throw new SurveyNotFoundException($"Survey with code '{code}' is not available");
+        }
+
+        // Get response counts
+        var responseCount = await _surveyRepository.GetResponseCountAsync(survey.Id);
+        var completedCount = await _responseRepository.GetCompletedCountAsync(survey.Id);
+
+        // Map to DTO
+        var result = _mapper.Map<SurveyDto>(survey);
+        result.TotalResponses = responseCount;
+        result.CompletedResponses = completedCount;
+
+        _logger.LogInformation("Survey {SurveyId} retrieved by code {Code}", survey.Id, code);
+
+        return result;
     }
 
     #region Private Helper Methods

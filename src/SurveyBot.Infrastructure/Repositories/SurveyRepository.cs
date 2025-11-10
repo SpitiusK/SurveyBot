@@ -22,6 +22,7 @@ public class SurveyRepository : GenericRepository<Survey>, ISurveyRepository
     public async Task<Survey?> GetByIdWithQuestionsAsync(int id)
     {
         return await _dbSet
+            .AsNoTracking()
             .Include(s => s.Questions.OrderBy(q => q.OrderIndex))
             .Include(s => s.Creator)
             .FirstOrDefaultAsync(s => s.Id == id);
@@ -53,6 +54,7 @@ public class SurveyRepository : GenericRepository<Survey>, ISurveyRepository
     public async Task<IEnumerable<Survey>> GetActiveSurveysAsync()
     {
         return await _dbSet
+            .AsNoTracking()
             .Include(s => s.Questions)
             .Include(s => s.Creator)
             .Where(s => s.IsActive)
@@ -123,5 +125,44 @@ public class SurveyRepository : GenericRepository<Survey>, ISurveyRepository
             .Include(s => s.Questions)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<Survey?> GetByCodeAsync(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        return await _dbSet
+            .Include(s => s.Creator)
+            .FirstOrDefaultAsync(s => s.Code == code.ToUpper());
+    }
+
+    /// <inheritdoc />
+    public async Task<Survey?> GetByCodeWithQuestionsAsync(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        return await _dbSet
+            .AsNoTracking()
+            .Include(s => s.Questions.OrderBy(q => q.OrderIndex))
+            .Include(s => s.Creator)
+            .FirstOrDefaultAsync(s => s.Code == code.ToUpper());
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> CodeExistsAsync(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return false;
+        }
+
+        return await _dbSet.AnyAsync(s => s.Code == code.ToUpper());
     }
 }

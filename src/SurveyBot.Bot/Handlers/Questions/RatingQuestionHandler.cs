@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Bot.Interfaces;
+using SurveyBot.Bot.Services;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 using Telegram.Bot;
@@ -13,10 +14,13 @@ namespace SurveyBot.Bot.Handlers.Questions;
 /// <summary>
 /// Handles rating questions with numeric scales (1-5 or 1-10).
 /// Displays inline keyboard with rating buttons.
+/// Includes comprehensive validation and error handling.
 /// </summary>
 public class RatingQuestionHandler : IQuestionHandler
 {
     private readonly IBotService _botService;
+    private readonly IAnswerValidator _validator;
+    private readonly QuestionErrorHandler _errorHandler;
     private readonly ILogger<RatingQuestionHandler> _logger;
 
     private const int DEFAULT_MIN_RATING = 1;
@@ -27,9 +31,13 @@ public class RatingQuestionHandler : IQuestionHandler
 
     public RatingQuestionHandler(
         IBotService botService,
+        IAnswerValidator validator,
+        QuestionErrorHandler errorHandler,
         ILogger<RatingQuestionHandler> logger)
     {
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+        _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -151,6 +159,24 @@ public class RatingQuestionHandler : IQuestionHandler
 
         // Create answer JSON
         var answerJson = JsonSerializer.Serialize(new { rating });
+
+        // Validate the answer
+        var validationResult = _validator.ValidateAnswer(answerJson, question);
+        if (!validationResult.IsValid)
+        {
+            _logger.LogWarning(
+                "Rating answer validation failed for question {QuestionId}: {ErrorMessage}",
+                question.Id,
+                validationResult.ErrorMessage);
+
+            await _botService.Client.AnswerCallbackQuery(
+                callbackQueryId: callbackQuery.Id,
+                text: validationResult.ErrorMessage!,
+                showAlert: true,
+                cancellationToken: cancellationToken);
+
+            return null;
+        }
 
         _logger.LogDebug(
             "Rating answer processed for question {QuestionId} from user {UserId}: {Rating}",
@@ -293,15 +319,25 @@ public class RatingQuestionHandler : IQuestionHandler
             buttons.Add(currentRow);
         }
 
-        // Add skip button for optional questions
+        // Add navigation row (Back and Skip buttons)
+        var navigationRow = new List<InlineKeyboardButton>();
+
+        // Back button (always show)
+        navigationRow.Add(InlineKeyboardButton.WithCallbackData(
+            text: "⬅️ Back",
+            callbackData: $"nav_back_q{question.Id}"));
+
+        // Skip button for optional questions
         if (!question.IsRequired)
         {
-            buttons.Add(new List<InlineKeyboardButton>
-            {
-                InlineKeyboardButton.WithCallbackData(
-                    text: "⏭ Skip this question",
-                    callbackData: $"skip_q{question.Id}")
-            });
+            navigationRow.Add(InlineKeyboardButton.WithCallbackData(
+                text: "⏭ Skip",
+                callbackData: $"nav_skip_q{question.Id}"));
+        }
+
+        if (navigationRow.Count > 0)
+        {
+            buttons.Add(navigationRow);
         }
 
         return new InlineKeyboardMarkup(buttons);

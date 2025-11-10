@@ -30,9 +30,9 @@ public class ResponseMappingProfile : Profile
             .ForMember(dest => dest.RespondentFirstName,
                 opt => opt.Ignore()) // This would come from a separate User lookup if needed
             .ForMember(dest => dest.AnsweredCount,
-                opt => opt.MapFrom<ResponseAnsweredCountResolver>())
+                opt => opt.MapFrom(src => src.Answers != null ? src.Answers.Count : 0))
             .ForMember(dest => dest.TotalQuestions,
-                opt => opt.MapFrom<ResponseTotalQuestionsResolver>());
+                opt => opt.MapFrom(src => src.Survey != null && src.Survey.Questions != null ? src.Survey.Questions.Count : 0));
 
         // CreateResponseDto -> Response (DTO to Entity for creation)
         CreateMap<CreateResponseDto, Response>()

@@ -356,6 +356,51 @@ public class ConversationStateManager : IConversationStateManager
 
     #endregion
 
+    #region Session Management
+
+    /// <summary>
+    /// Checks if user's session has expired and handles cleanup.
+    /// </summary>
+    public async Task<bool> CheckSessionTimeoutAsync(long userId)
+    {
+        var state = await GetStateAsync(userId);
+
+        if (state == null)
+            return false; // No session to timeout
+
+        if (state.IsExpired)
+        {
+            _logger.LogInformation(
+                $"Session expired for user {userId}. Last activity: {state.LastActivityAt:yyyy-MM-dd HH:mm:ss UTC}, " +
+                $"Age: {(DateTime.UtcNow - state.LastActivityAt).TotalMinutes:F1} minutes");
+
+            // Mark state as expired
+            state.TransitionTo(ConversationStateType.SessionExpired);
+
+            return true; // Session has expired
+        }
+
+        return false; // Session is still active
+    }
+
+    /// <summary>
+    /// Gets the remaining time before session expires.
+    /// </summary>
+    public async Task<TimeSpan?> GetSessionTimeRemainingAsync(long userId)
+    {
+        var state = await GetStateAsync(userId);
+
+        if (state == null)
+            return null;
+
+        var sessionAge = DateTime.UtcNow - state.LastActivityAt;
+        var remainingTime = TimeSpan.FromMinutes(EXPIRATION_MINUTES) - sessionAge;
+
+        return remainingTime > TimeSpan.Zero ? remainingTime : TimeSpan.Zero;
+    }
+
+    #endregion
+
     #region Utilities
 
     /// <summary>

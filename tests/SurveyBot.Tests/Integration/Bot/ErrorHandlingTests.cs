@@ -1,0 +1,375 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Moq;
+using SurveyBot.Bot.Handlers.Commands;
+using SurveyBot.Bot.Handlers.Questions;
+using SurveyBot.Bot.Interfaces;
+using SurveyBot.Bot.Services;
+using SurveyBot.Bot.Validators;
+using SurveyBot.Core.DTOs.Question;
+using SurveyBot.Core.Entities;
+using SurveyBot.Tests.Fixtures;
+using Telegram.Bot.Types;
+using Xunit;
+
+namespace SurveyBot.Tests.Integration.Bot;
+
+/// <summary>
+/// Integration tests for bot error handling scenarios.
+/// Tests validation, edge cases, and error recovery.
+/// </summary>
+public class ErrorHandlingTests : IClassFixture<BotTestFixture>
+{
+    private readonly BotTestFixture _fixture;
+    private readonly TextQuestionHandler _textHandler;
+    private readonly SingleChoiceQuestionHandler _singleChoiceHandler;
+    private readonly SurveyCommandHandler _surveyCommandHandler;
+    private readonly IAnswerValidator _validator;
+    private readonly QuestionErrorHandler _errorHandler;
+
+    private const long TestUserId = 555666777;
+    private const long TestChatId = 555666777;
+
+    public ErrorHandlingTests(BotTestFixture fixture)
+    {
+        _fixture = fixture;
+
+        _validator = new AnswerValidator();
+        _errorHandler = new QuestionErrorHandler(_fixture.MockBotService.Object, Mock.Of<ILogger<QuestionErrorHandler>>());
+
+        _textHandler = new TextQuestionHandler(
+            _fixture.MockBotService.Object,
+            _validator,
+            _errorHandler,
+            Mock.Of<ILogger<TextQuestionHandler>>());
+
+        _singleChoiceHandler = new SingleChoiceQuestionHandler(
+            _fixture.MockBotService.Object,
+            _validator,
+            _errorHandler,
+            Mock.Of<ILogger<SingleChoiceQuestionHandler>>());
+
+        var completionHandler = new CompletionHandler(
+            _fixture.MockBotService.Object,
+            _fixture.StateManager,
+            _fixture.ResponseRepository,
+            Mock.Of<ILogger<CompletionHandler>>());
+
+        _surveyCommandHandler = new SurveyCommandHandler(
+            _fixture.MockBotService.Object,
+            _fixture.SurveyRepository,
+            _fixture.ResponseRepository,
+            _fixture.StateManager,
+            completionHandler,
+            new[] { _textHandler, _singleChoiceHandler },
+            Mock.Of<ILogger<SurveyCommandHandler>>());
+    }
+
+    [Fact]
+    public async Task TextQuestion_TooLongInput_ReturnsValidationError()
+    {
+        // Arrange
+        var surveyId = _fixture.TestSurvey.Id;
+        await _fixture.StateManager.StartSurveyAsync(TestUserId, surveyId, 300, 4);
+
+        var longText = new string('A', 4001); // Exceeds 4000 character limit
+        var message = _fixture.CreateTestMessage(TestUserId, TestChatId, longText);
+        var question = CreateQuestionDto(1, "Text question", QuestionType.Text, true);
+
+        // Act
+        var result = await _textHandler.ProcessAnswerAsync(message, null, question, TestUserId, CancellationToken.None);
+
+        // Assert
+        result.Should().BeNull(); // Validation failed
+
+        // Verify error message was sent
+        _fixture.MockBotClient.Verify(
+            x => x.SendTextMessageAsync(
+                It.IsAny<ChatId>(),
+                It.Is<string>(s => s.Contains("too long")),
+                It.IsAny<int?>(),
+                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
+                It.IsAny<System.Collections.Generic.IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
+                It.IsAny<bool?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<int?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+                It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task TextQuestion_EmptyRequiredAnswer_ReturnsValidationError()
+    {
+        // Arrange
+        var surveyId = _fixture.TestSurvey.Id;
+        await _fixture.StateManager.StartSurveyAsync(TestUserId + 1, surveyId, 301, 4);
+
+        var message = _fixture.CreateTestMessage(TestUserId + 1, TestChatId + 1, "   "); // Empty/whitespace
+        var question = CreateQuestionDto(1, "Required text question", QuestionType.Text, true);
+
+        // Act
+        var result = await _textHandler.ProcessAnswerAsync(message, null, question, TestUserId + 1, CancellationToken.None);
+
+        // Assert
+        result.Should().BeNull();
+
+        // Verify error message
+        _fixture.MockBotClient.Verify(
+            x => x.SendTextMessageAsync(
+                It.IsAny<ChatId>(),
+                It.Is<string>(s => s.Contains("required")),
+                It.IsAny<int?>(),
+                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
+                It.IsAny<System.Collections.Generic.IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
+                It.IsAny<bool?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<int?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+                It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task SingleChoiceQuestion_InvalidOption_ReturnsValidationError()
+    {
+        // Arrange
+        var surveyId = _fixture.TestSurvey.Id;
+        await _fixture.StateManager.StartSurveyAsync(TestUserId + 2, surveyId, 302, 4);
+
+        var callback = _fixture.CreateTestCallbackQuery(TestUserId + 2, TestChatId + 2, "option_99_InvalidOption");
+        var question = CreateQuestionDto(2, "Single choice", QuestionType.SingleChoice, true, new[] { "Red", "Blue", "Green" });
+
+        // Act
+        var result = await _singleChoiceHandler.ProcessAnswerAsync(null, callback, question, TestUserId + 2, CancellationToken.None);
+
+        // Assert
+        result.Should().BeNull();
+
+        // Verify error was shown
+        _fixture.MockBotClient.Verify(
+            x => x.SendTextMessageAsync(
+                It.IsAny<ChatId>(),
+                It.Is<string>(s => s.Contains("Invalid") || s.Contains("not valid")),
+                It.IsAny<int?>(),
+                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
+                It.IsAny<System.Collections.Generic.IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
+                It.IsAny<bool?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<int?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+                It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task SkipRequiredQuestion_ReturnsError()
+    {
+        // Arrange
+        var surveyId = _fixture.TestSurvey.Id;
+        await _fixture.StateManager.StartSurveyAsync(TestUserId + 3, surveyId, 303, 4);
+
+        var message = _fixture.CreateTestMessage(TestUserId + 3, TestChatId + 3, "/skip");
+        var question = CreateQuestionDto(1, "Required question", QuestionType.Text, true);
+
+        // Act
+        var result = await _textHandler.ProcessAnswerAsync(message, null, question, TestUserId + 3, CancellationToken.None);
+
+        // Assert
+        result.Should().BeNull();
+
+        // Verify error shown
+        _fixture.MockBotClient.Verify(
+            x => x.SendTextMessageAsync(
+                It.IsAny<ChatId>(),
+                It.Is<string>(s => s.Contains("required") && s.Contains("cannot be skipped")),
+                It.IsAny<int?>(),
+                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
+                It.IsAny<System.Collections.Generic.IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
+                It.IsAny<bool?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<int?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+                It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task SessionTimeout_HandlesExpiredState()
+    {
+        // Arrange
+        var surveyId = _fixture.TestSurvey.Id;
+        await _fixture.StateManager.StartSurveyAsync(TestUserId + 4, surveyId, 304, 4);
+
+        // Get state and manually expire it
+        var state = await _fixture.StateManager.GetStateAsync(TestUserId + 4);
+        state.Should().NotBeNull();
+
+        // Set last activity to 31 minutes ago (past expiration)
+        var stateType = state!.GetType();
+        var lastActivityField = stateType.GetProperty("LastActivityAt");
+        lastActivityField!.SetValue(state, DateTime.UtcNow.AddMinutes(-31));
+
+        await _fixture.StateManager.SetStateAsync(TestUserId + 4, state);
+
+        // Act - Try to get expired state
+        var hasTimeout = await _fixture.StateManager.CheckSessionTimeoutAsync(TestUserId + 4);
+
+        // Assert
+        hasTimeout.Should().BeTrue();
+
+        var expiredState = await _fixture.StateManager.GetStateAsync(TestUserId + 4);
+        expiredState.Should().NotBeNull();
+        expiredState!.CurrentState.Should().Be(Bot.Models.ConversationStateType.SessionExpired);
+    }
+
+    [Fact]
+    public async Task StartSurvey_InvalidSurveyId_SendsErrorMessage()
+    {
+        // Arrange
+        var invalidSurveyId = 99999;
+        var message = _fixture.CreateTestMessage(TestUserId + 5, TestChatId + 5, $"/survey {invalidSurveyId}");
+
+        // Act
+        await _surveyCommandHandler.HandleAsync(message, CancellationToken.None);
+
+        // Assert
+        var state = await _fixture.StateManager.GetStateAsync(TestUserId + 5);
+        state.Should().BeNull(); // State not created for invalid survey
+
+        // Verify error message sent
+        _fixture.MockBotClient.Verify(
+            x => x.SendTextMessageAsync(
+                It.IsAny<ChatId>(),
+                It.Is<string>(s => s.Contains("not found")),
+                It.IsAny<int?>(),
+                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
+                It.IsAny<System.Collections.Generic.IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
+                It.IsAny<bool?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<int?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+                It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task StartSurvey_InactiveSurvey_SendsErrorMessage()
+    {
+        // Arrange - Create inactive survey
+        var inactiveSurvey = new Survey
+        {
+            Title = "Inactive Survey",
+            Description = "This is inactive",
+            CreatorId = _fixture.TestUser.Id,
+            IsActive = false,
+            AllowMultipleResponses = false,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _fixture.DbContext.Surveys.AddAsync(inactiveSurvey);
+        await _fixture.DbContext.SaveChangesAsync();
+
+        var message = _fixture.CreateTestMessage(TestUserId + 6, TestChatId + 6, $"/survey {inactiveSurvey.Id}");
+
+        // Act
+        await _surveyCommandHandler.HandleAsync(message, CancellationToken.None);
+
+        // Assert
+        var state = await _fixture.StateManager.GetStateAsync(TestUserId + 6);
+        state.Should().BeNull(); // State not created for inactive survey
+
+        // Verify error message sent
+        _fixture.MockBotClient.Verify(
+            x => x.SendTextMessageAsync(
+                It.IsAny<ChatId>(),
+                It.Is<string>(s => s.Contains("not currently accepting")),
+                It.IsAny<int?>(),
+                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
+                It.IsAny<System.Collections.Generic.IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
+                It.IsAny<bool?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<int?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+                It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task StartSurvey_DuplicateResponse_SendsErrorWhenNotAllowed()
+    {
+        // Arrange - Create survey that doesn't allow multiple responses
+        var singleResponseSurvey = new Survey
+        {
+            Title = "Single Response Survey",
+            Description = "Only one response allowed",
+            CreatorId = _fixture.TestUser.Id,
+            IsActive = true,
+            AllowMultipleResponses = false,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _fixture.DbContext.Surveys.AddAsync(singleResponseSurvey);
+        await _fixture.DbContext.SaveChangesAsync();
+
+        // Create completed response
+        var existingResponse = new Response
+        {
+            SurveyId = singleResponseSurvey.Id,
+            RespondentTelegramId = TestUserId + 7,
+            IsComplete = true,
+            StartedAt = DateTime.UtcNow.AddHours(-1),
+            SubmittedAt = DateTime.UtcNow
+        };
+        await _fixture.DbContext.Responses.AddAsync(existingResponse);
+        await _fixture.DbContext.SaveChangesAsync();
+
+        var message = _fixture.CreateTestMessage(TestUserId + 7, TestChatId + 7, $"/survey {singleResponseSurvey.Id}");
+
+        // Act
+        await _surveyCommandHandler.HandleAsync(message, CancellationToken.None);
+
+        // Assert
+        var state = await _fixture.StateManager.GetStateAsync(TestUserId + 7);
+        state.Should().BeNull(); // State not created due to duplicate
+
+        // Verify error message sent
+        _fixture.MockBotClient.Verify(
+            x => x.SendTextMessageAsync(
+                It.IsAny<ChatId>(),
+                It.Is<string>(s => s.Contains("already completed")),
+                It.IsAny<int?>(),
+                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
+                It.IsAny<System.Collections.Generic.IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
+                It.IsAny<bool?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<int?>(),
+                It.IsAny<bool?>(),
+                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+                It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce);
+    }
+
+    private QuestionDto CreateQuestionDto(int id, string text, QuestionType type, bool required, string[]? options = null)
+    {
+        return new QuestionDto
+        {
+            Id = id,
+            SurveyId = _fixture.TestSurvey.Id,
+            QuestionText = text,
+            QuestionType = type,
+            OrderIndex = 0,
+            IsRequired = required,
+            Options = options?.ToList(),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+    }
+}

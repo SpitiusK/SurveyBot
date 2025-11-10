@@ -22,6 +22,11 @@ public class SurveyListDto
     public string? Description { get; set; }
 
     /// <summary>
+    /// Gets or sets the unique survey code for easy sharing.
+    /// </summary>
+    public string? Code { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the survey is active.
     /// </summary>
     public bool IsActive { get; set; }

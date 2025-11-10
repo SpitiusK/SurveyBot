@@ -61,4 +61,25 @@ public interface ISurveyRepository : IRepository<Survey>
     /// <param name="surveyId">The survey ID.</param>
     /// <returns>True if the survey has responses, otherwise false.</returns>
     Task<bool> HasResponsesAsync(int surveyId);
+
+    /// <summary>
+    /// Gets a survey by its unique code.
+    /// </summary>
+    /// <param name="code">The survey code.</param>
+    /// <returns>The survey if found, otherwise null.</returns>
+    Task<Survey?> GetByCodeAsync(string code);
+
+    /// <summary>
+    /// Gets a survey by its unique code with all related questions included.
+    /// </summary>
+    /// <param name="code">The survey code.</param>
+    /// <returns>The survey with questions if found, otherwise null.</returns>
+    Task<Survey?> GetByCodeWithQuestionsAsync(string code);
+
+    /// <summary>
+    /// Checks if a survey code already exists.
+    /// </summary>
+    /// <param name="code">The code to check.</param>
+    /// <returns>True if the code exists, otherwise false.</returns>
+    Task<bool> CodeExistsAsync(string code);
 }

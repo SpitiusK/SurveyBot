@@ -302,3 +302,6 @@ finally
 {
     Log.CloseAndFlush();
 }
+
+// Make Program public for integration tests (WebApplicationFactory)
+public partial class Program { }

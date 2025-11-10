@@ -20,6 +20,12 @@ public class Survey : BaseEntity
     public string? Description { get; set; }
 
     /// <summary>
+    /// Gets or sets the unique survey code for easy sharing.
+    /// </summary>
+    [MaxLength(10)]
+    public string? Code { get; set; }
+
+    /// <summary>
     /// Gets or sets the ID of the user who created this survey.
     /// </summary>
     [Required]

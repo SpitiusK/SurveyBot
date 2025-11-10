@@ -31,6 +31,16 @@ public class SurveyConfiguration : IEntityTypeConfiguration<Survey>
             .HasColumnName("description")
             .HasColumnType("text");
 
+        // Code - unique survey code for sharing
+        builder.Property(s => s.Code)
+            .HasColumnName("code")
+            .HasMaxLength(10);
+
+        builder.HasIndex(s => s.Code)
+            .IsUnique()
+            .HasDatabaseName("idx_surveys_code")
+            .HasFilter("code IS NOT NULL");
+
         // CreatorId - foreign key to users
         builder.Property(s => s.CreatorId)
             .HasColumnName("creator_id")

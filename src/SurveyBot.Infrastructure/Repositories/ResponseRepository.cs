@@ -63,6 +63,7 @@ public class ResponseRepository : GenericRepository<Response>, IResponseReposito
     public async Task<Response?> GetIncompleteResponseAsync(int surveyId, long telegramId)
     {
         return await _dbSet
+            .AsNoTracking()
             .Include(r => r.Answers)
                 .ThenInclude(a => a.Question)
             .Include(r => r.Survey)

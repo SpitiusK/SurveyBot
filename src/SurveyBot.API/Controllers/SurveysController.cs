@@ -494,6 +494,52 @@ public class SurveysController : ControllerBase
     }
 
     /// <summary>
+    /// Gets a survey by its unique code (public endpoint - no authentication required).
+    /// </summary>
+    /// <param name="code">Survey code (6-8 alphanumeric characters).</param>
+    /// <returns>Survey details with questions.</returns>
+    /// <response code="200">Successfully retrieved survey.</response>
+    /// <response code="404">Survey not found or not active.</response>
+    [HttpGet("code/{code}")]
+    [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Get survey by code",
+        Description = "Gets survey details by its unique code. This is a public endpoint that doesn't require authentication. Only returns active surveys.",
+        Tags = new[] { "Surveys" }
+    )]
+    [ProducesResponseType(typeof(ApiResponse<SurveyDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<SurveyDto>>> GetSurveyByCode(string code)
+    {
+        try
+        {
+            _logger.LogInformation("Getting survey by code: {Code}", code);
+
+            var survey = await _surveyService.GetSurveyByCodeAsync(code);
+
+            return Ok(ApiResponse<SurveyDto>.Ok(survey));
+        }
+        catch (SurveyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Survey with code {Code} not found", code);
+            return NotFound(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting survey by code {Code}", code);
+            return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "An error occurred while retrieving the survey"
+            });
+        }
+    }
+
+    /// <summary>
     /// Gets comprehensive statistics for a survey.
     /// </summary>
     /// <param name="id">Survey ID.</param>
