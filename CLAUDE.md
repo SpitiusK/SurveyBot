@@ -1,8 +1,32 @@
-# SurveyBot - AI Assistant Documentation
+# SurveyBot - Complete AI Assistant Documentation
+
+**Last Updated**: 2025-11-10
+**Version**: 1.1.0-Enhanced
+**Target Framework**: .NET 8.0
+**Total Source Files Documented**: 184
+
+---
+
+## Table of Contents
+- [Project Overview](#project-overview)
+- [Solution Architecture](#solution-architecture)
+- [SurveyBot.Core - Domain Layer](#surveybot-core---domain-layer)
+- [SurveyBot.Infrastructure - Data Access Layer](#surveybot-infrastructure---data-access-layer)
+- [SurveyBot.Bot - Telegram Bot Layer](#surveybot-bot---telegram-bot-layer)
+- [SurveyBot.API - Presentation Layer](#surveybot-api---presentation-layer)
+- [Database Schema](#database-schema)
+- [Development Workflow](#development-workflow)
+- [Testing](#testing)
+- [Configuration](#configuration)
+- [API Reference](#api-reference)
+- [Common Patterns](#common-patterns)
+- [Troubleshooting](#troubleshooting)
+
+---
 
 ## Project Overview
 
-**SurveyBot** is a Telegram-based survey management system built with .NET 8.0, implementing Clean Architecture principles. The system enables users to create surveys via Telegram, distribute them to respondents, collect responses, and analyze results through a REST API.
+**SurveyBot** is a comprehensive Telegram-based survey management system built with .NET 8.0 following Clean Architecture principles. The system enables users to create surveys via Telegram bot interface, distribute them to respondents, collect responses, and analyze results through both Telegram bot commands and REST API endpoints.
 
 ### Key Technologies
 - **.NET 8.0** - Core framework
@@ -10,19 +34,26 @@
 - **Entity Framework Core 9.0** - ORM with PostgreSQL
 - **PostgreSQL 15** - Primary database
 - **Telegram.Bot 22.7.4** - Telegram Bot API integration
-- **Serilog** - Structured logging
-- **AutoMapper 12.0** - Object mapping
+- **Serilog** - Structured logging with enrichment
+- **AutoMapper 12.0** - Object-to-object mapping
 - **xUnit** - Testing framework
 - **JWT Bearer Authentication** - API security
+- **Swashbuckle** - Swagger/OpenAPI documentation
 
 ### Project Purpose
-Enable survey creation and response collection through Telegram bot interface with comprehensive analytics and management capabilities via REST API.
+Enable survey creation, distribution, and response collection through Telegram bot interface with comprehensive analytics and management capabilities via REST API. The system provides:
+- Telegram bot for creating and taking surveys
+- REST API for programmatic access
+- Real-time response collection
+- Comprehensive statistics and analytics
+- Secure authentication and authorization
+- Survey code sharing system
 
 ---
 
-## Solution Structure
+## Solution Architecture
 
-The solution follows Clean Architecture with clear separation of concerns:
+The solution follows Clean Architecture with clear separation of concerns and dependency inversion:
 
 ```
 SurveyBot/
@@ -33,217 +64,566 @@ SurveyBot/
 │   └── SurveyBot.API/               # Presentation Layer (depends on all)
 ├── tests/
 │   └── SurveyBot.Tests/             # Unit and Integration Tests
-├── documentation/                    # Comprehensive project documentation
+├── documentation/                    # Project documentation
 ├── docker-compose.yml               # PostgreSQL and pgAdmin containers
 └── SurveyBot.sln                    # Visual Studio Solution
-
-Dependency Flow: API → Infrastructure/Bot → Core
 ```
+
+### Dependency Flow
+```
+API → Infrastructure → Core
+API → Bot → Core
+Infrastructure → Core
+Bot → Core
+```
+
+**Core Principle**: Core has zero dependencies. All other projects depend on Core.
 
 ---
 
-## Architecture Patterns
+## SurveyBot.Core - Domain Layer
 
-### Clean Architecture Layers
+### Overview
+**Location**: `src/SurveyBot.Core/`
 
-1. **SurveyBot.Core** (Domain Layer)
-   - Contains: Entities, Interfaces, DTOs, Enums, Exceptions
-   - No external dependencies
-   - Pure business logic and domain models
-   - All other projects depend on this
+The Core project is the heart of the application containing all business entities, domain logic, interfaces (contracts), and DTOs. It has **zero dependencies** on external projects.
 
-2. **SurveyBot.Infrastructure** (Data Access Layer)
-   - Contains: DbContext, Repositories, EF Configurations, Migrations, Services
-   - Depends on: Core only
-   - Implements repository interfaces from Core
-   - Handles all database operations
+**Architecture Principle**: The Core project should never reference Infrastructure, Bot, or API projects. All dependencies point inward toward Core.
 
-3. **SurveyBot.Bot** (Application Layer - Bot Logic)
-   - Contains: Bot handlers, Command handlers, Update processing
-   - Depends on: Core only
-   - Implements Telegram bot interaction logic
-   - Webhook and polling support
-
-4. **SurveyBot.API** (Presentation Layer)
-   - Contains: Controllers, Middleware, AutoMapper profiles, API models
-   - Depends on: Core, Infrastructure, Bot
-   - Exposes REST API endpoints
-   - Handles HTTP requests/responses
-
-### Key Design Patterns
-
-1. **Repository Pattern**
-   - Generic base repository: `IRepository<T>` / `GenericRepository<T>`
-   - Specific repositories: `ISurveyRepository` / `SurveyRepository`
-   - All repositories are scoped per HTTP request
-
-2. **Service Pattern**
-   - Business logic in services: `ISurveyService`, `IAuthService`, etc.
-   - Services use repositories for data access
-   - Services contain validation and business rules
-
-3. **Dependency Injection**
-   - Constructor injection throughout
-   - Scoped lifetime for DbContext, Repositories, Services
-   - Configured in `Program.cs` and extension methods
-
-4. **AutoMapper for DTO Mapping**
-   - Profiles: `SurveyMappingProfile`, `QuestionMappingProfile`, etc.
-   - Value resolvers for complex mappings
-   - Located in `SurveyBot.API/Mapping/`
-
----
-
-## Database Schema
-
-### Core Entities
-
-1. **User** (Telegram users)
-   - `Id` (PK, auto-increment)
-   - `TelegramId` (unique, long) - Telegram's user ID
-   - `Username`, `FirstName`, `LastName`
-   - `LastLoginAt` (DateTime?)
-   - `CreatedAt`, `UpdatedAt`
-   - Navigation: `Surveys` (created by user)
-
-2. **Survey**
-   - `Id` (PK)
-   - `Title`, `Description`
-   - `CreatorId` (FK to User)
-   - `IsActive` (bool) - Accept responses or not
-   - `AllowMultipleResponses` (bool)
-   - `ShowResults` (bool)
-   - `CreatedAt`, `UpdatedAt`
-   - Navigation: `Creator`, `Questions`, `Responses`
-
-3. **Question**
-   - `Id` (PK)
-   - `SurveyId` (FK)
-   - `QuestionText`
-   - `QuestionType` (enum: Text, MultipleChoice, SingleChoice, YesNo, Rating)
-   - `OrderIndex` (int) - Display order
-   - `IsRequired` (bool)
-   - `OptionsJson` (string, JSONB) - For choice-based questions
-   - `CreatedAt`, `UpdatedAt`
-   - Navigation: `Survey`, `Answers`
-
-4. **Response** (User's survey submission)
-   - `Id` (PK)
-   - `SurveyId` (FK)
-   - `RespondentTelegramId` (long) - Not FK, allows anonymous
-   - `IsComplete` (bool)
-   - `StartedAt`, `SubmittedAt`
-   - Navigation: `Survey`, `Answers`
-
-5. **Answer** (Individual question answer)
-   - `Id` (PK)
-   - `ResponseId` (FK)
-   - `QuestionId` (FK)
-   - `AnswerJson` (string, JSONB) - Stores answer data
-   - `CreatedAt`
-   - Navigation: `Response`, `Question`
-
-### Entity Relationships
+### Project Structure
 
 ```
-User (1) ──< Surveys (*)
-Survey (1) ──< Questions (*)
-Survey (1) ──< Responses (*)
-Question (1) ──< Answers (*)
-Response (1) ──< Answers (*)
+SurveyBot.Core/
+├── Entities/                    # Domain entities (business objects)
+│   ├── BaseEntity.cs           # Base class with Id, CreatedAt, UpdatedAt
+│   ├── User.cs                 # Telegram user
+│   ├── Survey.cs               # Survey entity
+│   ├── Question.cs             # Survey question
+│   ├── Response.cs             # User's survey response
+│   ├── Answer.cs               # Individual question answer
+│   └── QuestionType.cs         # Question type enumeration
+├── Interfaces/                  # Repository and service contracts
+│   ├── IRepository.cs          # Generic repository base
+│   ├── ISurveyRepository.cs    # Survey-specific repository
+│   ├── IQuestionRepository.cs  # Question repository
+│   ├── IResponseRepository.cs  # Response repository
+│   ├── IUserRepository.cs      # User repository
+│   ├── IAnswerRepository.cs    # Answer repository
+│   ├── ISurveyService.cs       # Survey business logic
+│   ├── IQuestionService.cs     # Question business logic
+│   ├── IResponseService.cs     # Response business logic
+│   ├── IUserService.cs         # User business logic
+│   └── IAuthService.cs         # Authentication service
+├── DTOs/                        # Data Transfer Objects
+│   ├── Survey/                 # Survey DTOs
+│   ├── Question/               # Question DTOs
+│   ├── Response/               # Response DTOs
+│   ├── Answer/                 # Answer DTOs
+│   ├── User/                   # User DTOs
+│   ├── Auth/                   # Authentication DTOs
+│   ├── Statistics/             # Statistics DTOs
+│   └── Common/                 # Common DTOs (PagedResultDto, etc.)
+├── Exceptions/                  # Domain-specific exceptions
+├── Configuration/               # Configuration models (JwtSettings)
+├── Models/                      # Domain models (ValidationResult)
+└── Utilities/                   # Domain utilities (SurveyCodeGenerator)
 ```
 
-### Database Configuration
-- **Connection String**: `appsettings.json` → `ConnectionStrings:DefaultConnection`
-- **Provider**: PostgreSQL via Npgsql
-- **Migrations**: Located in `SurveyBot.Infrastructure/Migrations/`
-- **Context**: `SurveyBotDbContext` with automatic timestamp updates
+### Domain Entities
 
----
+#### BaseEntity
+**Location**: `Entities/BaseEntity.cs` (Lines 1-23)
 
-## Project Details by Layer
+Abstract base class providing common properties for all entities.
 
-### SurveyBot.Core (Domain)
+**Properties**:
+- `Id` (int, PK) - Unique identifier
+- `CreatedAt` (DateTime, UTC) - Creation timestamp
+- `UpdatedAt` (DateTime, UTC) - Last update timestamp
 
-**Purpose**: Define domain models, business rules, and contracts (interfaces)
+**Key Points**:
+- All entities except Response and Answer inherit from BaseEntity
+- Timestamps are automatically managed by DbContext.SaveChangesAsync override
+- Default values set to DateTime.UtcNow
 
-**Key Directories**:
-- `Entities/` - Domain entities (User, Survey, Question, Response, Answer)
-- `Interfaces/` - Repository and service contracts
-- `DTOs/` - Data transfer objects organized by feature
-  - `Survey/`, `Question/`, `Response/`, `Answer/`, `User/`, `Statistics/`, `Common/`, `Auth/`
-- `Exceptions/` - Custom domain exceptions
-- `Configuration/` - Settings models (JwtSettings)
+#### User
+**Location**: `Entities/User.cs` (Lines 1-48)
 
-**Important Interfaces**:
-- `IRepository<T>` - Generic repository base
-- `ISurveyRepository`, `IQuestionRepository`, `IResponseRepository`, `IUserRepository`, `IAnswerRepository`
-- `ISurveyService`, `IQuestionService`, `IResponseService`, `IUserService`, `IAuthService`
+Represents a Telegram user in the system.
 
-**DTOs Pattern**:
-- `CreateXxxDto` - For creation requests
-- `UpdateXxxDto` - For update requests
+**Properties**:
+- `TelegramId` (long, unique, required) - Telegram's unique user ID
+- `Username` (string?, max 255) - Telegram username without @
+- `FirstName` (string?, max 255) - User's first name
+- `LastName` (string?, max 255) - User's last name
+- `LastLoginAt` (DateTime?) - Last login timestamp
+
+**Navigation Properties**:
+- `Surveys` (ICollection<Survey>) - Surveys created by this user
+
+**Key Points**:
+- TelegramId is the external identifier from Telegram API
+- Id is internal database primary key
+- Username can be null (not all Telegram users have one)
+- LastLoginAt is updated during authentication
+
+#### Survey
+**Location**: `Entities/Survey.cs` (Lines 1-69)
+
+Represents a survey with metadata and configuration.
+
+**Properties**:
+- `Title` (string, required, max 500) - Survey title
+- `Description` (string?) - Survey description
+- `Code` (string?, max 10) - Unique survey code for sharing
+- `CreatorId` (int, FK, required) - User who created the survey
+- `IsActive` (bool, default: true) - Whether survey accepts responses
+- `AllowMultipleResponses` (bool, default: false) - Allow duplicate responses from same user
+- `ShowResults` (bool, default: true) - Show results to respondents
+
+**Navigation Properties**:
+- `Creator` (User) - User who created the survey
+- `Questions` (ICollection<Question>) - Survey questions
+- `Responses` (ICollection<Response>) - Survey responses
+
+**Business Rules**:
+- Must have at least one question to be activated
+- Cannot modify if active with responses (requires deactivation first)
+- Soft delete if has responses, hard delete otherwise
+- Code is auto-generated and unique (6-char alphanumeric)
+
+#### Question
+**Location**: `Entities/Question.cs` (Lines 1-59)
+
+Represents a question within a survey.
+
+**Properties**:
+- `SurveyId` (int, FK, required) - Parent survey ID
+- `QuestionText` (string, required) - The question text
+- `QuestionType` (QuestionType enum, required) - Type of question
+- `OrderIndex` (int, 0-based, required) - Display order within survey
+- `IsRequired` (bool, default: true) - Whether answer is required
+- `OptionsJson` (string?, JSONB) - JSON array for choice-based questions
+
+**Navigation Properties**:
+- `Survey` (Survey) - Parent survey
+- `Answers` (ICollection<Answer>) - All answers to this question
+
+**QuestionType Enum** (`Entities/QuestionType.cs`, Lines 1-28):
+- `Text` (0) - Free-form text answer
+- `SingleChoice` (1) - Single selection from options (radio button)
+- `MultipleChoice` (2) - Multiple selections from options (checkboxes)
+- `Rating` (3) - Numeric rating (1-5 scale)
+
+**OptionsJson Format**:
+
+For choice-based questions (MultipleChoice, SingleChoice):
+```json
+["Option 1", "Option 2", "Option 3"]
+```
+
+#### Response
+**Location**: `Entities/Response.cs` (Lines 1-56)
+
+Represents a user's response to a survey. Does NOT inherit from BaseEntity.
+
+**Properties**:
+- `Id` (int, PK) - Response ID
+- `SurveyId` (int, FK, required) - Survey being responded to
+- `RespondentTelegramId` (long, required) - Telegram ID of respondent (NOT a foreign key)
+- `IsComplete` (bool, default: false) - Whether response is submitted
+- `StartedAt` (DateTime?) - When user started the response
+- `SubmittedAt` (DateTime?) - When response was submitted
+
+**Navigation Properties**:
+- `Survey` (Survey) - Survey this response belongs to
+- `Answers` (ICollection<Answer>) - Answers in this response
+
+**Important**: RespondentTelegramId is NOT a foreign key to allow anonymous responses and avoid dependency on User table.
+
+**States**:
+- **Started**: `StartedAt` set, `IsComplete = false`
+- **Completed**: `SubmittedAt` set, `IsComplete = true`
+
+#### Answer
+**Location**: `Entities/Answer.cs` (Lines 1-56)
+
+Represents an answer to a specific question within a response. Does NOT inherit from BaseEntity.
+
+**Properties**:
+- `Id` (int, PK) - Answer ID
+- `ResponseId` (int, FK, required) - Response this answer belongs to
+- `QuestionId` (int, FK, required) - Question being answered
+- `AnswerText` (string?) - Text answer for Text questions
+- `AnswerJson` (string, JSONB) - JSON answer for complex question types
+- `CreatedAt` (DateTime, required) - When answer was submitted
+
+**Navigation Properties**:
+- `Response` (Response) - Parent response
+- `Question` (Question) - Question being answered
+
+**AnswerJson Format by Question Type**:
+
+**Text**:
+```json
+{"text": "User's answer"}
+```
+
+**SingleChoice**:
+```json
+{"selectedOption": "Option 2"}
+```
+
+**MultipleChoice**:
+```json
+{"selectedOptions": ["Option 1", "Option 3"]}
+```
+
+**Rating**:
+```json
+{"rating": 4}
+```
+
+### Repository Interfaces
+
+**IRepository<T>** - Generic repository base:
+```csharp
+Task<T?> GetByIdAsync(int id);
+Task<IEnumerable<T>> GetAllAsync();
+Task<T> AddAsync(T entity);
+Task<T> UpdateAsync(T entity);
+Task DeleteAsync(int id);
+Task<bool> ExistsAsync(int id);
+```
+
+**ISurveyRepository** - Survey-specific repository (`Interfaces/ISurveyRepository.cs`, Lines 1-86):
+- `GetByIdWithQuestionsAsync(int id)` - Include questions
+- `GetByIdWithDetailsAsync(int id)` - Include questions and responses
+- `GetByCreatorIdAsync(int creatorId)` - User's surveys
+- `GetActiveSurveysAsync()` - Only active surveys
+- `ToggleActiveStatusAsync(int id)` - Toggle IsActive
+- `SearchByTitleAsync(string searchTerm)` - Search by title (case-insensitive)
+- `GetResponseCountAsync(int surveyId)` - Count responses
+- `HasResponsesAsync(int surveyId)` - Check if has responses
+- `GetByCodeAsync(string code)` - Find by unique code
+- `GetByCodeWithQuestionsAsync(string code)` - Find by code with questions
+- `CodeExistsAsync(string code)` - Check if code exists
+
+### Service Interfaces
+
+**ISurveyService** - Survey business logic (`Interfaces/ISurveyService.cs`, Lines 1-109):
+- `CreateSurveyAsync(int userId, CreateSurveyDto dto)` - Create new survey
+- `UpdateSurveyAsync(int surveyId, int userId, UpdateSurveyDto dto)` - Update survey
+- `DeleteSurveyAsync(int surveyId, int userId)` - Delete survey (soft/hard)
+- `GetSurveyByIdAsync(int surveyId, int userId)` - Get survey details
+- `GetAllSurveysAsync(int userId, PaginationQueryDto query)` - List with pagination
+- `ActivateSurveyAsync(int surveyId, int userId)` - Activate survey
+- `DeactivateSurveyAsync(int surveyId, int userId)` - Deactivate survey
+- `GetSurveyStatisticsAsync(int surveyId, int userId)` - Get comprehensive statistics
+- `UserOwnsSurveyAsync(int surveyId, int userId)` - Check ownership
+- `GetSurveyByCodeAsync(string code)` - Get by unique code (public)
+
+### Data Transfer Objects
+
+**DTO Naming Conventions**:
+- `CreateXxxDto` - For POST requests (creation)
+- `UpdateXxxDto` - For PUT requests (updates)
 - `XxxDto` - For responses (full details)
-- `XxxListDto` - For list responses (summary)
-- `PagedResultDto<T>` - For paginated responses
+- `XxxListDto` - For list responses (summary data)
 
-**Exceptions**:
-- `SurveyNotFoundException`, `QuestionNotFoundException`, `ResponseNotFoundException`
-- `SurveyValidationException`, `QuestionValidationException`
-- `SurveyOperationException`, `InvalidAnswerFormatException`, `DuplicateResponseException`
-- `UnauthorizedAccessException`
+**SurveyDto** - Full details response (`DTOs/Survey/SurveyDto.cs`, Lines 1-81):
+```csharp
+public class SurveyDto
+{
+    public int Id { get; set; }
+    public string Title { get; set; }
+    public string? Description { get; set; }
+    public string? Code { get; set; }
+    public int CreatorId { get; set; }
+    public UserDto? Creator { get; set; }
+    public bool IsActive { get; set; }
+    public bool AllowMultipleResponses { get; set; }
+    public bool ShowResults { get; set; }
+    public List<QuestionDto> Questions { get; set; }
+    public int TotalResponses { get; set; }
+    public int CompletedResponses { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+```
 
-### SurveyBot.Infrastructure (Data Access)
+**PagedResultDto<T>** - Pagination wrapper:
+```csharp
+public class PagedResultDto<T>
+{
+    public List<T> Items { get; set; }
+    public int TotalCount { get; set; }
+    public int PageNumber { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages { get; set; }
+    public bool HasPreviousPage => PageNumber > 1;
+    public bool HasNextPage => PageNumber < TotalPages;
+}
+```
 
-**Purpose**: Implement data access, database context, and business logic services
+### Domain Exceptions
 
-**Key Directories**:
-- `Data/` - DbContext and configurations
-  - `SurveyBotDbContext` - Main database context
-  - `Configurations/` - Fluent API entity configurations
-  - `DataSeeder.cs` - Test data seeding
-- `Repositories/` - Repository implementations
-  - `GenericRepository<T>` - Base implementation
-  - Specific repositories for each entity
-- `Services/` - Business logic services
-  - `AuthService` - JWT authentication
-  - `SurveyService`, `QuestionService`, `ResponseService`, `UserService`
-- `Migrations/` - EF Core migrations
+All custom exceptions inherit from `Exception` and are in `SurveyBot.Core.Exceptions`:
+- `SurveyNotFoundException` - Survey with ID doesn't exist
+- `QuestionNotFoundException` - Question with ID doesn't exist
+- `ResponseNotFoundException` - Response with ID doesn't exist
+- `SurveyValidationException` - Survey validation fails
+- `QuestionValidationException` - Question validation fails
+- `SurveyOperationException` - Operation cannot be performed
+- `InvalidAnswerFormatException` - Answer JSON doesn't match question type
+- `InvalidQuestionTypeException` - Invalid question type provided
+- `DuplicateResponseException` - User tries to submit multiple responses when not allowed
+- `UnauthorizedAccessException` - User tries to access/modify resource they don't own
 
-**DbContext Features**:
-- Automatic `CreatedAt`/`UpdatedAt` timestamp management
-- Entity configurations via `IEntityTypeConfiguration<T>`
-- Eager loading of navigation properties in repositories
-- Sensitive data logging in Development
+### Utilities
 
-**Repository Pattern**:
-- All repositories inherit from `GenericRepository<T>`
-- Specific methods for common queries (e.g., `GetByIdWithQuestionsAsync`)
-- Include navigation properties as needed
-- Return `IEnumerable<T>` for collections
+**SurveyCodeGenerator** (`Utilities/SurveyCodeGenerator.cs`, Lines 1-73):
 
-**Services**:
-- Implement business logic and validation
-- Use repositories for data access
-- Throw domain exceptions for error conditions
-- Return DTOs, not entities
+Generates unique, URL-safe, 6-character alphanumeric codes for surveys.
 
-### SurveyBot.Bot (Telegram Bot)
+**Key Methods**:
+- `GenerateCode()` - Generate random 6-character code (A-Z, 0-9)
+- `GenerateUniqueCodeAsync(Func<string, Task<bool>> codeExistsAsync, int maxAttempts = 10)` - Generate unique code with collision checking
+- `IsValidCode(string? code)` - Validate code format
 
-**Purpose**: Handle Telegram bot interactions, commands, and updates
+**Features**:
+- Uses cryptographically secure random number generator
+- Base36 character set (A-Z, 0-9) - 2.17 billion combinations
+- Collision detection with configurable max attempts
+- Case-insensitive (stored as uppercase)
 
-**Key Directories**:
-- `Configuration/` - Bot configuration model
-- `Services/` - Core bot services
-  - `BotService` - Bot client lifecycle management
-  - `UpdateHandler` - Process incoming updates
-  - `CommandRouter` - Route commands to handlers
-- `Handlers/Commands/` - Command handlers
-  - `StartCommandHandler`, `HelpCommandHandler`, `MySurveysCommandHandler`, `SurveysCommandHandler`
-- `Interfaces/` - Bot-related interfaces
-- `Extensions/` - DI registration extensions
+---
 
-**Bot Configuration** (`appsettings.json`):
+## SurveyBot.Infrastructure - Data Access Layer
+
+### Overview
+**Location**: `src/SurveyBot.Infrastructure/`
+
+The Infrastructure project implements data access, database operations, and business logic services. This layer depends only on **SurveyBot.Core**.
+
+### Project Structure
+
+```
+SurveyBot.Infrastructure/
+├── Data/
+│   ├── SurveyBotDbContext.cs           # Main DbContext
+│   ├── DataSeeder.cs                   # Test data seeding
+│   ├── Configurations/                 # Entity configurations (Fluent API)
+│   │   ├── UserConfiguration.cs
+│   │   ├── SurveyConfiguration.cs
+│   │   ├── QuestionConfiguration.cs
+│   │   ├── ResponseConfiguration.cs
+│   │   └── AnswerConfiguration.cs
+│   └── Extensions/
+│       └── DatabaseExtensions.cs       # Seeding extensions
+├── Repositories/                       # Repository implementations
+│   ├── GenericRepository.cs            # Base repository
+│   ├── SurveyRepository.cs
+│   ├── QuestionRepository.cs
+│   ├── ResponseRepository.cs
+│   ├── UserRepository.cs
+│   └── AnswerRepository.cs
+├── Services/                           # Business logic services
+│   ├── AuthService.cs                  # JWT authentication
+│   ├── SurveyService.cs
+│   ├── QuestionService.cs
+│   ├── ResponseService.cs
+│   └── UserService.cs
+├── Migrations/                         # EF Core migrations
+│   ├── 20251105190107_InitialCreate.cs
+│   ├── 20251106000001_AddLastLoginAtToUser.cs
+│   ├── 20251109000001_AddSurveyCodeColumn.cs
+│   └── SurveyBotDbContextModelSnapshot.cs
+└── DependencyInjection.cs
+```
+
+### Database Context
+
+**SurveyBotDbContext** (`Data/SurveyBotDbContext.cs`, Lines 1-109):
+
+**Key Features**:
+1. Automatic timestamp management (`CreatedAt`, `UpdatedAt`)
+2. Entity configurations via Fluent API
+3. PostgreSQL-specific features (JSONB)
+4. Development-mode detailed logging
+
+**DbSets**:
+```csharp
+public DbSet<User> Users { get; set; }
+public DbSet<Survey> Surveys { get; set; }
+public DbSet<Question> Questions { get; set; }
+public DbSet<Response> Responses { get; set; }
+public DbSet<Answer> Answers { get; set; }
+```
+
+**SaveChangesAsync Override** (Lines 70-107):
+```csharp
+public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+{
+    var entries = ChangeTracker.Entries()
+        .Where(e => e.Entity is BaseEntity &&
+                   (e.State == EntityState.Added || e.State == EntityState.Modified));
+
+    foreach (var entry in entries)
+    {
+        var entity = (BaseEntity)entry.Entity;
+
+        if (entry.State == EntityState.Added)
+        {
+            entity.CreatedAt = DateTime.UtcNow;
+            entity.UpdatedAt = DateTime.UtcNow;
+        }
+        else if (entry.State == EntityState.Modified)
+        {
+            entity.UpdatedAt = DateTime.UtcNow;
+        }
+    }
+
+    return base.SaveChangesAsync(cancellationToken);
+}
+```
+
+### Repository Implementations
+
+**SurveyRepository** (`Repositories/SurveyRepository.cs`, Lines 1-169):
+
+Key Methods:
+- `GetByIdWithQuestionsAsync` (Lines 22-29) - Include questions ordered by OrderIndex
+- `GetByIdWithDetailsAsync` (Lines 32-40) - Include questions, responses, and answers
+- `GetActiveSurveysAsync` (Lines 54-63) - Only active surveys
+- `SearchByTitleAsync` (Lines 82-95) - PostgreSQL case-insensitive LIKE search
+- `GetByCodeWithQuestionsAsync` (Lines 144-156) - Find by code with questions
+- `CodeExistsAsync` (Lines 159-167) - Check code existence
+
+### Service Implementations
+
+**SurveyService** (`Services/SurveyService.cs`, Lines 1-724):
+
+**Key Methods**:
+
+1. **CreateSurveyAsync** (Lines 44-74):
+   - Validates DTO
+   - Maps to Survey entity
+   - Sets CreatorId and IsActive=false
+   - Generates unique survey code using `SurveyCodeGenerator`
+   - Saves to database
+   - Returns mapped SurveyDto
+
+2. **UpdateSurveyAsync** (Lines 77-127):
+   - Gets survey with questions
+   - Checks authorization (user owns survey)
+   - Prevents modification if active with responses
+   - Updates properties
+   - Returns updated SurveyDto
+
+3. **ActivateSurveyAsync** (Lines 260-306):
+   - Checks authorization
+   - Validates survey has at least one question
+   - Sets IsActive=true
+   - Returns updated SurveyDto
+
+4. **GetSurveyStatisticsAsync** (Lines 350-410):
+   - Gets survey with questions and responses
+   - Calculates basic statistics (total, completed, completion rate)
+   - Calculates average completion time
+   - Calculates question-level statistics
+   - Returns comprehensive SurveyStatisticsDto
+
+5. **GetSurveyByCodeAsync** (Lines 420-458):
+   - Validates code format
+   - Gets survey by code with questions
+   - Only returns if active (for public access)
+   - Returns SurveyDto
+
+**Private Helper Methods**:
+- `CalculateQuestionStatisticsAsync` (Lines 512-560) - Question-level statistics
+- `CalculateChoiceDistribution` (Lines 565-644) - Choice question distribution
+- `CalculateRatingStatistics` (Lines 649-696) - Rating statistics
+- `CalculateTextStatistics` (Lines 701-720) - Text answer statistics
+
+### Database Migrations
+
+**Commands** (from `SurveyBot.API` directory):
+```bash
+dotnet ef migrations add MigrationName
+dotnet ef database update
+dotnet ef migrations remove
+dotnet ef migrations script
+```
+
+**Existing Migrations**:
+- **InitialCreate** (20251105190107) - Creates all tables
+- **AddLastLoginAtToUser** (20251106000001) - Adds LastLoginAt column
+- **AddSurveyCodeColumn** (20251109000001) - Adds Code column with unique index
+
+---
+
+## SurveyBot.Bot - Telegram Bot Layer
+
+### Overview
+**Location**: `src/SurveyBot.Bot/`
+
+The Bot project implements Telegram bot logic and handles all interactions with Telegram's Bot API.
+
+**Dependencies**: SurveyBot.Core, Telegram.Bot 22.7.4
+
+### Project Structure
+
+```
+SurveyBot.Bot/
+├── Configuration/
+│   └── BotConfiguration.cs             # Bot settings model
+├── Services/
+│   ├── BotService.cs                   # Bot client lifecycle
+│   ├── UpdateHandler.cs                # Process incoming updates
+│   ├── CommandRouter.cs                # Route commands to handlers
+│   ├── ConversationStateManager.cs     # Manage conversation state
+│   ├── AdminAuthService.cs
+│   ├── ApiErrorHandler.cs
+│   ├── BotPerformanceMonitor.cs
+│   ├── QuestionErrorHandler.cs
+│   └── SurveyCache.cs
+├── Handlers/
+│   ├── Commands/                       # Command handler implementations
+│   │   ├── StartCommandHandler.cs
+│   │   ├── HelpCommandHandler.cs
+│   │   ├── MySurveysCommandHandler.cs
+│   │   ├── SurveysCommandHandler.cs
+│   │   ├── StatsCommandHandler.cs      # (Lines 1-239)
+│   │   └── ...
+│   ├── Questions/                      # Question type handlers
+│   │   ├── TextQuestionHandler.cs
+│   │   ├── SingleChoiceQuestionHandler.cs
+│   │   ├── MultipleChoiceQuestionHandler.cs
+│   │   └── RatingQuestionHandler.cs
+│   ├── NavigationHandler.cs
+│   └── CancelCallbackHandler.cs
+├── Interfaces/
+│   ├── IBotService.cs
+│   ├── IUpdateHandler.cs
+│   ├── ICommandHandler.cs
+│   ├── IQuestionHandler.cs
+│   ├── IConversationStateManager.cs
+│   ├── IAdminAuthService.cs
+│   └── IAnswerValidator.cs
+├── Models/
+│   ├── ConversationState.cs            # (Lines 1-241)
+│   └── ApiResponse.cs
+├── Validators/
+│   └── AnswerValidator.cs
+└── Extensions/
+    ├── ServiceCollectionExtensions.cs
+    └── BotServiceExtensions.cs
+```
+
+### Configuration
+
+**BotConfiguration** (`Configuration/BotConfiguration.cs`, Lines 1-122):
 ```json
 {
   "BotConfiguration": {
@@ -252,456 +632,383 @@ Response (1) ──< Answers (*)
     "WebhookPath": "/api/bot/webhook",
     "WebhookSecret": "your-secret",
     "UseWebhook": false,
-    "ApiBaseUrl": "http://localhost:5000"
+    "ApiBaseUrl": "http://localhost:5000",
+    "MaxConnections": 40,
+    "AdminUserIds": [123456789]
   }
 }
 ```
 
-**Command Handler Pattern**:
-- Implement `ICommandHandler` interface
-- Register in DI container
-- `CommandRouter` dispatches to appropriate handler
+### Core Services
 
-**Webhook vs Polling**:
-- Webhook: Production mode, set `UseWebhook: true`
-- Polling: Development mode, set `UseWebhook: false`
+**UpdateHandler** (`Services/UpdateHandler.cs`, Lines 1-505):
 
-### SurveyBot.API (Presentation)
+Routes updates to appropriate handlers:
+- `UpdateType.Message` → HandleMessageAsync
+- `UpdateType.CallbackQuery` → HandleCallbackQueryAsync
+- `UpdateType.EditedMessage` → HandleEditedMessageAsync
 
-**Purpose**: Expose REST API endpoints, handle HTTP requests, authentication
+**Callback Data Formats**:
+- `cmd:commandName` - Execute command from inline button
+- `nav_back_q{questionId}` - Go back to previous question
+- `nav_skip_q{questionId}` - Skip optional question
+- `cancel_confirm` / `cancel_dismiss` - Cancel confirmation
+- `listsurveys:page:{pageNumber}` - Pagination
 
-**Key Directories**:
-- `Controllers/` - API controllers
-  - `SurveysController`, `QuestionsController`, `ResponsesController`, `UsersController`
-  - `AuthController` - Login/authentication
-  - `BotController` - Webhook endpoint
-  - `HealthController`, `TestErrorsController`
-- `Middleware/` - Custom middleware
-  - `GlobalExceptionMiddleware` - Centralized error handling
-  - `RequestLoggingMiddleware` - Request/response logging
-- `Models/` - API-specific models
-  - `ApiResponse<T>` - Standard response wrapper
-  - `ErrorResponse` - Error details
-- `Mapping/` - AutoMapper profiles
-  - `SurveyMappingProfile`, `QuestionMappingProfile`, etc.
-  - `ValueResolvers/` - Custom mapping resolvers
-- `Extensions/` - Service registration extensions
-- `Services/` - Background services
-  - `BackgroundTaskQueue` - Queue for webhook processing
+**ConversationStateManager** (`Services/ConversationStateManager.cs`, Lines 1-544):
 
-**Program.cs Structure**:
-1. Configure Serilog
-2. Add Controllers
-3. Configure AutoMapper
-4. Register DbContext with PostgreSQL
-5. Configure JWT Authentication
-6. Register Repositories (Scoped)
-7. Register Services (Scoped)
-8. Register Telegram Bot Services
-9. Add Health Checks
-10. Configure Swagger/OpenAPI
-11. Build app and configure middleware pipeline
+Manages conversation state for Telegram bot users:
+- In-memory storage with `ConcurrentDictionary`
+- Automatic cleanup of expired states (30 min inactivity)
+- Thread-safe state transitions with `SemaphoreSlim`
+- Survey progress tracking
 
-**Authentication**:
-- JWT Bearer tokens
-- Configuration in `appsettings.json` → `JwtSettings`
-- Required fields: `SecretKey`, `Issuer`, `Audience`, `ExpirationMinutes`
-- Most endpoints require `[Authorize]` attribute
-- User ID extracted from `ClaimTypes.NameIdentifier`
+**Key Methods**:
+- `StartSurveyAsync(userId, surveyId, responseId, totalQuestions)` - Initialize survey session
+- `NextQuestionAsync(userId)` - Move to next question
+- `PreviousQuestionAsync(userId)` - Move to previous question
+- `CompleteSurveyAsync(userId)` - Mark survey as complete
+- `CancelSurveyAsync(userId)` - Cancel and clear survey data
 
-**API Response Pattern**:
+**ConversationState Model** (`Models/ConversationState.cs`, Lines 1-241):
+
+Properties:
+- `CurrentSurveyId`, `CurrentResponseId`, `CurrentQuestionIndex`
+- `TotalQuestions`, `AnsweredQuestionIndices`, `CachedAnswers`
+- `IsExpired`, `ProgressPercent`, `IsAllAnswered`
+
+**ConversationStateType Enum** (Lines 197-240):
+- `Idle`, `WaitingSurveySelection`, `InSurvey`, `AnsweringQuestion`
+- `ResponseComplete`, `SessionExpired`, `Cancelled`
+
+### Command Handlers
+
+**StatsCommandHandler** (`Handlers/Commands/StatsCommandHandler.cs`, Lines 1-239):
+
+**Command**: `/stats <survey_id>`
+**Purpose**: Display comprehensive statistics (Admin only)
+
+Output includes:
+- Survey title, ID, status
+- Total/completed/incomplete responses
+- Completion rate, unique respondents
+- Average completion time
+- Top 3 questions by response count
+- Creation date, first/last response timestamps
+
+### Webhook vs Polling
+
+**Webhook Mode (Production)**:
+- Real-time updates from Telegram
+- HTTPS required with valid SSL certificate
+- Set `UseWebhook: true`
+
+**Polling Mode (Development)**:
+- Bot actively polls Telegram API
+- No HTTPS or public URL required
+- Set `UseWebhook: false`
+
+---
+
+## SurveyBot.API - Presentation Layer
+
+### Overview
+**Location**: `src/SurveyBot.API/`
+
+The API project exposes REST API endpoints and serves as the entry point.
+
+### Project Structure
+
+```
+SurveyBot.API/
+├── Controllers/                # API controllers
+│   ├── AuthController.cs
+│   ├── SurveysController.cs
+│   ├── QuestionsController.cs
+│   ├── ResponsesController.cs
+│   ├── UsersController.cs
+│   ├── BotController.cs
+│   └── HealthController.cs
+├── Middleware/
+│   ├── GlobalExceptionMiddleware.cs
+│   └── RequestLoggingMiddleware.cs
+├── Models/
+│   ├── ApiResponse.cs          # Standard response wrapper
+│   └── ErrorResponse.cs
+├── Mapping/                    # AutoMapper profiles
+│   ├── SurveyMappingProfile.cs
+│   ├── QuestionMappingProfile.cs
+│   └── ValueResolvers/
+├── Extensions/                 # Service registration
+├── Services/                   # Background services
+│   ├── BackgroundTaskQueue.cs
+│   └── QueuedHostedService.cs
+├── Exceptions/                 # API-specific exceptions
+├── Program.cs                  # Application entry point (Lines 1-308)
+└── appsettings.json
+```
+
+### Program.cs
+
+**Location**: `Program.cs` (Lines 1-308)
+
+**Service Registration Order** (Lines 37-139):
+1. Controllers
+2. AutoMapper
+3. DbContext with PostgreSQL
+4. JWT Settings
+5. Authentication & Authorization
+6. Repositories (Scoped)
+7. Services (Scoped)
+8. Telegram Bot Services
+9. Background Task Queue
+10. Health Checks
+11. Swagger
+
+**Middleware Pipeline** (Lines 216-257):
+1. Serilog request logging
+2. Custom request logging
+3. Global exception handling
+4. Swagger (Development)
+5. HTTPS redirection
+6. Authentication
+7. Authorization
+8. Map Controllers
+9. Map Health Checks
+
+### API Response Pattern
+
+**ApiResponse<T>** (`Models/ApiResponse.cs`):
 ```csharp
-ApiResponse<T> {
-    bool Success,
-    string Message,
-    T Data,
-    Dictionary<string, object> Metadata
+public class ApiResponse<T>
+{
+    public bool Success { get; set; }
+    public string Message { get; set; }
+    public T? Data { get; set; }
+    public Dictionary<string, object>? Metadata { get; set; }
 }
 ```
 
-**Controllers Best Practices**:
-- Use DTOs for requests/responses
-- Return `ApiResponse<T>` wrapper
-- Log operations
-- Handle specific exceptions (catch specific before general)
-- Extract user ID from JWT claims
-- Use `[SwaggerOperation]` attributes for documentation
-
----
-
-## API Endpoints
-
 ### Authentication
-- `POST /api/auth/login` - Login with Telegram credentials
-- `POST /api/auth/refresh` - Refresh JWT token
 
-### Surveys
-- `POST /api/surveys` - Create survey
-- `GET /api/surveys` - List user's surveys (paginated, filterable)
-- `GET /api/surveys/{id}` - Get survey details with questions
-- `PUT /api/surveys/{id}` - Update survey
-- `DELETE /api/surveys/{id}` - Delete survey (soft/hard)
-- `POST /api/surveys/{id}/activate` - Activate survey
-- `POST /api/surveys/{id}/deactivate` - Deactivate survey
-- `GET /api/surveys/{id}/statistics` - Get survey statistics
+**JWT Configuration** (Lines 56-108):
+```csharp
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings.Issuer,
+        ValidAudience = jwtSettings.Audience,
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
+        ClockSkew = TimeSpan.Zero
+    };
+});
+```
 
-### Questions
-- `POST /api/surveys/{surveyId}/questions` - Add question
-- `GET /api/surveys/{surveyId}/questions` - List questions
-- `GET /api/questions/{id}` - Get question details
-- `PUT /api/questions/{id}` - Update question
-- `DELETE /api/questions/{id}` - Delete question
-- `POST /api/surveys/{surveyId}/questions/reorder` - Reorder questions
+### Middleware
 
-### Responses
-- `POST /api/surveys/{surveyId}/responses/start` - Start response
-- `POST /api/responses/{responseId}/answers` - Submit answer
-- `POST /api/responses/{responseId}/complete` - Complete response
-- `GET /api/surveys/{surveyId}/responses` - List survey responses
-- `GET /api/responses/{id}` - Get response details
-
-### Users
-- `GET /api/users/me` - Get current user profile
-- `PUT /api/users/me` - Update user profile
-
-### Bot
-- `POST /api/bot/webhook` - Telegram webhook endpoint (if enabled)
-
-### Health
-- `GET /health/db` - Database health check
-- `GET /health/db/details` - Detailed DB health info
+**GlobalExceptionMiddleware**:
+Maps domain exceptions to HTTP status codes:
+- `SurveyNotFoundException` → 404 Not Found
+- `SurveyValidationException` → 400 Bad Request
+- `DuplicateResponseException` → 409 Conflict
+- `UnauthorizedAccessException` → 403 Forbidden
 
 ---
 
-## Testing
+## Database Schema
 
-### Test Project Structure
+### Entity Relationships
+
 ```
-SurveyBot.Tests/
-├── Unit/                      # Unit tests (isolated components)
-│   ├── Repositories/          # Repository tests
-│   ├── Services/              # Service tests
-│   └── Validators/            # Validation tests
-├── Integration/               # Integration tests (with database)
-│   ├── Controllers/           # API endpoint tests
-│   ├── Database/              # Database operation tests
-│   └── Scenarios/             # End-to-end scenarios
-├── Fixtures/                  # Test fixtures and helpers
-│   ├── DatabaseFixture.cs     # In-memory database setup
-│   └── TestDataBuilder.cs     # Test data creation
-└── Helpers/                   # Test utilities
+User (1) ──creates──> Surveys (*)
+Survey (1) ──contains──> Questions (*)
+Survey (1) ──receives──> Responses (*)
+Question (1) ──answered by──> Answers (*)
+Response (1) ──contains──> Answers (*)
 ```
 
-### Testing Stack
-- **xUnit** - Test framework
-- **Moq** - Mocking framework
-- **FluentAssertions** - Assertion library
-- **EF Core InMemory** - In-memory database for tests
-- **Microsoft.AspNetCore.Mvc.Testing** - API integration tests
+### Tables
 
-### Running Tests
-```bash
-# Run all tests
-dotnet test
+**users**: id, telegram_id (unique), username, first_name, last_name, last_login_at, created_at, updated_at
 
-# Run with coverage
-dotnet test /p:CollectCoverage=true
+**surveys**: id, title, description, code (unique), creator_id (FK), is_active, allow_multiple_responses, show_results, created_at, updated_at
 
-# Run specific test project
-dotnet test tests/SurveyBot.Tests/SurveyBot.Tests.csproj
+**questions**: id, survey_id (FK), question_text, question_type, order_index, is_required, options_json (JSONB), created_at, updated_at
 
-# Run specific test class
-dotnet test --filter "FullyQualifiedName~SurveyServiceTests"
-```
+**responses**: id, survey_id (FK), respondent_telegram_id (NOT FK), is_complete, started_at, submitted_at
 
-### Test Patterns
-1. **Arrange-Act-Assert** structure
-2. Use `DatabaseFixture` for tests requiring database
-3. Mock repositories/services for unit tests
-4. Use `WebApplicationFactory` for integration tests
-5. Test both success and failure scenarios
+**answers**: id, response_id (FK), question_id (FK), answer_text, answer_json (JSONB), created_at
+
+### Cascade Delete
+
+- Delete Survey → Questions cascade delete
+- Delete Survey → Responses cascade delete
+- Delete Question → Answers cascade delete
+- Delete Response → Answers cascade delete
 
 ---
 
 ## Development Workflow
 
 ### Initial Setup
-1. Install .NET 8.0 SDK
-2. Install Docker Desktop (for PostgreSQL)
-3. Clone repository
-4. Copy `.env.example` to `.env` and configure
-5. Start Docker: `docker-compose up -d`
-6. Navigate to API: `cd src/SurveyBot.API`
-7. Apply migrations: `dotnet ef database update`
-8. Run API: `dotnet run`
+
+1. Install .NET 8.0 SDK, Docker Desktop
+2. Clone repository
+3. Configure `.env` file
+4. Start Docker: `docker-compose up -d`
+5. Apply migrations: `cd src/SurveyBot.API && dotnet ef database update`
+6. Configure bot token in `appsettings.json`
+7. Run: `dotnet run`
+8. Access Swagger: http://localhost:5000/swagger
 
 ### Database Migrations
+
 ```bash
-# Add new migration (from SurveyBot.API directory)
 cd src/SurveyBot.API
 dotnet ef migrations add MigrationName
-
-# Apply migrations
 dotnet ef database update
-
-# Rollback migration
-dotnet ef database update PreviousMigrationName
-
-# Remove last migration (if not applied)
 dotnet ef migrations remove
-
-# Generate SQL script
 dotnet ef migrations script
 ```
 
-### Configuration Files
+---
 
-**appsettings.json** (SurveyBot.API):
+## Testing
+
+### Running Tests
+
+```bash
+dotnet test
+dotnet test /p:CollectCoverage=true
+dotnet test --filter "FullyQualifiedName~SurveyServiceTests"
+```
+
+---
+
+## Configuration
+
+### appsettings.json
+
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database=surveybot_db;Username=surveybot_user;Password=surveybot_dev_password"
+    "DefaultConnection": "Host=localhost;Port=5432;Database=surveybot_db;..."
   },
   "JwtSettings": {
-    "SecretKey": "your-secret-key-min-32-chars",
+    "SecretKey": "min-32-characters",
     "Issuer": "SurveyBot.API",
     "Audience": "SurveyBot.Client",
     "ExpirationMinutes": 60
   },
   "BotConfiguration": {
-    "BotToken": "your-telegram-bot-token",
+    "BotToken": "",
     "UseWebhook": false,
-    "ApiBaseUrl": "http://localhost:5000"
-  },
-  "Serilog": {
-    "MinimumLevel": "Information"
+    "ApiBaseUrl": "http://localhost:5000",
+    "AdminUserIds": []
   }
 }
 ```
 
-**.env** (Docker):
-```bash
-POSTGRES_DB=surveybot_db
-POSTGRES_USER=surveybot_user
-POSTGRES_PASSWORD=surveybot_dev_password
-PGADMIN_DEFAULT_EMAIL=admin@surveybot.local
-PGADMIN_DEFAULT_PASSWORD=admin123
+---
+
+## API Reference
+
+### Authentication
+
+**POST /api/auth/login**: Login with Telegram credentials
+**POST /api/auth/refresh**: Refresh JWT token
+
+### Surveys
+
+**POST /api/surveys**: Create survey
+**GET /api/surveys**: List surveys (paginated)
+**GET /api/surveys/{id}**: Get survey details
+**PUT /api/surveys/{id}**: Update survey
+**DELETE /api/surveys/{id}**: Delete survey
+**POST /api/surveys/{id}/activate**: Activate survey
+**POST /api/surveys/{id}/deactivate**: Deactivate survey
+**GET /api/surveys/{id}/statistics**: Get statistics
+**GET /api/surveys/code/{code}**: Get by code (public)
+
+### Questions
+
+**POST /api/surveys/{surveyId}/questions**: Add question
+**GET /api/surveys/{surveyId}/questions**: List questions
+**GET /api/questions/{id}**: Get question
+**PUT /api/questions/{id}**: Update question
+**DELETE /api/questions/{id}**: Delete question
+**POST /api/surveys/{surveyId}/questions/reorder**: Reorder
+
+### Responses
+
+**POST /api/surveys/{surveyId}/responses/start**: Start response
+**POST /api/responses/{responseId}/answers**: Submit answer
+**POST /api/responses/{responseId}/complete**: Complete response
+**GET /api/surveys/{surveyId}/responses**: List responses
+**GET /api/responses/{id}**: Get response details
+
+---
+
+## Common Patterns
+
+### Repository Pattern
+
+```csharp
+public async Task<Survey?> GetByIdWithQuestionsAsync(int id)
+{
+    return await _dbSet
+        .AsNoTracking()
+        .Include(s => s.Questions.OrderBy(q => q.OrderIndex))
+        .Include(s => s.Creator)
+        .FirstOrDefaultAsync(s => s.Id == id);
+}
 ```
 
-### Adding New Features
+### Service Pattern
 
-#### Adding a New Entity
-1. Create entity in `SurveyBot.Core/Entities/`
-2. Add DbSet to `SurveyBotDbContext`
-3. Create entity configuration in `Infrastructure/Data/Configurations/`
-4. Apply configuration in `OnModelCreating`
-5. Create migration: `dotnet ef migrations add AddNewEntity`
-6. Apply migration: `dotnet ef database update`
-7. Create repository interface in `Core/Interfaces/`
-8. Implement repository in `Infrastructure/Repositories/`
-9. Register repository in `Program.cs`
-
-#### Adding a New API Endpoint
-1. Create DTOs in `SurveyBot.Core/DTOs/`
-2. Create/update service interface in `Core/Interfaces/`
-3. Implement service in `Infrastructure/Services/`
-4. Create AutoMapper profile in `API/Mapping/`
-5. Create/update controller in `API/Controllers/`
-6. Add XML documentation comments
-7. Test with Swagger UI
-
-#### Adding a New Bot Command
-1. Create command handler in `SurveyBot.Bot/Handlers/Commands/`
-2. Implement `ICommandHandler` interface
-3. Register handler in DI (`BotServiceExtensions`)
-4. Add command to `CommandRouter`
-5. Test with Telegram bot
+```csharp
+public async Task<SurveyDto> GetSurveyAsync(int surveyId, int userId)
+{
+    var survey = await _repository.GetByIdAsync(surveyId);
+    if (survey == null)
+        throw new SurveyNotFoundException(surveyId);
+    if (survey.CreatorId != userId)
+        throw new UnauthorizedAccessException();
+    return _mapper.Map<SurveyDto>(survey);
+}
+```
 
 ---
 
-## Coding Standards
+## Troubleshooting
 
-### C# Conventions
-- **Naming**: PascalCase for classes/methods, camelCase for parameters/locals
-- **Async**: All async methods end with `Async` suffix
-- **Nullability**: Nullable reference types enabled
-- **Documentation**: XML comments for public APIs
-- **Constants**: Use `const` or `static readonly` as appropriate
+### Database Connection
 
-### File Organization
-- One class per file
-- File name matches class name
-- Organize using statements (System first, then third-party, then project)
-- Use `namespace` file-scoped declaration (C# 10+)
+**Problem**: Cannot connect to PostgreSQL
+**Solutions**: Check Docker is running (`docker ps`), verify connection string
 
-### Entity Framework
-- Use async methods: `ToListAsync()`, `FirstOrDefaultAsync()`, etc.
-- Include navigation properties explicitly: `.Include(x => x.Navigation)`
-- Use `AsNoTracking()` for read-only queries
-- Always use parameterized queries (EF does this automatically)
+### Migrations
 
-### API Controllers
-- Return `ActionResult<T>` or `IActionResult`
-- Use `[ApiController]` attribute
-- Use route attributes: `[Route("api/[controller]")]`
-- Use HTTP verb attributes: `[HttpGet]`, `[HttpPost]`, etc.
-- Add `[ProducesResponseType]` for Swagger documentation
-- Wrap responses in `ApiResponse<T>`
+**Problem**: Migrations fail
+**Solutions**: Ensure in API directory, check EF Core tools installed
 
-### Error Handling
-- Throw domain exceptions in services
-- Catch specific exceptions in controllers
-- Use `GlobalExceptionMiddleware` for unhandled exceptions
-- Log errors with context
-- Return appropriate HTTP status codes
+### Bot Not Responding
 
-### Dependency Injection
-- Use constructor injection
-- Register services with appropriate lifetime (Scoped for most)
-- Avoid service locator pattern
-- Register in `Program.cs` or extension methods
+**Problem**: Bot doesn't respond
+**Solutions**: Verify bot token, check initialization logs, test with `/start`
+
+### JWT Authentication
+
+**Problem**: 401 Unauthorized
+**Solutions**: Verify SecretKey is 32+ chars, check token expiration, verify Issuer/Audience match
 
 ---
 
-## Common Tasks Reference
-
-### Debugging
-- **API**: Set `SurveyBot.API` as startup project
-- **Logs**: Check console or Serilog output
-- **Database**: Use pgAdmin at http://localhost:5050
-- **Swagger**: http://localhost:5000/swagger
-- **EF Queries**: Enable logging in `appsettings.json`
-
-### Database Access
-- **pgAdmin**: http://localhost:5050
-  - Email: admin@surveybot.local
-  - Password: admin123
-- **Connection**:
-  - Host: localhost
-  - Port: 5432
-  - Database: surveybot_db
-  - Username: surveybot_user
-  - Password: surveybot_dev_password
-
-### Telegram Bot Testing
-1. Get token from @BotFather
-2. Add to `appsettings.json` → `BotConfiguration:BotToken`
-3. Set `UseWebhook: false` for development
-4. Run API
-5. Message your bot on Telegram
-
-### Troubleshooting
-
-**Database connection fails**:
-- Ensure Docker is running: `docker ps`
-- Check connection string matches `.env`
-- Verify PostgreSQL container is healthy
-
-**Migrations fail**:
-- Ensure you're in `SurveyBot.API` directory
-- Check EF Core tools installed: `dotnet tool list -g`
-- Install if needed: `dotnet tool install --global dotnet-ef`
-
-**Bot not responding**:
-- Verify bot token is correct
-- Check bot initialization logs
-- For webhook mode, ensure webhook URL is accessible
-
-**JWT authentication fails**:
-- Verify `SecretKey` is at least 32 characters
-- Check token hasn't expired
-- Ensure `Issuer` and `Audience` match
-
----
-
-## Project Status
-
-### Completed Features
-- Clean Architecture solution structure
-- Database schema and EF Core setup
-- Repository pattern implementation
-- Service layer with business logic
-- REST API with full CRUD operations
-- JWT authentication
-- AutoMapper configuration
-- Global exception handling
-- Request logging
-- Health checks
-- Swagger/OpenAPI documentation
-- Docker Compose setup
-- Basic Telegram bot infrastructure
-- Unit and integration testing setup
-
-### In Progress
-- Telegram bot conversation flows
-- Survey response collection via bot
-- Advanced analytics and reporting
-
-### Planned
-- Admin panel (React SPA)
-- Survey export functionality (CSV, Excel, PDF)
-- Response rate tracking
-- Survey templates
-- Multi-language support
-- CI/CD pipeline
-
----
-
-## Important Notes for AI Assistants
-
-### When Making Changes
-1. **Always preserve Clean Architecture**: Don't add business logic to controllers
-2. **Use existing patterns**: Follow repository/service patterns
-3. **Update migrations**: Create migration after entity changes
-4. **Update DTOs**: Keep DTOs in sync with entities
-5. **Add tests**: Write tests for new functionality
-6. **Update AutoMapper**: Add mapping profiles for new DTOs
-7. **Document APIs**: Add XML comments and Swagger attributes
-
-### When Reading Code
-1. **Start with Core**: Understand entities and interfaces first
-2. **Follow dependencies**: Core → Infrastructure/Bot → API
-3. **Check DI registration**: Look in `Program.cs` and extension methods
-4. **Review DTOs**: Understand data contracts
-5. **Check AutoMapper**: Understand entity-to-DTO mappings
-
-### When Debugging
-1. **Check logs**: Serilog provides detailed logging
-2. **Use Swagger**: Test API endpoints interactively
-3. **Verify DI**: Check `DIVerifier` output in Development
-4. **Database state**: Use pgAdmin to inspect data
-5. **Migration history**: Check `__EFMigrationsHistory` table
-
-### Key Files to Reference
-- `Program.cs` - Application startup and DI configuration
-- `SurveyBotDbContext.cs` - Database context and entity configuration
-- `DI-STRUCTURE.md` - Detailed DI documentation
-- `README.md` - Project overview and quick start
-- `documentation/` - Comprehensive documentation by topic
-
----
-
-## Additional Resources
-
-### Documentation Files
-- `README.md` - Project overview and quick start guide
-- `DI-STRUCTURE.md` - Dependency injection structure
-- `DOCKER-STARTUP-GUIDE.md` - Docker setup instructions
-- `QUICK-START-DATABASE.md` - Database setup guide
-- `documentation/DEVELOPER_ONBOARDING.md` - Complete developer guide
-- `documentation/TROUBLESHOOTING.md` - Common issues and solutions
-- `documentation/architecture/` - Architecture diagrams and decisions
-- `documentation/database/` - Database schema and design
-- `documentation/api/` - API reference documentation
-
-### External Resources
-- [.NET 8 Documentation](https://learn.microsoft.com/en-us/dotnet/)
-- [Entity Framework Core](https://learn.microsoft.com/en-us/ef/core/)
-- [Telegram Bot API](https://core.telegram.org/bots/api)
-- [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-
----
-
-**Last Updated**: 2025-11-07
-**Version**: 1.0.0-MVP
-**Target Framework**: .NET 8.0
+**End of Documentation**

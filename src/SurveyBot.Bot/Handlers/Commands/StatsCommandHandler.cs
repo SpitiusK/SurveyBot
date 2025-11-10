@@ -103,6 +103,9 @@ public class StatsCommandHandler : ICommandHandler
                 return;
             }
 
+            // Get survey details to access IsActive and CreatedAt
+            var survey = await _surveyService.GetSurveyByIdAsync(surveyId, user.Id);
+
             // Get survey statistics
             var stats = await _surveyService.GetSurveyStatisticsAsync(surveyId, user.Id);
 
@@ -112,31 +115,39 @@ public class StatsCommandHandler : ICommandHandler
                 telegramUserId);
 
             // Build statistics message
-            var statusEmoji = stats.IsActive ? "✅" : "⏸";
-            var statusText = stats.IsActive ? "Active" : "Inactive";
+            var statusEmoji = survey.IsActive ? "✅" : "⏸";
+            var statusText = survey.IsActive ? "Active" : "Inactive";
 
-            var completionRate = stats.TotalResponses > 0
-                ? (stats.CompletedResponses * 100.0 / stats.TotalResponses)
-                : 0;
+            var totalQuestions = stats.QuestionStatistics?.Count ?? 0;
 
-            var message = $"📊 *Survey Statistics*\n\n" +
+            var responseText = $"📊 *Survey Statistics*\n\n" +
                          $"*{stats.Title}*\n" +
-                         $"ID: {stats.Id}\n" +
+                         $"ID: {stats.SurveyId}\n" +
                          $"Status: {statusEmoji} {statusText}\n\n" +
                          $"📈 *Response Stats:*\n" +
                          $"Total Responses: {stats.TotalResponses}\n" +
                          $"Completed: {stats.CompletedResponses}\n" +
-                         $"In Progress: {stats.TotalResponses - stats.CompletedResponses}\n" +
-                         $"Completion Rate: {completionRate:F1}%\n\n" +
+                         $"Incomplete: {stats.IncompleteResponses}\n" +
+                         $"Completion Rate: {stats.CompletionRate:F1}%\n" +
+                         $"Unique Respondents: {stats.UniqueRespondents}\n\n" +
                          $"❓ *Questions:*\n" +
-                         $"Total Questions: {stats.TotalQuestions}\n\n";
+                         $"Total Questions: {totalQuestions}\n";
+
+            // Add average completion time if available
+            if (stats.AverageCompletionTime.HasValue)
+            {
+                var avgTime = TimeSpan.FromSeconds(stats.AverageCompletionTime.Value);
+                responseText += $"Avg. Completion Time: {avgTime.Minutes}m {avgTime.Seconds}s\n";
+            }
+
+            responseText += "\n";
 
             // Add top 3 questions by response count
-            if (stats.QuestionStats != null && stats.QuestionStats.Any())
+            if (stats.QuestionStatistics != null && stats.QuestionStatistics.Any())
             {
-                message += "📋 *Top Questions by Responses:*\n";
+                responseText += "📋 *Top Questions by Responses:*\n";
 
-                var topQuestions = stats.QuestionStats
+                var topQuestions = stats.QuestionStatistics
                     .OrderByDescending(q => q.TotalAnswers)
                     .Take(3);
 
@@ -147,24 +158,38 @@ public class StatsCommandHandler : ICommandHandler
                         ? question.QuestionText.Substring(0, 47) + "..."
                         : question.QuestionText;
 
-                    message += $"{index}. {questionPreview}\n";
-                    message += $"   Answers: {question.TotalAnswers}\n";
+                    var responseRate = stats.TotalResponses > 0
+                        ? (question.TotalAnswers * 100.0 / stats.TotalResponses)
+                        : 0;
+
+                    responseText += $"{index}. {questionPreview}\n";
+                    responseText += $"   Answers: {question.TotalAnswers} ({responseRate:F1}%)\n";
                     index++;
                 }
 
-                message += "\n";
+                responseText += "\n";
             }
 
-            message += $"📅 Created: {stats.CreatedAt:yyyy-MM-dd HH:mm}\n";
+            responseText += $"📅 Created: {survey.CreatedAt:yyyy-MM-dd HH:mm}\n";
+
+            if (stats.FirstResponseAt.HasValue)
+            {
+                responseText += $"🕐 First Response: {stats.FirstResponseAt.Value:yyyy-MM-dd HH:mm}\n";
+            }
+
+            if (stats.LastResponseAt.HasValue)
+            {
+                responseText += $"🕑 Last Response: {stats.LastResponseAt.Value:yyyy-MM-dd HH:mm}\n";
+            }
 
             if (stats.TotalResponses == 0)
             {
-                message += "\n💡 *Tip:* Share this survey to start collecting responses!";
+                responseText += "\n💡 *Tip:* Share this survey to start collecting responses!";
             }
 
             await _botService.Client.SendMessage(
                 chatId: chatId,
-                text: message,
+                text: responseText,
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
         }
