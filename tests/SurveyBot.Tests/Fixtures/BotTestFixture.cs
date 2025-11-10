@@ -8,7 +8,9 @@ using SurveyBot.Core.Interfaces;
 using SurveyBot.Infrastructure.Data;
 using SurveyBot.Infrastructure.Repositories;
 using Telegram.Bot;
+using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.ReplyMarkups;
 using User = SurveyBot.Core.Entities.User;
 
 namespace SurveyBot.Tests.Fixtures;
@@ -52,32 +54,25 @@ public class BotTestFixture : IDisposable
         // Create mock Telegram bot client
         MockBotClient = new Mock<ITelegramBotClient>();
 
-        // Setup mock to return message IDs
+        // Setup mock to return message IDs for SendRequest (core method used by SendMessage)
         MockBotClient
-            .Setup(x => x.SendTextMessageAsync(
-                It.IsAny<ChatId>(),
-                It.IsAny<string>(),
-                It.IsAny<int?>(),
-                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
-                It.IsAny<IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
-                It.IsAny<bool?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<int?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+            .Setup(x => x.SendRequest(
+                It.IsAny<SendMessageRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ChatId chatId, string text, int? _, Telegram.Bot.Types.Enums.ParseMode? _,
-                IEnumerable<Telegram.Bot.Types.MessageEntity> _, bool? _, bool? _, int? _, bool? _,
-                Telegram.Bot.Types.ReplyMarkups.IReplyMarkup _, CancellationToken _) =>
-                new Message { MessageId = Random.Shared.Next(1000, 9999), Chat = new Chat { Id = chatId.Identifier ?? 0 } });
+            .ReturnsAsync((SendMessageRequest request, CancellationToken ct) =>
+            {
+                var message = new Message();
+                var messageIdProperty = typeof(Message).GetProperty("MessageId");
+                var chatProperty = typeof(Message).GetProperty("Chat");
+                messageIdProperty?.SetValue(message, Random.Shared.Next(1000, 9999));
+                chatProperty?.SetValue(message, new Chat { Id = request.ChatId.Identifier ?? 0 });
+                return message;
+            });
 
+        // Setup mock for AnswerCallbackQueryRequest
         MockBotClient
-            .Setup(x => x.AnswerCallbackQueryAsync(
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<bool?>(),
-                It.IsAny<string>(),
-                It.IsAny<int?>(),
+            .Setup(x => x.SendRequest(
+                It.IsAny<AnswerCallbackQueryRequest>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
@@ -170,29 +165,42 @@ public class BotTestFixture : IDisposable
 
     public Message CreateTestMessage(long userId, long chatId, string text)
     {
-        return new Message
-        {
-            MessageId = Random.Shared.Next(1000, 9999),
-            From = new Telegram.Bot.Types.User { Id = userId, Username = "testuser" },
-            Chat = new Chat { Id = chatId },
-            Text = text,
-            Date = DateTime.UtcNow
-        };
+        var message = new Message();
+        var messageIdProperty = typeof(Message).GetProperty("MessageId");
+        var fromProperty = typeof(Message).GetProperty("From");
+        var chatProperty = typeof(Message).GetProperty("Chat");
+        var textProperty = typeof(Message).GetProperty("Text");
+        var dateProperty = typeof(Message).GetProperty("Date");
+
+        messageIdProperty?.SetValue(message, Random.Shared.Next(1000, 9999));
+        fromProperty?.SetValue(message, new Telegram.Bot.Types.User { Id = userId, Username = "testuser" });
+        chatProperty?.SetValue(message, new Chat { Id = chatId });
+        textProperty?.SetValue(message, text);
+        dateProperty?.SetValue(message, DateTime.UtcNow);
+
+        return message;
     }
 
     public CallbackQuery CreateTestCallbackQuery(long userId, long chatId, string data)
     {
-        return new CallbackQuery
-        {
-            Id = Guid.NewGuid().ToString(),
-            From = new Telegram.Bot.Types.User { Id = userId, Username = "testuser" },
-            Message = new Message
-            {
-                MessageId = Random.Shared.Next(1000, 9999),
-                Chat = new Chat { Id = chatId }
-            },
-            Data = data
-        };
+        var innerMessage = new Message();
+        var messageIdProperty = typeof(Message).GetProperty("MessageId");
+        var chatProperty = typeof(Message).GetProperty("Chat");
+        messageIdProperty?.SetValue(innerMessage, Random.Shared.Next(1000, 9999));
+        chatProperty?.SetValue(innerMessage, new Chat { Id = chatId });
+
+        var callbackQuery = new CallbackQuery();
+        var idProperty = typeof(CallbackQuery).GetProperty("Id");
+        var fromProperty = typeof(CallbackQuery).GetProperty("From");
+        var messageProperty = typeof(CallbackQuery).GetProperty("Message");
+        var dataProperty = typeof(CallbackQuery).GetProperty("Data");
+
+        idProperty?.SetValue(callbackQuery, Guid.NewGuid().ToString());
+        fromProperty?.SetValue(callbackQuery, new Telegram.Bot.Types.User { Id = userId, Username = "testuser" });
+        messageProperty?.SetValue(callbackQuery, innerMessage);
+        dataProperty?.SetValue(callbackQuery, data);
+
+        return callbackQuery;
     }
 
     public void Dispose()

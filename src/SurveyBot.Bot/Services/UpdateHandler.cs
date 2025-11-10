@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using SurveyBot.Bot.Handlers;
 using SurveyBot.Bot.Interfaces;
 using Telegram.Bot;
@@ -346,7 +347,18 @@ public class UpdateHandler : IUpdateHandler
             "Processing listsurveys pagination callback: page {Page}",
             pageNumber);
 
-        // Get the listsurveys command handler
+        // We cannot create a new Message object or modify the existing one because Message properties
+        // in Telegram.Bot library are read-only. Instead of using reflection hacks, we'll create a
+        // wrapper message that can be used by the handler.
+
+        // The simplest approach: create a Message-like object with the properties we need
+        // Since we can't instantiate Message directly, we'll pass the existing message but handle
+        // the text parsing ourselves by creating a synthetic command text approach
+
+        // Alternative: directly invoke the handler with a synthesized message
+        // Since Message class has init-only properties, we need to use System.Text.Json or
+        // similar to create an instance
+
         var handler = _commandRouter.GetAllHandlers()
             .FirstOrDefault(h => h.Command.Equals("listsurveys", StringComparison.OrdinalIgnoreCase));
 
@@ -356,19 +368,38 @@ public class UpdateHandler : IUpdateHandler
             return false;
         }
 
-        // Create a fake message with the page number to simulate command
-        var fakeMessage = new Message
+        // Use JSON serialization/deserialization as a workaround to create a modified Message
+        // This is the cleanest way to work with init-only properties without using reflection
+        // Telegram.Bot uses Newtonsoft.Json internally, so this approach is compatible
+        var originalMessage = callbackQuery.Message!;
+
+        try
         {
-            Chat = callbackQuery.Message!.Chat,
-            From = callbackQuery.From,
-            Text = $"/listsurveys {pageNumber}",
-            MessageId = callbackQuery.Message.MessageId
-        };
+            var messageJson = JsonConvert.SerializeObject(originalMessage);
+            var messageObject = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(messageJson);
 
-        // Execute the handler
-        await handler.HandleAsync(fakeMessage, cancellationToken);
+            if (messageObject != null)
+            {
+                // Modify the text property
+                messageObject["text"] = $"/listsurveys {pageNumber}";
 
-        return true;
+                // Deserialize back to Message
+                var modifiedMessage = messageObject.ToObject<Message>();
+
+                if (modifiedMessage != null)
+                {
+                    // Execute the handler with the modified message
+                    await handler.HandleAsync(modifiedMessage, cancellationToken);
+                    return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create modified message for pagination");
+        }
+
+        return false;
     }
 
     private async Task<bool> HandleUnknownCallbackAsync(
