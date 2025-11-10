@@ -75,11 +75,11 @@ public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFi
         result1!.Data!.Items.Should().HaveCount(10);
         result1.Data.TotalCount.Should().Be(15);
         result1.Data.TotalPages.Should().Be(2);
-        result1.Data.CurrentPage.Should().Be(1);
+        result1.Data.PageNumber.Should().Be(1);
 
         response2.StatusCode.Should().Be(HttpStatusCode.OK);
         result2!.Data!.Items.Should().HaveCount(5);
-        result2.Data.CurrentPage.Should().Be(2);
+        result2.Data.PageNumber.Should().Be(2);
     }
 
     [Fact]

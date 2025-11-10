@@ -8,8 +8,11 @@ using Moq;
 using SurveyBot.Bot.Handlers.Commands;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
+using SurveyBot.Core.DTOs.Response;
 using SurveyBot.Core.Entities;
+using SurveyBot.Core.Interfaces;
 using SurveyBot.Tests.Fixtures;
+using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Xunit;
 
@@ -31,10 +34,22 @@ public class SurveyCodeTests : IClassFixture<BotTestFixture>
     {
         _fixture = fixture;
 
+        // Create mock for IResponseService
+        var mockResponseService = new Mock<IResponseService>();
+        mockResponseService
+            .Setup(x => x.CompleteResponseAsync(It.IsAny<int>(), It.IsAny<int?>()))
+            .ReturnsAsync((int responseId, int? userId) => new ResponseDto
+            {
+                Id = responseId,
+                IsComplete = true,
+                SubmittedAt = DateTime.UtcNow
+            });
+
         var completionHandler = new CompletionHandler(
             _fixture.MockBotService.Object,
+            mockResponseService.Object,
+            _fixture.SurveyRepository,
             _fixture.StateManager,
-            _fixture.ResponseRepository,
             Mock.Of<ILogger<CompletionHandler>>());
 
         _surveyCommandHandler = new SurveyCommandHandler(
@@ -64,17 +79,10 @@ public class SurveyCodeTests : IClassFixture<BotTestFixture>
 
         // Verify intro message was sent
         _fixture.MockBotClient.Verify(
-            x => x.SendTextMessageAsync(
-                It.IsAny<ChatId>(),
-                It.Is<string>(s => s.Contains(_fixture.TestSurvey.Title)),
-                It.IsAny<int?>(),
-                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
-                It.IsAny<System.Collections.Generic.IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
-                It.IsAny<bool?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<int?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+            x => x.SendRequest(
+                It.Is<SendMessageRequest>(req =>
+                    req.ChatId.Identifier == TestChatId &&
+                    req.Text.Contains(_fixture.TestSurvey.Title)),
                 It.IsAny<CancellationToken>()),
             Times.AtLeastOnce);
     }
@@ -94,17 +102,10 @@ public class SurveyCodeTests : IClassFixture<BotTestFixture>
 
         // Verify error/usage message was sent
         _fixture.MockBotClient.Verify(
-            x => x.SendTextMessageAsync(
-                It.IsAny<ChatId>(),
-                It.Is<string>(s => s.Contains("Usage") || s.Contains("not found")),
-                It.IsAny<int?>(),
-                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
-                It.IsAny<System.Collections.Generic.IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
-                It.IsAny<bool?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<int?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+            x => x.SendRequest(
+                It.Is<SendMessageRequest>(req =>
+                    req.ChatId.Identifier == TestChatId + 1 &&
+                    (req.Text.Contains("Usage") || req.Text.Contains("not found"))),
                 It.IsAny<CancellationToken>()),
             Times.AtLeastOnce);
     }
@@ -124,17 +125,10 @@ public class SurveyCodeTests : IClassFixture<BotTestFixture>
 
         // Verify usage message was sent
         _fixture.MockBotClient.Verify(
-            x => x.SendTextMessageAsync(
-                It.IsAny<ChatId>(),
-                It.Is<string>(s => s.Contains("Usage") && s.Contains("/survey")),
-                It.IsAny<int?>(),
-                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
-                It.IsAny<System.Collections.Generic.IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
-                It.IsAny<bool?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<int?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+            x => x.SendRequest(
+                It.Is<SendMessageRequest>(req =>
+                    req.ChatId.Identifier == TestChatId + 2 &&
+                    req.Text.Contains("Usage") && req.Text.Contains("/survey")),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

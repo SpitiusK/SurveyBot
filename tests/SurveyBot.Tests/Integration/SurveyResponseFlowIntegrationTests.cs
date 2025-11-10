@@ -172,7 +172,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
 
         var result = await response.Content.ReadFromJsonAsync<ApiResponse<ResponseDto>>();
         result!.Data!.IsComplete.Should().BeTrue();
-        result.Data.CompletedAt.Should().NotBeNull();
+        result.Data.SubmittedAt.Should().NotBeNull();
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
                 surveyId: survey.Id,
                 respondentTelegramId: 999888777,
                 isComplete: true);
-            response.CompletedAt = DateTime.UtcNow;
+            response.SubmittedAt = DateTime.UtcNow;
             db.Responses.Add(response);
             db.SaveChanges();
             responseId = response.Id;

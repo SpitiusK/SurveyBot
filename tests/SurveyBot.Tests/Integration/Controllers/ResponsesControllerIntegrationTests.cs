@@ -165,8 +165,8 @@ public class ResponsesControllerIntegrationTests : IClassFixture<WebApplicationF
 
         var result = await response.Content.ReadFromJsonAsync<ApiResponse<ResponseDto>>();
         result!.Data!.IsComplete.Should().BeTrue();
-        result.Data.CompletedAt.Should().NotBeNull();
-        result.Data.CompletedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        result.Data.SubmittedAt.Should().NotBeNull();
+        result.Data.SubmittedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
     }
 
     [Fact]

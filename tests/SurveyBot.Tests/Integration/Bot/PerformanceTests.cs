@@ -21,7 +21,9 @@ using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
 using SurveyBot.Bot.Validators;
 using SurveyBot.Core.DTOs.Question;
+using SurveyBot.Core.DTOs.Response;
 using SurveyBot.Core.Entities;
+using SurveyBot.Core.Interfaces;
 using SurveyBot.Tests.Fixtures;
 using Telegram.Bot.Types;
 using Xunit;
@@ -54,14 +56,14 @@ public class PerformanceTests : IClassFixture<BotTestFixture>
         _performanceMonitor = new BotPerformanceMonitor(Mock.Of<ILogger<BotPerformanceMonitor>>());
 
         // Create question handlers
-        var validator = new AnswerValidator();
+        var validator = new AnswerValidator(Mock.Of<ILogger<AnswerValidator>>());
         var errorHandler = new QuestionErrorHandler(_fixture.MockBotService.Object, Mock.Of<ILogger<QuestionErrorHandler>>());
 
         _questionHandlers = new List<IQuestionHandler>
         {
             new TextQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<TextQuestionHandler>>()),
             new SingleChoiceQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<SingleChoiceQuestionHandler>>()),
-            new MultipleChoiceQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<MultipleChoiceQuestionHandler>>()),
+            new MultipleChoiceQuestionHandler(_fixture.MockBotService.Object, _fixture.StateManager, validator, errorHandler, Mock.Of<ILogger<MultipleChoiceQuestionHandler>>()),
             new RatingQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<RatingQuestionHandler>>())
         };
 
@@ -132,10 +134,22 @@ public class PerformanceTests : IClassFixture<BotTestFixture>
             surveyCache,
             Mock.Of<ILogger<NavigationHandler>>());
 
+        // Create mock for IResponseService
+        var mockResponseService = new Mock<IResponseService>();
+        mockResponseService
+            .Setup(x => x.CompleteResponseAsync(It.IsAny<int>(), It.IsAny<int?>()))
+            .ReturnsAsync((int responseId, int? userId) => new ResponseDto
+            {
+                Id = responseId,
+                IsComplete = true,
+                SubmittedAt = DateTime.UtcNow
+            });
+
         var completionHandler = new CompletionHandler(
             _fixture.MockBotService.Object,
+            mockResponseService.Object,
+            _fixture.SurveyRepository,
             _fixture.StateManager,
-            _fixture.ResponseRepository,
             Mock.Of<ILogger<CompletionHandler>>());
 
         _surveyCommandHandler = new SurveyCommandHandler(

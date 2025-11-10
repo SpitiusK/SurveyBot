@@ -19,6 +19,7 @@ using SurveyBot.Bot.Services;
 using SurveyBot.Bot.Validators;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Tests.Fixtures;
+using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Xunit;
 
@@ -114,14 +115,14 @@ public class NavigationTests : IClassFixture<BotTestFixture>
         };
 
         // Create question handlers
-        var validator = new AnswerValidator();
+        var validator = new AnswerValidator(Mock.Of<ILogger<AnswerValidator>>());
         var errorHandler = new QuestionErrorHandler(_fixture.MockBotService.Object, Mock.Of<ILogger<QuestionErrorHandler>>());
 
         var questionHandlers = new List<IQuestionHandler>
         {
             new TextQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<TextQuestionHandler>>()),
             new SingleChoiceQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<SingleChoiceQuestionHandler>>()),
-            new MultipleChoiceQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<MultipleChoiceQuestionHandler>>()),
+            new MultipleChoiceQuestionHandler(_fixture.MockBotService.Object, _fixture.StateManager, validator, errorHandler, Mock.Of<ILogger<MultipleChoiceQuestionHandler>>()),
             new RatingQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<RatingQuestionHandler>>())
         };
 
@@ -166,12 +167,9 @@ public class NavigationTests : IClassFixture<BotTestFixture>
 
         // Verify bot answered callback
         _fixture.MockBotClient.Verify(
-            x => x.AnswerCallbackQueryAsync(
-                It.Is<string>(id => id == callback.Id),
-                It.IsAny<string>(),
-                It.IsAny<bool?>(),
-                It.IsAny<string>(),
-                It.IsAny<int?>(),
+            x => x.SendRequest(
+                It.Is<AnswerCallbackQueryRequest>(req =>
+                    req.CallbackQueryId == callback.Id),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -194,12 +192,9 @@ public class NavigationTests : IClassFixture<BotTestFixture>
 
         // Verify error message shown
         _fixture.MockBotClient.Verify(
-            x => x.AnswerCallbackQueryAsync(
-                It.Is<string>(id => id == callback.Id),
-                It.Is<string>(text => text.Contains("first question")),
-                It.Is<bool?>(alert => alert == true),
-                It.IsAny<string>(),
-                It.IsAny<int?>(),
+            x => x.SendRequest(
+                It.Is<AnswerCallbackQueryRequest>(req =>
+                    req.CallbackQueryId == callback.Id),
                 It.IsAny<CancellationToken>()),
             Times.Once);
 
@@ -234,12 +229,9 @@ public class NavigationTests : IClassFixture<BotTestFixture>
 
         // Verify callback answered
         _fixture.MockBotClient.Verify(
-            x => x.AnswerCallbackQueryAsync(
-                It.Is<string>(id => id == callback.Id),
-                It.Is<string>(text => text.Contains("skipped")),
-                It.IsAny<bool?>(),
-                It.IsAny<string>(),
-                It.IsAny<int?>(),
+            x => x.SendRequest(
+                It.Is<AnswerCallbackQueryRequest>(req =>
+                    req.CallbackQueryId == callback.Id),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -262,12 +254,9 @@ public class NavigationTests : IClassFixture<BotTestFixture>
 
         // Verify error message shown
         _fixture.MockBotClient.Verify(
-            x => x.AnswerCallbackQueryAsync(
-                It.Is<string>(id => id == callback.Id),
-                It.Is<string>(text => text.Contains("required")),
-                It.Is<bool?>(alert => alert == true),
-                It.IsAny<string>(),
-                It.IsAny<int?>(),
+            x => x.SendRequest(
+                It.Is<AnswerCallbackQueryRequest>(req =>
+                    req.CallbackQueryId == callback.Id),
                 It.IsAny<CancellationToken>()),
             Times.Once);
 

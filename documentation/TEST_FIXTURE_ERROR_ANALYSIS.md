@@ -400,15 +400,193 @@ The Telegram.Bot library has good documentation. Consulting it early would have 
 
 ---
 
-## Related Files to Review
+## Handler Constructor Issues (Added 2025-11-10)
 
-These files likely contain similar mocking anti-patterns:
-- `tests/SurveyBot.Tests/Unit/Bot/CompletionHandlerTests.cs` - Uses incorrect `SendMessage` mocking
-- Any other test files mocking `ITelegramBotClient`
+### Overview
+During testing fixture setup, several handler constructors were invoked with incorrect parameter counts. This section documents these errors and their solutions.
+
+### Error #1: AnswerValidator Constructor Missing ILogger Parameter
+
+**Symptom**:
+```
+⚠️ Constructor 'AnswerValidator' has 1 parameter(s) but is invoked with 0 argument(s)
+```
+
+**Root Cause**:
+- `AnswerValidator` requires an `ILogger<AnswerValidator>` parameter
+- Test setup was creating validator without the required dependency
+
+**Original Code** (WRONG):
+```csharp
+var validator = new AnswerValidator();
+```
+
+**Fixed Code** (CORRECT):
+```csharp
+var validator = new AnswerValidator(Mock.Of<ILogger<AnswerValidator>>());
+```
+
+**Lesson**: All service classes require logging dependencies. Always provide mock loggers for test setups.
 
 ---
 
-**Report Generated**: 2025-11-10
+### Error #2: MultipleChoiceQuestionHandler Missing StateManager Parameter
+
+**Symptom**:
+```
+⚠️ Constructor 'MultipleChoiceQuestionHandler' has 5 parameter(s) but is invoked with 4 argument(s)
+```
+
+**Root Cause**:
+- `MultipleChoiceQuestionHandler` requires 5 parameters, including `IConversationStateManager`
+- Parameter was missing between `IBotService` and `IAnswerValidator`
+
+**Original Code** (WRONG):
+```csharp
+new MultipleChoiceQuestionHandler(
+    _fixture.MockBotService.Object,
+    validator,
+    errorHandler,
+    Mock.Of<ILogger<MultipleChoiceQuestionHandler>>());
+```
+
+**Fixed Code** (CORRECT):
+```csharp
+new MultipleChoiceQuestionHandler(
+    _fixture.MockBotService.Object,
+    _fixture.StateManager,  // ← ADDED (missing parameter)
+    validator,
+    errorHandler,
+    Mock.Of<ILogger<MultipleChoiceQuestionHandler>>());
+```
+
+**Constructor Signature**:
+```csharp
+public MultipleChoiceQuestionHandler(
+    IBotService botService,
+    IConversationStateManager stateManager,    // ← Required
+    IAnswerValidator validator,
+    IQuestionErrorHandler errorHandler,
+    ILogger<MultipleChoiceQuestionHandler> logger)
+```
+
+**Lesson**: Question handlers need state management access to track survey progress. Check constructor signatures before instantiation.
+
+---
+
+### Error #3: CompletionHandler Missing IResponseService Parameter
+
+**Symptom**:
+```
+⚠️ Constructor 'CompletionHandler' has 5 parameter(s) but is invoked with 4 argument(s)
+```
+
+**Root Cause**:
+- `CompletionHandler` requires 5 parameters including `IResponseService`
+- Parameter order was incorrect: repository was passed instead of service
+- Missing proper dependency injection setup
+
+**Original Code** (WRONG):
+```csharp
+new CompletionHandler(
+    _fixture.MockBotService.Object,
+    _fixture.StateManager,
+    _fixture.ResponseRepository,          // ← WRONG TYPE (should be IResponseService)
+    Mock.Of<ILogger<CompletionHandler>>());
+```
+
+**Fixed Code** (CORRECT):
+```csharp
+// Setup mock for IResponseService
+var mockResponseService = new Mock<IResponseService>();
+mockResponseService
+    .Setup(x => x.CompleteResponseAsync(It.IsAny<int>(), It.IsAny<int?>()))
+    .ReturnsAsync((int responseId, int? userId) => new ResponseDto
+    {
+        Id = responseId,
+        IsComplete = true,
+        SubmittedAt = DateTime.UtcNow,
+        AnsweredCount = 3,
+        TotalQuestions = 4
+    });
+
+new CompletionHandler(
+    _fixture.MockBotService.Object,
+    mockResponseService.Object,           // ← ADDED (IResponseService with mock)
+    _fixture.SurveyRepository,
+    _fixture.StateManager,
+    Mock.Of<ILogger<CompletionHandler>>());
+```
+
+**Constructor Signature**:
+```csharp
+public CompletionHandler(
+    IBotService botService,
+    IResponseService responseService,     // ← Required
+    ISurveyRepository surveyRepository,
+    IConversationStateManager stateManager,
+    ILogger<CompletionHandler> logger)
+```
+
+**Lesson**: Service interfaces (IResponseService) are different from repository interfaces (IResponseRepository). Always use the correct dependency type. Create proper mocks with setup methods for service interfaces.
+
+---
+
+### Error #4: Missing Using Directive for ConversationStateType
+
+**Symptom**:
+```
+⚠️ Cannot resolve symbol 'Models'
+```
+
+**Root Cause**:
+- Missing `using SurveyBot.Bot.Models;` directive
+- Code tried to use `Bot.Models.ConversationStateType` without proper namespace import
+
+**Original Code** (WRONG):
+```csharp
+finalState!.CurrentState.Should().Be(Bot.Models.ConversationStateType.ResponseComplete);
+// ↑ Partial namespace reference requires using directive
+```
+
+**Fixed Code** (CORRECT):
+```csharp
+using SurveyBot.Bot.Models;  // ← ADD THIS at top
+
+// Later in code:
+finalState!.CurrentState.Should().Be(ConversationStateType.ResponseComplete);
+// ↑ Can now use simple name
+```
+
+**Lesson**: Always add using directives for namespaces you reference. Avoid partial namespace paths (e.g., `Bot.Models.X`) - they can be ambiguous.
+
+---
+
+### Prevention Checklist for Test Fixtures
+
+When creating test handlers and services:
+
+- [ ] **Check constructor signatures** - Use IDE Go-to-Definition (F12) to view exact parameters
+- [ ] **Add all required dependencies** - Services need loggers, state managers, etc.
+- [ ] **Create mocks for service interfaces** - Use `Mock<IServiceInterface>()` with `.Setup()` methods
+- [ ] **Use repository instances directly** - Repository interfaces can be injected from fixture
+- [ ] **Verify parameter order** - Don't rearrange parameters; follow the constructor definition
+- [ ] **Add using directives** - Import namespaces for all types you reference
+- [ ] **Test instantiation early** - Create instances in constructor, not in test methods
+- [ ] **Mock service methods** - Service interfaces need method mocks to return test data
+
+---
+
+## Related Files to Review
+
+These files likely contain similar issues:
+- `tests/SurveyBot.Tests/Unit/Bot/CompletionHandlerTests.cs` - May have handler constructor issues
+- `tests/SurveyBot.Tests/Integration/Bot/ErrorHandlingTests.cs` - Handler instantiation patterns
+- Any other test files creating bot handlers and services
+
+---
+
+**Report Generated**: 2025-11-10 (Updated)
 **Status**: RESOLVED ✅
-**Files Modified**: 1
-**Errors Fixed**: 4
+**Files Modified**: 1 (BotTestFixture) + Multiple test files
+**Errors Fixed**: 4 (BotTestFixture) + 15 (Anti-pattern mocking) + 4 (Constructor issues)

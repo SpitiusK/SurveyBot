@@ -76,6 +76,25 @@ public class BotTestFixture : IDisposable
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
+        // Setup mock for EditMessageTextRequest
+        MockBotClient
+            .Setup(x => x.SendRequest(
+                It.IsAny<EditMessageTextRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((EditMessageTextRequest request, CancellationToken ct) =>
+            {
+                var message = new Message();
+                var messageIdProperty = typeof(Message).GetProperty("MessageId");
+                var chatProperty = typeof(Message).GetProperty("Chat");
+                var textProperty = typeof(Message).GetProperty("Text");
+
+                messageIdProperty?.SetValue(message, request.MessageId);
+                chatProperty?.SetValue(message, new Chat { Id = request.ChatId.Identifier ?? 0 });
+                textProperty?.SetValue(message, request.Text);
+
+                return message;
+            });
+
         // Create mock IBotService
         MockBotService = new Mock<IBotService>();
         MockBotService.Setup(x => x.Client).Returns(MockBotClient.Object);

@@ -10,10 +10,13 @@ using Moq;
 using SurveyBot.Bot.Handlers.Commands;
 using SurveyBot.Bot.Handlers.Questions;
 using SurveyBot.Bot.Interfaces;
+using SurveyBot.Bot.Models;
 using SurveyBot.Bot.Services;
 using SurveyBot.Bot.Validators;
 using SurveyBot.Core.Entities;
+using SurveyBot.Core.Interfaces;
 using SurveyBot.Tests.Fixtures;
+using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Xunit;
 
@@ -42,7 +45,7 @@ public class EndToEndSurveyFlowTests : IClassFixture<BotTestFixture>
         _fixture = fixture;
 
         // Create question handlers
-        var validator = new AnswerValidator();
+        var validator = new AnswerValidator(Mock.Of<ILogger<AnswerValidator>>());
         var errorHandler = new QuestionErrorHandler(_fixture.MockBotService.Object, Mock.Of<ILogger<QuestionErrorHandler>>());
 
         _textHandler = new TextQuestionHandler(
@@ -59,6 +62,7 @@ public class EndToEndSurveyFlowTests : IClassFixture<BotTestFixture>
 
         _multipleChoiceHandler = new MultipleChoiceQuestionHandler(
             _fixture.MockBotService.Object,
+            _fixture.StateManager,
             validator,
             errorHandler,
             Mock.Of<ILogger<MultipleChoiceQuestionHandler>>());
@@ -77,11 +81,24 @@ public class EndToEndSurveyFlowTests : IClassFixture<BotTestFixture>
             _ratingHandler
         };
 
-        // Create completion handler
+        // Create completion handler with mock IResponseService
+        var mockResponseService = new Mock<IResponseService>();
+        mockResponseService
+            .Setup(x => x.CompleteResponseAsync(It.IsAny<int>(), It.IsAny<int?>()))
+            .ReturnsAsync((int responseId, int? userId) => new Core.DTOs.Response.ResponseDto
+            {
+                Id = responseId,
+                IsComplete = true,
+                SubmittedAt = DateTime.UtcNow,
+                AnsweredCount = 3,
+                TotalQuestions = 4
+            });
+
         _completionHandler = new CompletionHandler(
             _fixture.MockBotService.Object,
+            mockResponseService.Object,
+            _fixture.SurveyRepository,
             _fixture.StateManager,
-            _fixture.ResponseRepository,
             Mock.Of<ILogger<CompletionHandler>>());
 
         // Create survey command handler
@@ -172,7 +189,7 @@ public class EndToEndSurveyFlowTests : IClassFixture<BotTestFixture>
 
         // Verify final state
         var finalState = await _fixture.StateManager.GetStateAsync(TestUserId);
-        finalState!.CurrentState.Should().Be(Bot.Models.ConversationStateType.ResponseComplete);
+        finalState!.CurrentState.Should().Be(ConversationStateType.ResponseComplete);
 
         // Verify response in database
         var response = await _fixture.ResponseRepository.GetByIdAsync(state.CurrentResponseId!.Value);
@@ -200,17 +217,10 @@ public class EndToEndSurveyFlowTests : IClassFixture<BotTestFixture>
 
         // Verify bot sent messages
         _fixture.MockBotClient.Verify(
-            x => x.SendTextMessageAsync(
-                It.IsAny<ChatId>(),
-                It.Is<string>(s => s.Contains("Test Survey")),
-                It.IsAny<int?>(),
-                It.IsAny<Telegram.Bot.Types.Enums.ParseMode?>(),
-                It.IsAny<IEnumerable<Telegram.Bot.Types.MessageEntity>>(),
-                It.IsAny<bool?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<int?>(),
-                It.IsAny<bool?>(),
-                It.IsAny<Telegram.Bot.Types.ReplyMarkups.IReplyMarkup>(),
+            x => x.SendRequest(
+                It.Is<SendMessageRequest>(req =>
+                    req.ChatId.Identifier == TestChatId + 1 &&
+                    req.Text.Contains("Test Survey")),
                 It.IsAny<CancellationToken>()),
             Times.AtLeastOnce);
     }
