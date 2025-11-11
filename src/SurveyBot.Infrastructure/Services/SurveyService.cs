@@ -719,5 +719,252 @@ public class SurveyService : ISurveyService
         };
     }
 
+    /// <inheritdoc/>
+    public async Task<string> ExportSurveyToCSVAsync(int surveyId, int userId, string filter = "completed",
+        bool includeMetadata = true, bool includeTimestamps = true)
+    {
+        _logger.LogInformation("Exporting survey {SurveyId} to CSV for user {UserId} with filter '{Filter}'",
+            surveyId, userId, filter);
+
+        // Get survey with all details
+        var survey = await _surveyRepository.GetByIdWithDetailsAsync(surveyId);
+        if (survey == null)
+        {
+            _logger.LogWarning("Survey {SurveyId} not found", surveyId);
+            throw new SurveyNotFoundException(surveyId);
+        }
+
+        // Check authorization
+        if (survey.CreatorId != userId)
+        {
+            _logger.LogWarning("User {UserId} attempted to export survey {SurveyId} owned by {OwnerId}",
+                userId, surveyId, survey.CreatorId);
+            throw new Core.Exceptions.UnauthorizedAccessException(userId, "Survey", surveyId);
+        }
+
+        // Validate filter parameter
+        filter = filter.ToLower();
+        if (filter != "all" && filter != "completed" && filter != "incomplete")
+        {
+            _logger.LogWarning("Invalid filter parameter: {Filter}", filter);
+            throw new SurveyValidationException("Filter must be 'all', 'completed', or 'incomplete'");
+        }
+
+        // Filter responses based on parameter
+        var responses = survey.Responses.AsEnumerable();
+        switch (filter)
+        {
+            case "completed":
+                responses = responses.Where(r => r.IsComplete);
+                break;
+            case "incomplete":
+                responses = responses.Where(r => !r.IsComplete);
+                break;
+            // "all" - no filtering
+        }
+
+        var responsesList = responses.OrderBy(r => r.StartedAt ?? DateTime.MinValue).ToList();
+
+        _logger.LogInformation("Found {Count} responses matching filter '{Filter}'", responsesList.Count, filter);
+
+        // Generate CSV content
+        var csv = GenerateCSVContent(survey, responsesList, includeMetadata, includeTimestamps);
+
+        _logger.LogInformation("CSV export completed for survey {SurveyId}. Size: {Size} bytes",
+            surveyId, csv.Length);
+
+        return csv;
+    }
+
+    /// <summary>
+    /// Generates CSV content from survey responses.
+    /// </summary>
+    private string GenerateCSVContent(Survey survey, List<Response> responses,
+        bool includeMetadata, bool includeTimestamps)
+    {
+        var csv = new System.Text.StringBuilder();
+
+        // Get ordered questions
+        var questions = survey.Questions.OrderBy(q => q.OrderIndex).ToList();
+
+        // Build header row
+        var headers = new List<string>();
+
+        // Metadata columns
+        if (includeMetadata)
+        {
+            headers.Add("Response ID");
+            headers.Add("Respondent Telegram ID");
+            headers.Add("Status");
+        }
+
+        // Timestamp columns
+        if (includeTimestamps)
+        {
+            headers.Add("Started At");
+            headers.Add("Submitted At");
+        }
+
+        // Question columns
+        for (int i = 0; i < questions.Count; i++)
+        {
+            var question = questions[i];
+            var columnHeader = $"Q{i + 1}: {question.QuestionText}";
+            headers.Add(columnHeader);
+        }
+
+        // Write header row
+        csv.AppendLine(EscapeCSVRow(headers));
+
+        // Handle no responses case
+        if (responses.Count == 0)
+        {
+            _logger.LogInformation("No responses to export, returning CSV with headers only");
+            return csv.ToString();
+        }
+
+        // Write data rows
+        foreach (var response in responses)
+        {
+            var row = new List<string>();
+
+            // Metadata columns
+            if (includeMetadata)
+            {
+                row.Add(response.Id.ToString());
+                row.Add(response.RespondentTelegramId.ToString());
+                row.Add(response.IsComplete ? "Completed" : "Incomplete");
+            }
+
+            // Timestamp columns
+            if (includeTimestamps)
+            {
+                row.Add(response.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "");
+                row.Add(response.SubmittedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "");
+            }
+
+            // Answer columns
+            foreach (var question in questions)
+            {
+                var answer = response.Answers.FirstOrDefault(a => a.QuestionId == question.Id);
+                var answerText = FormatAnswerForCSV(answer, question);
+                row.Add(answerText);
+            }
+
+            csv.AppendLine(EscapeCSVRow(row));
+        }
+
+        return csv.ToString();
+    }
+
+    /// <summary>
+    /// Formats an answer for CSV export based on question type.
+    /// </summary>
+    private string FormatAnswerForCSV(Answer? answer, Question question)
+    {
+        if (answer == null)
+        {
+            return ""; // No answer provided
+        }
+
+        try
+        {
+            switch (question.QuestionType)
+            {
+                case QuestionType.Text:
+                    // Return text answer directly
+                    return answer.AnswerText ?? "";
+
+                case QuestionType.SingleChoice:
+                    // Parse JSON and return selected option
+                    if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
+                    {
+                        var singleChoice = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+                        if (singleChoice.TryGetProperty("selectedOption", out var option))
+                        {
+                            return option.GetString() ?? "";
+                        }
+                    }
+                    return "";
+
+                case QuestionType.MultipleChoice:
+                    // Parse JSON and return comma-separated options
+                    if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
+                    {
+                        var multipleChoice = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+                        if (multipleChoice.TryGetProperty("selectedOptions", out var options) &&
+                            options.ValueKind == JsonValueKind.Array)
+                        {
+                            var selectedOptions = new List<string>();
+                            foreach (var opt in options.EnumerateArray())
+                            {
+                                var optValue = opt.GetString();
+                                if (optValue != null)
+                                {
+                                    selectedOptions.Add(optValue);
+                                }
+                            }
+                            return string.Join(", ", selectedOptions);
+                        }
+                    }
+                    return "";
+
+                case QuestionType.Rating:
+                    // Parse JSON and return rating value
+                    if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
+                    {
+                        var rating = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+                        if (rating.TryGetProperty("rating", out var ratingValue))
+                        {
+                            return ratingValue.GetInt32().ToString();
+                        }
+                    }
+                    return "";
+
+                default:
+                    _logger.LogWarning("Unknown question type {QuestionType} for question {QuestionId}",
+                        question.QuestionType, question.Id);
+                    return "";
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse answer JSON for answer {AnswerId}", answer.Id);
+            return "";
+        }
+    }
+
+    /// <summary>
+    /// Escapes a CSV row by properly handling quotes, commas, and newlines.
+    /// </summary>
+    private string EscapeCSVRow(List<string> values)
+    {
+        var escapedValues = new List<string>();
+
+        foreach (var value in values)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                escapedValues.Add("");
+                continue;
+            }
+
+            // Check if value needs escaping (contains comma, quote, or newline)
+            if (value.Contains('"') || value.Contains(',') || value.Contains('\n') || value.Contains('\r'))
+            {
+                // Escape quotes by doubling them
+                var escaped = value.Replace("\"", "\"\"");
+                // Wrap in quotes
+                escapedValues.Add($"\"{escaped}\"");
+            }
+            else
+            {
+                escapedValues.Add(value);
+            }
+        }
+
+        return string.Join(",", escapedValues);
+    }
+
     #endregion
 }

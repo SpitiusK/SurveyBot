@@ -5,6 +5,7 @@ using SurveyBot.Bot.Handlers.Questions;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
 using SurveyBot.Bot.Validators;
+using System.Net.Http;
 
 namespace SurveyBot.Bot.Extensions;
 
@@ -20,42 +21,45 @@ public static class BotServiceExtensions
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddBotHandlers(this IServiceCollection services)
     {
-        // Register command handlers - User commands
-        services.AddTransient<ICommandHandler, StartCommandHandler>();
-        services.AddTransient<ICommandHandler, HelpCommandHandler>();
-        services.AddTransient<ICommandHandler, MySurveysCommandHandler>();
-        services.AddTransient<ICommandHandler, SurveysCommandHandler>();
-        services.AddTransient<ICommandHandler, SurveyCommandHandler>();
-        services.AddTransient<ICommandHandler, CancelCommandHandler>();
+        // Register HttpClient for handlers that need it
+        services.AddScoped<HttpClient>();
+
+        // Register command handlers - User commands (Scoped to work with Singleton CommandRouter)
+        services.AddScoped<ICommandHandler, StartCommandHandler>();
+        services.AddScoped<ICommandHandler, HelpCommandHandler>();
+        services.AddScoped<ICommandHandler, MySurveysCommandHandler>();
+        services.AddScoped<ICommandHandler, SurveysCommandHandler>();
+        services.AddScoped<ICommandHandler, SurveyCommandHandler>();
+        services.AddScoped<ICommandHandler, CancelCommandHandler>();
 
         // Register admin command handlers
-        services.AddTransient<ICommandHandler, CreateSurveyCommandHandler>();
-        services.AddTransient<ICommandHandler, ListSurveysCommandHandler>();
-        services.AddTransient<ICommandHandler, ActivateCommandHandler>();
-        services.AddTransient<ICommandHandler, DeactivateCommandHandler>();
-        services.AddTransient<ICommandHandler, StatsCommandHandler>();
-        services.AddTransient<ICommandHandler, AdminHelpCommandHandler>();
+        services.AddScoped<ICommandHandler, CreateSurveyCommandHandler>();
+        services.AddScoped<ICommandHandler, ListSurveysCommandHandler>();
+        services.AddScoped<ICommandHandler, ActivateCommandHandler>();
+        services.AddScoped<ICommandHandler, DeactivateCommandHandler>();
+        services.AddScoped<ICommandHandler, StatsCommandHandler>();
+        services.AddScoped<ICommandHandler, AdminHelpCommandHandler>();
 
         // Register question handlers
-        services.AddTransient<IQuestionHandler, TextQuestionHandler>();
-        services.AddTransient<IQuestionHandler, SingleChoiceQuestionHandler>();
-        services.AddTransient<IQuestionHandler, MultipleChoiceQuestionHandler>();
-        services.AddTransient<IQuestionHandler, RatingQuestionHandler>();
+        services.AddScoped<IQuestionHandler, TextQuestionHandler>();
+        services.AddScoped<IQuestionHandler, SingleChoiceQuestionHandler>();
+        services.AddScoped<IQuestionHandler, MultipleChoiceQuestionHandler>();
+        services.AddScoped<IQuestionHandler, RatingQuestionHandler>();
 
         // Register completion handler
-        services.AddTransient<CompletionHandler>();
+        services.AddScoped<CompletionHandler>();
 
         // Register navigation handler (for back/skip navigation)
-        services.AddTransient<NavigationHandler>();
+        services.AddScoped<NavigationHandler>();
 
         // Register cancel callback handler
-        services.AddTransient<CancelCallbackHandler>();
+        services.AddScoped<CancelCallbackHandler>();
 
-        // Register command router
-        services.AddSingleton<CommandRouter>();
+        // Register command router as Scoped to allow it to resolve scoped services
+        services.AddScoped<CommandRouter>();
 
-        // Register update handler
-        services.AddSingleton<IUpdateHandler, UpdateHandler>();
+        // Register update handler as Scoped (needs access to scoped services like CommandRouter)
+        services.AddScoped<IUpdateHandler, UpdateHandler>();
 
         // Register conversation state manager (singleton for in-memory storage)
         services.AddSingleton<IConversationStateManager, ConversationStateManager>();

@@ -105,4 +105,18 @@ public interface ISurveyService
     /// <returns>The survey details with questions.</returns>
     /// <exception cref="SurveyNotFoundException">Thrown when the survey with the specified code is not found.</exception>
     Task<SurveyDto> GetSurveyByCodeAsync(string code);
+
+    /// <summary>
+    /// Exports survey responses to CSV format.
+    /// </summary>
+    /// <param name="surveyId">The ID of the survey to export.</param>
+    /// <param name="userId">The ID of the user requesting the export (must own survey).</param>
+    /// <param name="filter">Response filter: "all", "completed", "incomplete".</param>
+    /// <param name="includeMetadata">Whether to include metadata columns (Response ID, Respondent ID, etc.).</param>
+    /// <param name="includeTimestamps">Whether to include timestamp columns.</param>
+    /// <returns>CSV content as string.</returns>
+    /// <exception cref="SurveyNotFoundException">Thrown when the survey is not found.</exception>
+    /// <exception cref="UnauthorizedAccessException">Thrown when the user doesn't own the survey.</exception>
+    Task<string> ExportSurveyToCSVAsync(int surveyId, int userId, string filter = "completed",
+        bool includeMetadata = true, bool includeTimestamps = true);
 }

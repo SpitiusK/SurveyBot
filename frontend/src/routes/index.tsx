@@ -1,0 +1,133 @@
+import { createBrowserRouter, Navigate } from 'react-router-dom';
+import App from '../App';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import { useAuth } from '@/hooks/useAuth';
+
+// Layout components
+import DashboardLayout from '@/layouts/DashboardLayout';
+
+// Page components
+import Dashboard from '@/pages/Dashboard';
+import Login from '@/pages/Login';
+import SurveyList from '@/pages/SurveyList';
+import SurveyBuilder from '@/pages/SurveyBuilder';
+import SurveyEdit from '@/pages/SurveyEdit';
+import SurveyStatistics from '@/pages/SurveyStatistics';
+import NotFound from '@/pages/NotFound';
+
+// Public route wrapper (redirects to dashboard if already authenticated)
+interface PublicRouteProps {
+  children: React.ReactNode;
+}
+
+const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return null; // Or a loading spinner
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// Router configuration
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <App />,
+    children: [
+      // Root redirect
+      {
+        index: true,
+        element: <Navigate to="/dashboard" replace />,
+      },
+
+      // Auth routes
+      {
+        path: 'login',
+        element: (
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        ),
+      },
+
+      // Protected dashboard routes
+      {
+        path: 'dashboard',
+        element: (
+          <ProtectedRoute>
+            <DashboardLayout />
+          </ProtectedRoute>
+        ),
+        children: [
+          {
+            index: true,
+            element: <Dashboard />,
+          },
+          {
+            path: 'surveys',
+            children: [
+              {
+                index: true,
+                element: <SurveyList />,
+              },
+              {
+                path: 'new',
+                element: <SurveyBuilder />,
+              },
+              {
+                path: ':id/edit',
+                element: <SurveyEdit />,
+              },
+              {
+                path: ':id/statistics',
+                element: <SurveyStatistics />,
+              },
+            ],
+          },
+          // Placeholder routes for future pages
+          {
+            path: 'settings',
+            element: (
+              <div style={{ padding: '2rem' }}>
+                <h2>Settings</h2>
+                <p>Settings page coming soon...</p>
+              </div>
+            ),
+          },
+          {
+            path: 'profile',
+            element: (
+              <div style={{ padding: '2rem' }}>
+                <h2>Profile</h2>
+                <p>Profile page coming soon...</p>
+              </div>
+            ),
+          },
+          {
+            path: 'help',
+            element: (
+              <div style={{ padding: '2rem' }}>
+                <h2>Help</h2>
+                <p>Help page coming soon...</p>
+              </div>
+            ),
+          },
+        ],
+      },
+
+      // 404 Not Found
+      {
+        path: '*',
+        element: <NotFound />,
+      },
+    ],
+  },
+]);
+
+export default router;

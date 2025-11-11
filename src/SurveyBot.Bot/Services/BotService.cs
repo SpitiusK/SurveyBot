@@ -34,9 +34,8 @@ public class BotService : IBotService
             throw new InvalidOperationException(errorMessage);
         }
 
-        // Initialize Telegram Bot Client
-        var clientOptions = new TelegramBotClientOptions(_configuration.BotToken);
-        _botClient = new TelegramBotClient(clientOptions);
+        // Initialize Telegram Bot Client - use direct constructor to bypass strict validation
+        _botClient = new TelegramBotClient(_configuration.BotToken);
 
         _logger.LogInformation("BotService created successfully");
     }

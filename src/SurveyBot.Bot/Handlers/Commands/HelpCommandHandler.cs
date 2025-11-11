@@ -13,18 +13,15 @@ namespace SurveyBot.Bot.Handlers.Commands;
 public class HelpCommandHandler : ICommandHandler
 {
     private readonly IBotService _botService;
-    private readonly IEnumerable<ICommandHandler> _commandHandlers;
     private readonly ILogger<HelpCommandHandler> _logger;
 
     public string Command => "help";
 
     public HelpCommandHandler(
         IBotService botService,
-        IEnumerable<ICommandHandler> commandHandlers,
         ILogger<HelpCommandHandler> logger)
     {
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
-        _commandHandlers = commandHandlers ?? throw new ArgumentNullException(nameof(commandHandlers));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -85,19 +82,17 @@ public class HelpCommandHandler : ICommandHandler
         var helpText = "*SurveyBot - Available Commands*\n\n";
         helpText += "Here are all the commands you can use:\n\n";
 
-        // Get all command handlers except this one
-        var handlers = _commandHandlers
-            .Where(h => h.Command != Command)
-            .OrderBy(h => h.Command)
-            .ToList();
-
-        foreach (var handler in handlers)
-        {
-            helpText += $"/{handler.Command} - {handler.GetDescription()}\n";
-        }
-
-        // Add this command last
-        helpText += $"/{Command} - {GetDescription()}\n\n";
+        // Hardcoded list of commands to avoid circular dependency
+        helpText += "/start - Start the bot and get welcome message\n";
+        helpText += "/mysurveys - View and manage your surveys\n";
+        helpText += "/surveys - Browse available surveys\n";
+        helpText += "/survey - Take a specific survey\n";
+        helpText += "/create - Create a new survey\n";
+        helpText += "/list - List all your surveys\n";
+        helpText += "/activate - Activate a survey\n";
+        helpText += "/deactivate - Deactivate a survey\n";
+        helpText += "/stats - View survey statistics\n";
+        helpText += "/help - Show this help message\n\n";
 
         // Add usage instructions
         helpText += "*How to use SurveyBot:*\n\n";

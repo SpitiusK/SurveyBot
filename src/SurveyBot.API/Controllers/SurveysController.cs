@@ -598,6 +598,101 @@ public class SurveysController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Exports survey responses to CSV file.
+    /// </summary>
+    /// <param name="id">Survey ID.</param>
+    /// <param name="filter">Response filter: "all", "completed", "incomplete" (default: "completed").</param>
+    /// <param name="includeMetadata">Include metadata columns (Response ID, Respondent ID, Status).</param>
+    /// <param name="includeTimestamps">Include timestamp columns (Started At, Submitted At).</param>
+    /// <returns>CSV file download.</returns>
+    /// <response code="200">CSV file generated and downloaded successfully.</response>
+    /// <response code="400">Invalid filter parameter.</response>
+    /// <response code="401">Unauthorized - invalid or missing token.</response>
+    /// <response code="403">Forbidden - user doesn't own this survey.</response>
+    /// <response code="404">Survey not found.</response>
+    [HttpGet("{id}/export")]
+    [SwaggerOperation(
+        Summary = "Export survey responses to CSV",
+        Description = "Exports survey responses to a CSV file. User must own the survey. Supports filtering by response status and optional metadata/timestamp columns.",
+        Tags = new[] { "Surveys" }
+    )]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ExportSurveyToCSV(
+        int id,
+        [FromQuery] string filter = "completed",
+        [FromQuery] bool includeMetadata = true,
+        [FromQuery] bool includeTimestamps = true)
+    {
+        try
+        {
+            var userId = GetUserIdFromClaims();
+            _logger.LogInformation(
+                "Exporting survey {SurveyId} to CSV for user {UserId} with filter '{Filter}'",
+                id, userId, filter);
+
+            var csvContent = await _surveyService.ExportSurveyToCSVAsync(
+                id, userId, filter, includeMetadata, includeTimestamps);
+
+            // Generate filename with survey ID and timestamp
+            var fileName = $"survey_{id}_responses_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+
+            // Convert string to byte array with UTF-8 encoding (with BOM for Excel compatibility)
+            var preamble = System.Text.Encoding.UTF8.GetPreamble();
+            var content = System.Text.Encoding.UTF8.GetBytes(csvContent);
+            var csvBytes = new byte[preamble.Length + content.Length];
+            preamble.CopyTo(csvBytes, 0);
+            content.CopyTo(csvBytes, preamble.Length);
+
+            _logger.LogInformation(
+                "CSV export successful for survey {SurveyId}. File size: {Size} bytes",
+                id, csvBytes.Length);
+
+            // Return file with proper content type and disposition headers
+            return File(csvBytes, "text/csv", fileName);
+        }
+        catch (SurveyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Survey {SurveyId} not found", id);
+            return NotFound(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Core.Exceptions.UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized export attempt for survey {SurveyId}", id);
+            return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (SurveyValidationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid filter parameter for survey {SurveyId}", id);
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting survey {SurveyId} to CSV", id);
+            return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "An error occurred while exporting the survey to CSV"
+            });
+        }
+    }
+
     #region Helper Methods
 
     /// <summary>
