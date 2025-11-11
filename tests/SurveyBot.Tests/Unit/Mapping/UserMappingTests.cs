@@ -96,9 +96,7 @@ public class UserMappingTests
         var loginDto = new LoginDto
         {
             TelegramId = 111222333,
-            Username = "newuser",
-            FirstName = "New",
-            LastName = "User"
+            Username = "newuser"
         };
 
         // Act
@@ -108,7 +106,7 @@ public class UserMappingTests
         Assert.NotNull(user);
         Assert.Equal(loginDto.TelegramId, user.TelegramId);
         Assert.Equal(loginDto.Username, user.Username);
-        Assert.Equal(loginDto.FirstName, user.FirstName);
-        Assert.Equal(loginDto.LastName, user.LastName);
+        // FirstName and LastName are not part of LoginDto mapping
+        // They are populated separately during authentication flow
     }
 }

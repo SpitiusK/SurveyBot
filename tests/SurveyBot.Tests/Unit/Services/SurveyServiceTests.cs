@@ -212,7 +212,7 @@ public class SurveyServiceTests
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId)).ReturnsAsync(survey);
 
         // Act & Assert
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<SurveyBot.Core.Exceptions.UnauthorizedAccessException>(() =>
             _sut.UpdateSurveyAsync(surveyId, userId, dto));
     }
 
@@ -316,7 +316,7 @@ public class SurveyServiceTests
         _surveyRepositoryMock.Setup(r => r.GetByIdAsync(surveyId)).ReturnsAsync(survey);
 
         // Act & Assert
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<SurveyBot.Core.Exceptions.UnauthorizedAccessException>(() =>
             _sut.DeleteSurveyAsync(surveyId, userId));
     }
 
@@ -531,7 +531,7 @@ public class SurveyServiceTests
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId)).ReturnsAsync(survey);
 
         // Act & Assert
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<SurveyBot.Core.Exceptions.UnauthorizedAccessException>(() =>
             _sut.ActivateSurveyAsync(surveyId, userId));
     }
 

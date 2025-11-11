@@ -334,7 +334,7 @@ public class QuestionServiceTests
         _questionRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(questionId))
             .ReturnsAsync(new Question { Id = questionId, Answers = new List<Answer>() });
         _questionRepositoryMock.Setup(r => r.UpdateAsync(It.IsAny<Question>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Question q) => q);
 
         // Act
         var result = await _sut.UpdateQuestionAsync(questionId, userId, dto);
@@ -437,7 +437,7 @@ public class QuestionServiceTests
         _questionRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(questionId))
             .ReturnsAsync(new Question { Id = questionId, Answers = new List<Answer>() });
         _questionRepositoryMock.Setup(r => r.DeleteAsync(questionId))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(true);
 
         // Act
         var result = await _sut.DeleteQuestionAsync(questionId, userId);

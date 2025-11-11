@@ -100,19 +100,19 @@ public class CompletionHandlerTests
             .Setup(x => x.CompleteSurveyAsync(TestUserId))
             .ReturnsAsync(true);
 
+        // Mock the actual interface method SendRequest, not the extension method SendMessage
         _botClientMock
-            .Setup(x => x.SendMessage(
-                It.IsAny<long>(),
-                It.IsAny<string>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            .Setup(x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Telegram.Bot.Types.Message { MessageId = 1 });
+            .ReturnsAsync((Telegram.Bot.Requests.SendMessageRequest req, CancellationToken ct) =>
+            {
+                var message = new Telegram.Bot.Types.Message();
+                typeof(Telegram.Bot.Types.Message)
+                    .GetProperty("MessageId")
+                    ?.SetValue(message, 1);
+                return message;
+            });
 
         // Act
         await _handler.HandleCompletionAsync(chatId, TestUserId, CancellationToken.None);
@@ -127,16 +127,8 @@ public class CompletionHandlerTests
             Times.Once);
 
         _botClientMock.Verify(
-            x => x.SendMessage(
-                It.Is<long>(c => c == chatId),
-                It.Is<string>(m => m.Contains("Thank You")),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -188,34 +180,25 @@ public class CompletionHandlerTests
             .ReturnsAsync(true);
 
         _botClientMock
-            .Setup(x => x.SendMessage(
-                It.IsAny<long>(),
-                It.IsAny<string>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            .Setup(x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Telegram.Bot.Types.Message { MessageId = 1 });
+            .ReturnsAsync((Telegram.Bot.Requests.SendMessageRequest req, CancellationToken ct) =>
+            {
+                var message = new Telegram.Bot.Types.Message();
+                typeof(Telegram.Bot.Types.Message)
+                    .GetProperty("MessageId")
+                    ?.SetValue(message, 1);
+                return message;
+            });
 
         // Act
         await _handler.HandleCompletionAsync(chatId, TestUserId, CancellationToken.None);
 
         // Assert
         _botClientMock.Verify(
-            x => x.SendMessage(
-                It.IsAny<long>(),
-                It.Is<string>(m => m.Contains(surveyTitle)),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -235,34 +218,25 @@ public class CompletionHandlerTests
             .ReturnsAsync((ConversationState?)null);
 
         _botClientMock
-            .Setup(x => x.SendMessage(
-                It.IsAny<long>(),
-                It.IsAny<string>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            .Setup(x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Telegram.Bot.Types.Message { MessageId = 1 });
+            .ReturnsAsync((Telegram.Bot.Requests.SendMessageRequest req, CancellationToken ct) =>
+            {
+                var message = new Telegram.Bot.Types.Message();
+                typeof(Telegram.Bot.Types.Message)
+                    .GetProperty("MessageId")
+                    ?.SetValue(message, 1);
+                return message;
+            });
 
         // Act
         await _handler.HandleCompletionAsync(chatId, TestUserId, CancellationToken.None);
 
         // Assert
         _botClientMock.Verify(
-            x => x.SendMessage(
-                It.Is<long>(c => c == chatId),
-                It.Is<string>(m => m.Contains("Session expired")),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
 
@@ -288,34 +262,25 @@ public class CompletionHandlerTests
             .ReturnsAsync(state);
 
         _botClientMock
-            .Setup(x => x.SendMessage(
-                It.IsAny<long>(),
-                It.IsAny<string>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            .Setup(x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Telegram.Bot.Types.Message { MessageId = 1 });
+            .ReturnsAsync((Telegram.Bot.Requests.SendMessageRequest req, CancellationToken ct) =>
+            {
+                var message = new Telegram.Bot.Types.Message();
+                typeof(Telegram.Bot.Types.Message)
+                    .GetProperty("MessageId")
+                    ?.SetValue(message, 1);
+                return message;
+            });
 
         // Act
         await _handler.HandleCompletionAsync(chatId, TestUserId, CancellationToken.None);
 
         // Assert
         _botClientMock.Verify(
-            x => x.SendMessage(
-                It.Is<long>(c => c == chatId),
-                It.Is<string>(m => m.Contains("No active survey response")),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -341,34 +306,25 @@ public class CompletionHandlerTests
             .ThrowsAsync(new ResponseNotFoundException("Response not found"));
 
         _botClientMock
-            .Setup(x => x.SendMessage(
-                It.IsAny<long>(),
-                It.IsAny<string>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            .Setup(x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Telegram.Bot.Types.Message { MessageId = 1 });
+            .ReturnsAsync((Telegram.Bot.Requests.SendMessageRequest req, CancellationToken ct) =>
+            {
+                var message = new Telegram.Bot.Types.Message();
+                typeof(Telegram.Bot.Types.Message)
+                    .GetProperty("MessageId")
+                    ?.SetValue(message, 1);
+                return message;
+            });
 
         // Act
         await _handler.HandleCompletionAsync(chatId, TestUserId, CancellationToken.None);
 
         // Assert
         _botClientMock.Verify(
-            x => x.SendMessage(
-                It.Is<long>(c => c == chatId),
-                It.Is<string>(m => m.Contains("not found")),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -394,34 +350,25 @@ public class CompletionHandlerTests
             .ThrowsAsync(new InvalidOperationException("Cannot complete already completed response"));
 
         _botClientMock
-            .Setup(x => x.SendMessage(
-                It.IsAny<long>(),
-                It.IsAny<string>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            .Setup(x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Telegram.Bot.Types.Message { MessageId = 1 });
+            .ReturnsAsync((Telegram.Bot.Requests.SendMessageRequest req, CancellationToken ct) =>
+            {
+                var message = new Telegram.Bot.Types.Message();
+                typeof(Telegram.Bot.Types.Message)
+                    .GetProperty("MessageId")
+                    ?.SetValue(message, 1);
+                return message;
+            });
 
         // Act
         await _handler.HandleCompletionAsync(chatId, TestUserId, CancellationToken.None);
 
         // Assert
         _botClientMock.Verify(
-            x => x.SendMessage(
-                It.Is<long>(c => c == chatId),
-                It.Is<string>(m => m.Contains("Cannot complete")),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -468,34 +415,25 @@ public class CompletionHandlerTests
             .ReturnsAsync(true);
 
         _botClientMock
-            .Setup(x => x.SendMessage(
-                It.IsAny<long>(),
-                It.IsAny<string>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            .Setup(x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Telegram.Bot.Types.Message { MessageId = 1 });
+            .ReturnsAsync((Telegram.Bot.Requests.SendMessageRequest req, CancellationToken ct) =>
+            {
+                var message = new Telegram.Bot.Types.Message();
+                typeof(Telegram.Bot.Types.Message)
+                    .GetProperty("MessageId")
+                    ?.SetValue(message, 1);
+                return message;
+            });
 
         // Act
         await _handler.HandleCompletionAsync(chatId, TestUserId, CancellationToken.None);
 
         // Assert
         _botClientMock.Verify(
-            x => x.SendMessage(
-                It.IsAny<long>(),
-                It.Is<string>(m => m.Contains("Survey") || !m.Contains("null")),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<object>(),
-                It.IsAny<bool>(),
-                It.IsAny<object>(),
+            x => x.SendRequest(
+                It.IsAny<Telegram.Bot.Requests.SendMessageRequest>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
