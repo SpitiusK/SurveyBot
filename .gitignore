@@ -45,3 +45,30 @@ Thumbs.db
 node_modules/
 npm-debug.log
 yarn-error.log
+
+# Documentation clutter prevention
+# Exclude task summaries, phase reports, and execution plans
+TASK-*-SUMMARY.md
+TASK-*-COMPLETION-*.md
+TASK-*-VERIFICATION.md
+TASK_*.md
+PHASE-*.md
+PROGRESS-REPORT-*.md
+EXECUTION-*.md
+ORCHESTRATION-*.md
+ORCHESTRATOR-*.md
+*-COMPLETION-SUMMARY.md
+TESTING-GUIDE.md
+
+# Exclude legacy agent output folders
+agents/
+.claude/out/
+
+# Exclude scattered documentation
+docs/
+
+# Exclude old implementation notes and quick references
+*-QUICK-REFERENCE.md
+*-QUICK-START.md
+*-Implementation-Summary.md
+*-Testing-Guide.md
