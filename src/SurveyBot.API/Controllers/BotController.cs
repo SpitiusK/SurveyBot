@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using SurveyBot.API.Services;
 using SurveyBot.Bot.Configuration;
 using SurveyBot.Bot.Interfaces;
@@ -27,12 +28,12 @@ public class BotController : ControllerBase
     /// </summary>
     public BotController(
         IUpdateHandler updateHandler,
-        BotConfiguration botConfiguration,
+        IOptions<BotConfiguration> botConfiguration,
         IBackgroundTaskQueue backgroundTaskQueue,
         ILogger<BotController> logger)
     {
         _updateHandler = updateHandler ?? throw new ArgumentNullException(nameof(updateHandler));
-        _botConfiguration = botConfiguration ?? throw new ArgumentNullException(nameof(botConfiguration));
+        _botConfiguration = botConfiguration?.Value ?? throw new ArgumentNullException(nameof(botConfiguration));
         _backgroundTaskQueue = backgroundTaskQueue ?? throw new ArgumentNullException(nameof(backgroundTaskQueue));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -85,12 +86,16 @@ public class BotController : ControllerBase
                 update.Type);
 
             // Queue update for background processing (fire-and-forget)
-            _backgroundTaskQueue.QueueBackgroundWorkItem(async ct =>
+            _backgroundTaskQueue.QueueBackgroundWorkItem(async (serviceProvider, ct) =>
             {
                 try
                 {
                     _logger.LogDebug("Processing update {UpdateId} in background", update.Id);
-                    await _updateHandler.HandleUpdateAsync(update, ct);
+                    
+                    // Get a fresh UpdateHandler instance from the scoped service provider
+                    var updateHandler = serviceProvider.GetRequiredService<IUpdateHandler>();
+                    await updateHandler.HandleUpdateAsync(update, ct);
+                    
                     _logger.LogDebug("Update {UpdateId} processed successfully", update.Id);
                 }
                 catch (Exception ex)
@@ -103,7 +108,8 @@ public class BotController : ControllerBase
                     // Handle error through the update handler
                     try
                     {
-                        await _updateHandler.HandleErrorAsync(ex, ct);
+                        var updateHandler = serviceProvider.GetRequiredService<IUpdateHandler>();
+                        await updateHandler.HandleErrorAsync(ex, ct);
                     }
                     catch (Exception errorHandlerEx)
                     {

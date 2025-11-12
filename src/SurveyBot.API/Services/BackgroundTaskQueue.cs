@@ -5,10 +5,11 @@ namespace SurveyBot.API.Services;
 /// <summary>
 /// Thread-safe queue for background task processing.
 /// Uses System.Threading.Channels for high-performance async operations.
+/// Work items receive a service provider to create their own scoped services.
 /// </summary>
 public class BackgroundTaskQueue : IBackgroundTaskQueue
 {
-    private readonly Channel<Func<CancellationToken, Task>> _queue;
+    private readonly Channel<Func<IServiceProvider, CancellationToken, Task>> _queue;
     private readonly ILogger<BackgroundTaskQueue> _logger;
 
     /// <summary>
@@ -26,7 +27,7 @@ public class BackgroundTaskQueue : IBackgroundTaskQueue
             FullMode = BoundedChannelFullMode.Wait
         };
 
-        _queue = Channel.CreateBounded<Func<CancellationToken, Task>>(options);
+        _queue = Channel.CreateBounded<Func<IServiceProvider, CancellationToken, Task>>(options);
 
         _logger.LogInformation("BackgroundTaskQueue initialized with capacity {Capacity}", capacity);
     }
@@ -34,8 +35,8 @@ public class BackgroundTaskQueue : IBackgroundTaskQueue
     /// <summary>
     /// Queues a background work item for processing.
     /// </summary>
-    /// <param name="workItem">The work item to execute.</param>
-    public void QueueBackgroundWorkItem(Func<CancellationToken, Task> workItem)
+    /// <param name="workItem">The work item to execute. Receives a service provider and cancellation token.</param>
+    public void QueueBackgroundWorkItem(Func<IServiceProvider, CancellationToken, Task> workItem)
     {
         if (workItem == null)
         {
@@ -58,7 +59,7 @@ public class BackgroundTaskQueue : IBackgroundTaskQueue
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The work item to execute.</returns>
-    public async Task<Func<CancellationToken, Task>> DequeueAsync(CancellationToken cancellationToken)
+    public async Task<Func<IServiceProvider, CancellationToken, Task>> DequeueAsync(CancellationToken cancellationToken)
     {
         var workItem = await _queue.Reader.ReadAsync(cancellationToken);
 

@@ -3,10 +3,12 @@ namespace SurveyBot.API.Services;
 /// <summary>
 /// Background service that processes queued background tasks.
 /// Runs continuously and executes work items from the queue.
+/// Creates a new service scope for each task to ensure proper dependency injection.
 /// </summary>
 public class QueuedHostedService : BackgroundService
 {
     private readonly IBackgroundTaskQueue _taskQueue;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<QueuedHostedService> _logger;
 
     /// <summary>
@@ -14,9 +16,11 @@ public class QueuedHostedService : BackgroundService
     /// </summary>
     public QueuedHostedService(
         IBackgroundTaskQueue taskQueue,
+        IServiceProvider serviceProvider,
         ILogger<QueuedHostedService> logger)
     {
         _taskQueue = taskQueue ?? throw new ArgumentNullException(nameof(taskQueue));
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -44,9 +48,12 @@ public class QueuedHostedService : BackgroundService
 
                 try
                 {
-                    _logger.LogDebug("Executing background work item");
+                    _logger.LogDebug("Executing background work item with new service scope");
 
-                    await workItem(stoppingToken);
+                    // Create a new service scope for each background task
+                    // This ensures fresh instances of scoped services like DbContext
+                    using var scope = _serviceProvider.CreateScope();
+                    await workItem(scope.ServiceProvider, stoppingToken);
 
                     _logger.LogDebug("Background work item completed successfully");
                 }
