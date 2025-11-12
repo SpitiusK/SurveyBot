@@ -40,18 +40,22 @@ try
     builder.Services.AddAutoMapper(typeof(Program).Assembly);
 
     // Configure Entity Framework Core with PostgreSQL
-    builder.Services.AddDbContext<SurveyBotDbContext>(options =>
+    // Skip DbContext registration in Testing environment (integration tests will register their own)
+    if (!builder.Environment.IsEnvironment("Testing"))
     {
-        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-        options.UseNpgsql(connectionString);
-
-        // Enable detailed logging in development
-        if (builder.Environment.IsDevelopment())
+        builder.Services.AddDbContext<SurveyBotDbContext>(options =>
         {
-            options.EnableSensitiveDataLogging();
-            options.EnableDetailedErrors();
-        }
-    });
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            options.UseNpgsql(connectionString);
+
+            // Enable detailed logging in development
+            if (builder.Environment.IsDevelopment())
+            {
+                options.EnableSensitiveDataLogging();
+                options.EnableDetailedErrors();
+            }
+        });
+    }
 
     // Configure JWT Settings
     builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));

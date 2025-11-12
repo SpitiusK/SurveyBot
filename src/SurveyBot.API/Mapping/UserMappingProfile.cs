@@ -18,6 +18,9 @@ public class UserMappingProfile : Profile
         // Note: This mapping is primarily for creating users during Telegram authentication
         CreateMap<LoginDto, User>()
             .ForMember(dest => dest.Id, opt => opt.Ignore())
+            .ForMember(dest => dest.FirstName, opt => opt.Ignore()) // Optional, can be set from Telegram
+            .ForMember(dest => dest.LastName, opt => opt.Ignore()) // Optional, can be set from Telegram
+            .ForMember(dest => dest.LastLoginAt, opt => opt.Ignore()) // Set by service during login
             .ForMember(dest => dest.Surveys, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
             .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());

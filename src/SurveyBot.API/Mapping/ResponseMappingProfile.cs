@@ -14,6 +14,8 @@ public class ResponseMappingProfile : Profile
     {
         // Response -> ResponseDto (Entity to DTO for reading)
         CreateMap<Response, ResponseDto>()
+            .ForMember(dest => dest.Answers,
+                opt => opt.MapFrom(src => src.Answers)) // Map Answers collection using Answer->AnswerDto profile
             .ForMember(dest => dest.RespondentUsername,
                 opt => opt.Ignore()) // This would come from a separate User lookup if needed
             .ForMember(dest => dest.RespondentFirstName,
