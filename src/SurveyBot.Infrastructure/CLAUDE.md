@@ -1,136 +1,98 @@
-# SurveyBot.Infrastructure - Data Access Layer Documentation
+# SurveyBot.Infrastructure - Data Access Layer
+
+**Last Updated**: 2025-11-12
+**Version**: 1.0.0
+**Target Framework**: .NET 8.0
+**EF Core Version**: 9.0.10
+**Database**: PostgreSQL 15+
+
+---
 
 ## Table of Contents
 
-1. [Project Overview](#project-overview)
-2. [Project Structure](#project-structure)
-3. [Dependencies and Packages](#dependencies-and-packages)
+1. [Layer Overview](#layer-overview)
+2. [Architecture and Dependencies](#architecture-and-dependencies)
+3. [Project Structure](#project-structure)
 4. [Database Context](#database-context)
 5. [Entity Configurations](#entity-configurations)
 6. [Repository Layer](#repository-layer)
 7. [Service Layer](#service-layer)
-8. [Data Seeding](#data-seeding)
-9. [Migrations](#migrations)
+8. [Database Migrations](#database-migrations)
+9. [Data Seeding](#data-seeding)
 10. [Dependency Injection](#dependency-injection)
-11. [Key Features](#key-features)
-12. [Best Practices](#best-practices)
-13. [Common Patterns](#common-patterns)
-14. [Performance Optimization](#performance-optimization)
-15. [Error Handling](#error-handling)
-16. [Testing Approaches](#testing-approaches)
-17. [Common Issues and Solutions](#common-issues-and-solutions)
-18. [Code Examples](#code-examples)
+11. [Performance Optimization](#performance-optimization)
+12. [Best Practices and Patterns](#best-practices-and-patterns)
+13. [Error Handling](#error-handling)
+14. [Testing Strategies](#testing-strategies)
+15. [Common Issues and Solutions](#common-issues-and-solutions)
 
 ---
 
-## Project Overview
+## Layer Overview
 
 ### Purpose
 
-**SurveyBot.Infrastructure** is the data access layer of the SurveyBot application. It implements:
+**SurveyBot.Infrastructure** is the data access layer that implements all database operations and business logic services for the SurveyBot application. This layer is responsible for:
 
-- Entity Framework Core DbContext for database operations
-- Repository pattern for data access abstraction
-- Business logic services implementing Core interfaces
-- Database migrations and schema management
-- Data seeding for development and testing
-- PostgreSQL-specific optimizations (JSONB, GIN indexes)
+- **Database Access**: All interactions with PostgreSQL via Entity Framework Core
+- **Repository Pattern**: Concrete implementations of repository interfaces defined in Core
+- **Service Layer**: Business logic services implementing domain operations
+- **Data Persistence**: Transaction management, change tracking, and state management
+- **Schema Management**: Database migrations and version control
+- **Data Initialization**: Seeding development and test data
 
-### Responsibilities
+### Key Responsibilities
 
-1. **Database Access**: All database operations via Entity Framework Core
-2. **Repository Implementation**: Concrete implementations of `IRepository<T>` interfaces from Core
-3. **Service Implementation**: Business logic services implementing Core service interfaces
-4. **Data Persistence**: Transaction management and change tracking
-5. **Database Schema**: Entity configurations using Fluent API
-6. **Migrations**: Database schema versioning and evolution
-7. **Data Seeding**: Test data generation for development
+1. **Data Access Abstraction**: Isolates database specifics from business logic
+2. **Entity Framework Configuration**: Fluent API configurations for all entities
+3. **Query Optimization**: Eager loading, indexes, and performance tuning
+4. **Business Logic Implementation**: Domain operations with validation and authorization
+5. **Database Evolution**: Migration generation and application
+6. **Connection Management**: Connection pooling and lifetime management
 
 ### Architecture Principles
 
-- **Depends only on Core**: No dependencies on API or Bot layers
-- **Repository Pattern**: Abstracts data access from business logic
-- **Service Layer**: Business logic separate from data access
-- **Single Responsibility**: Each repository/service has one clear purpose
-- **Dependency Injection**: All dependencies injected via constructor
+**Clean Architecture Compliance**:
+- Depends **only** on `SurveyBot.Core` (Domain layer)
+- **No dependencies** on API or Bot layers
+- Implements interfaces defined in Core
+- All external concerns abstracted behind interfaces
+
+**Separation of Concerns**:
+- **Repositories**: Data access only (queries, commands)
+- **Services**: Business logic only (validation, authorization, orchestration)
+- **Configurations**: Entity mapping only (Fluent API)
+- **Migrations**: Schema evolution only
 
 ---
 
-## Project Structure
+## Architecture and Dependencies
 
-### Complete File Tree
+### Dependency Graph
 
 ```
-SurveyBot.Infrastructure/
-├── Data/
-│   ├── SurveyBotDbContext.cs                 # Main DbContext (108 lines)
-│   ├── DataSeeder.cs                         # Test data seeding (587 lines)
-│   ├── Configurations/                       # Fluent API configurations
-│   │   ├── UserConfiguration.cs              # User entity config (73 lines)
-│   │   ├── SurveyConfiguration.cs            # Survey entity config (117 lines)
-│   │   ├── QuestionConfiguration.cs          # Question entity config (107 lines)
-│   │   ├── ResponseConfiguration.cs          # Response entity config (78 lines)
-│   │   └── AnswerConfiguration.cs            # Answer entity config (89 lines)
-│   └── Extensions/
-│       └── DatabaseExtensions.cs             # Seeding extension methods (61 lines)
-├── Repositories/                             # Repository implementations
-│   ├── GenericRepository.cs                  # Base repository (95 lines)
-│   ├── SurveyRepository.cs                   # Survey-specific queries (169 lines)
-│   ├── QuestionRepository.cs                 # Question-specific queries (148 lines)
-│   ├── ResponseRepository.cs                 # Response-specific queries (160 lines)
-│   ├── UserRepository.cs                     # User-specific queries (146 lines)
-│   └── AnswerRepository.cs                   # Answer-specific queries (134 lines)
-├── Services/                                 # Business logic services
-│   ├── AuthService.cs                        # JWT authentication (174 lines)
-│   ├── SurveyService.cs                      # Survey business logic (724 lines)
-│   ├── QuestionService.cs                    # Question business logic (462 lines)
-│   ├── ResponseService.cs                    # Response business logic (623 lines)
-│   └── UserService.cs                        # User management (289 lines)
-├── Migrations/                               # EF Core migrations
-│   ├── 20251105190107_InitialCreate.cs
-│   ├── 20251106000001_AddLastLoginAtToUser.cs
-│   ├── 20251109000001_AddSurveyCodeColumn.cs
-│   └── SurveyBotDbContextModelSnapshot.cs
-├── DependencyInjection.cs                    # DI registration (46 lines)
-└── SurveyBot.Infrastructure.csproj           # Project file
+SurveyBot.Core (Domain)
+        ↑
+        |
+SurveyBot.Infrastructure (Data Access)
+        ↑
+        |
+SurveyBot.API (Presentation)
 ```
 
-### Organization by Purpose
+### Package Dependencies
 
-**Data Layer** (`Data/`):
-- DbContext and database configuration
-- Entity type configurations
-- Data seeding utilities
-
-**Repository Layer** (`Repositories/`):
-- Generic base repository
-- Entity-specific repositories with custom queries
-- Eager loading and query optimization
-
-**Service Layer** (`Services/`):
-- Business logic implementation
-- Validation and authorization
-- DTO mapping and transformation
-
-**Migrations** (`Migrations/`):
-- Database schema versions
-- Migration scripts
-- Model snapshots
-
----
-
-## Dependencies and Packages
-
-### Project File: `SurveyBot.Infrastructure.csproj`
+**Project File**: `SurveyBot.Infrastructure.csproj` (Lines 1-26)
 
 ```xml
-<!-- Lines 1-26 -->
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Project Reference -->
   <ItemGroup>
     <ProjectReference Include="..\SurveyBot.Core\SurveyBot.Core.csproj" />
   </ItemGroup>
 
+  <!-- NuGet Packages -->
   <ItemGroup>
     <PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="12.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
@@ -152,14 +114,64 @@ SurveyBot.Infrastructure/
 </Project>
 ```
 
-### Key Dependencies
+**Key Dependencies**:
 
-1. **SurveyBot.Core** - Domain entities and interfaces
-2. **Entity Framework Core 9.0.10** - ORM framework
-3. **Npgsql.EntityFrameworkCore.PostgreSQL 9.0.4** - PostgreSQL provider
-4. **AutoMapper 12.0.1** - Object-to-object mapping
-5. **System.IdentityModel.Tokens.Jwt 7.1.2** - JWT token generation
-6. **Microsoft.Extensions.Options 9.0.10** - Configuration options
+1. **Entity Framework Core 9.0.10**: ORM framework for database operations
+2. **Npgsql.EntityFrameworkCore.PostgreSQL 9.0.4**: PostgreSQL database provider
+3. **AutoMapper 12.0.1**: Object-to-object mapping (Entity ↔ DTO)
+4. **System.IdentityModel.Tokens.Jwt 7.1.2**: JWT token generation/validation
+5. **Microsoft.Extensions.Options 9.0.10**: Strongly-typed configuration
+6. **EF Core Design**: Migration generation tooling
+
+---
+
+## Project Structure
+
+### Complete Directory Tree
+
+```
+SurveyBot.Infrastructure/
+├── Data/                                      # Database context and configuration
+│   ├── SurveyBotDbContext.cs                 # Main DbContext (109 lines)
+│   ├── DataSeeder.cs                         # Test data generation (587 lines)
+│   ├── Configurations/                       # Fluent API entity configurations
+│   │   ├── UserConfiguration.cs              # User entity config (73 lines)
+│   │   ├── SurveyConfiguration.cs            # Survey entity config (117 lines)
+│   │   ├── QuestionConfiguration.cs          # Question entity config (107 lines)
+│   │   ├── ResponseConfiguration.cs          # Response entity config (78 lines)
+│   │   └── AnswerConfiguration.cs            # Answer entity config (89 lines)
+│   └── Extensions/
+│       └── DatabaseExtensions.cs             # Seeding extension methods (61 lines)
+├── Repositories/                             # Repository implementations
+│   ├── GenericRepository.cs                  # Base repository (95 lines)
+│   ├── SurveyRepository.cs                   # Survey operations (169 lines)
+│   ├── QuestionRepository.cs                 # Question operations (148 lines)
+│   ├── ResponseRepository.cs                 # Response operations (160 lines)
+│   ├── UserRepository.cs                     # User operations (146 lines)
+│   └── AnswerRepository.cs                   # Answer operations (134 lines)
+├── Services/                                 # Business logic services
+│   ├── AuthService.cs                        # JWT authentication (174 lines)
+│   ├── SurveyService.cs                      # Survey business logic (724 lines)
+│   ├── QuestionService.cs                    # Question business logic (462 lines)
+│   ├── ResponseService.cs                    # Response business logic (623 lines)
+│   └── UserService.cs                        # User management (289 lines)
+├── Migrations/                               # EF Core database migrations
+│   ├── 20251105190107_InitialCreate.cs
+│   ├── 20251106000001_AddLastLoginAtToUser.cs
+│   ├── 20251109000001_AddSurveyCodeColumn.cs
+│   └── SurveyBotDbContextModelSnapshot.cs
+├── DependencyInjection.cs                    # Service registration (46 lines)
+└── SurveyBot.Infrastructure.csproj           # Project file
+```
+
+### File Count Summary
+
+- **Total C# Files**: ~25 production files
+- **Total Lines of Code**: ~3,500+ lines
+- **Entity Configurations**: 5 files (464 lines)
+- **Repositories**: 6 files (852 lines)
+- **Services**: 5 files (2,272 lines)
+- **Migrations**: 3 applied migrations + snapshot
 
 ---
 
@@ -169,9 +181,9 @@ SurveyBot.Infrastructure/
 
 **Location**: `Data/SurveyBotDbContext.cs` (Lines 1-109)
 
-The central database context managing all entity sets and database operations.
+The main database context managing all entity sets and database operations.
 
-#### Class Declaration and Constructor
+#### Class Structure
 
 ```csharp
 // Lines 11-16
@@ -185,42 +197,24 @@ public class SurveyBotDbContext : DbContext
 
 #### DbSet Properties
 
-All entity DbSets exposed for querying:
+All domain entities exposed as DbSets:
 
 ```csharp
-// Lines 18-41
-/// <summary>
-/// Gets or sets the Users DbSet.
-/// </summary>
+// Lines 21, 26, 31, 36, 41
 public DbSet<User> Users { get; set; } = null!;
-
-/// <summary>
-/// Gets or sets the Surveys DbSet.
-/// </summary>
 public DbSet<Survey> Surveys { get; set; } = null!;
-
-/// <summary>
-/// Gets or sets the Questions DbSet.
-/// </summary>
 public DbSet<Question> Questions { get; set; } = null!;
-
-/// <summary>
-/// Gets or sets the Responses DbSet.
-/// </summary>
 public DbSet<Response> Responses { get; set; } = null!;
-
-/// <summary>
-/// Gets or sets the Answers DbSet.
-/// </summary>
 public DbSet<Answer> Answers { get; set; } = null!;
 ```
 
+**Naming Convention**: Plural table names (users, surveys, questions, responses, answers)
+
 #### OnModelCreating - Entity Configuration
 
-Applies all Fluent API configurations:
+**Lines 43-56**: Applies all Fluent API configurations
 
 ```csharp
-// Lines 43-56
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
     base.OnModelCreating(modelBuilder);
@@ -231,18 +225,16 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
     modelBuilder.ApplyConfiguration(new QuestionConfiguration());
     modelBuilder.ApplyConfiguration(new ResponseConfiguration());
     modelBuilder.ApplyConfiguration(new AnswerConfiguration());
-
-    // Configure automatic timestamp updates for entities with UpdatedAt
-    // This will be handled by SaveChangesAsync override
 }
 ```
 
-#### OnConfiguring - Development Settings
+**Pattern**: Separate configuration classes implementing `IEntityTypeConfiguration<T>` for better organization.
 
-Enables detailed logging for development:
+#### OnConfiguring - Development Enhancements
+
+**Lines 58-68**: Enables detailed logging in development
 
 ```csharp
-// Lines 58-68
 protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 {
     base.OnConfiguring(optionsBuilder);
@@ -256,17 +248,23 @@ protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 }
 ```
 
-#### SaveChangesAsync Override - Automatic Timestamps
+**Development Features**:
+- `EnableSensitiveDataLogging()`: Shows parameter values in logs
+- `EnableDetailedErrors()`: Provides detailed error messages
 
-**Critical Feature**: Automatically manages `CreatedAt` and `UpdatedAt` timestamps:
+**Warning**: Only enabled when options not configured (development scenario). Production configuration disables these.
+
+#### SaveChangesAsync Override - Automatic Timestamp Management
+
+**Lines 70-107**: Critical feature for automatic timestamp handling
 
 ```csharp
-// Lines 70-107
 public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
 {
     // Update timestamps for entities that have UpdatedAt property
     var entries = ChangeTracker.Entries()
-        .Where(e => e.Entity is BaseEntity && (e.State == EntityState.Added || e.State == EntityState.Modified));
+        .Where(e => e.Entity is BaseEntity &&
+                   (e.State == EntityState.Added || e.State == EntityState.Modified));
 
     foreach (var entry in entries)
     {
@@ -302,18 +300,20 @@ public override Task<int> SaveChangesAsync(CancellationToken cancellationToken =
 }
 ```
 
-**Key Points**:
-- Automatically sets `CreatedAt` on entity creation (EntityState.Added)
-- Automatically updates `UpdatedAt` on entity modification (EntityState.Modified)
-- Works for entities inheriting from `BaseEntity`
-- Uses reflection for non-BaseEntity classes with CreatedAt property
-- All timestamps are in UTC
+**Key Features**:
+1. **Automatic CreatedAt**: Set when entity first added (EntityState.Added)
+2. **Automatic UpdatedAt**: Updated on every modification (EntityState.Modified)
+3. **UTC Timestamps**: All timestamps stored in UTC for consistency
+4. **BaseEntity Support**: Handles entities inheriting from BaseEntity (User, Survey, Question)
+5. **Non-BaseEntity Support**: Uses reflection for entities with CreatedAt but not inheriting BaseEntity (Response, Answer)
+
+**Benefit**: Developers never need to manually set timestamps. The context handles it automatically.
 
 ---
 
 ## Entity Configurations
 
-All entity configurations use Fluent API pattern implementing `IEntityTypeConfiguration<T>`.
+All entity configurations use the Fluent API pattern by implementing `IEntityTypeConfiguration<T>`. This approach separates configuration from entity classes and keeps configurations organized.
 
 ### UserConfiguration
 
@@ -321,116 +321,126 @@ All entity configurations use Fluent API pattern implementing `IEntityTypeConfig
 
 Configures the User entity mapping to the `users` table.
 
-#### Complete Configuration
+#### Table and Primary Key
 
 ```csharp
-// Lines 12-71
-public void Configure(EntityTypeBuilder<User> builder)
-{
-    // Table name
-    builder.ToTable("users");
+// Lines 15, 18-21
+builder.ToTable("users");
 
-    // Primary key
-    builder.HasKey(u => u.Id);
-    builder.Property(u => u.Id)
-        .HasColumnName("id")
-        .ValueGeneratedOnAdd();
-
-    // TelegramId - unique identifier from Telegram
-    builder.Property(u => u.TelegramId)
-        .HasColumnName("telegram_id")
-        .IsRequired();
-
-    builder.HasIndex(u => u.TelegramId)
-        .IsUnique()
-        .HasDatabaseName("idx_users_telegram_id");
-
-    // Username
-    builder.Property(u => u.Username)
-        .HasColumnName("username")
-        .HasMaxLength(255);
-
-    builder.HasIndex(u => u.Username)
-        .HasDatabaseName("idx_users_username")
-        .HasFilter("username IS NOT NULL");
-
-    // FirstName
-    builder.Property(u => u.FirstName)
-        .HasColumnName("first_name")
-        .HasMaxLength(255);
-
-    // LastName
-    builder.Property(u => u.LastName)
-        .HasColumnName("last_name")
-        .HasMaxLength(255);
-
-    // CreatedAt
-    builder.Property(u => u.CreatedAt)
-        .HasColumnName("created_at")
-        .HasColumnType("timestamp with time zone")
-        .IsRequired()
-        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-    // UpdatedAt
-    builder.Property(u => u.UpdatedAt)
-        .HasColumnName("updated_at")
-        .HasColumnType("timestamp with time zone")
-        .IsRequired()
-        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-    // Relationships
-    builder.HasMany(u => u.Surveys)
-        .WithOne(s => s.Creator)
-        .HasForeignKey(s => s.CreatorId)
-        .OnDelete(DeleteBehavior.Cascade)
-        .HasConstraintName("fk_surveys_creator");
-}
+builder.HasKey(u => u.Id);
+builder.Property(u => u.Id)
+    .HasColumnName("id")
+    .ValueGeneratedOnAdd();
 ```
 
-**Key Features**:
-- Unique index on `TelegramId` (prevents duplicate users)
-- Partial index on `Username` (only when not null)
-- Cascade delete: deleting user deletes all their surveys
-- PostgreSQL timestamp with time zone
-- Snake_case column naming
+#### TelegramId - Unique External Identifier
+
+```csharp
+// Lines 24-30
+builder.Property(u => u.TelegramId)
+    .HasColumnName("telegram_id")
+    .IsRequired();
+
+builder.HasIndex(u => u.TelegramId)
+    .IsUnique()
+    .HasDatabaseName("idx_users_telegram_id");
+```
+
+**Important**: `TelegramId` is the user's unique identifier from Telegram API. The unique index prevents duplicate user registrations.
+
+#### Username with Partial Index
+
+```csharp
+// Lines 33-39
+builder.Property(u => u.Username)
+    .HasColumnName("username")
+    .HasMaxLength(255);
+
+builder.HasIndex(u => u.Username)
+    .HasDatabaseName("idx_users_username")
+    .HasFilter("username IS NOT NULL");
+```
+
+**Partial Index**: Only indexes non-null usernames (optimization). Not all Telegram users have usernames.
+
+#### Name Fields
+
+```csharp
+// Lines 42-49
+builder.Property(u => u.FirstName)
+    .HasColumnName("first_name")
+    .HasMaxLength(255);
+
+builder.Property(u => u.LastName)
+    .HasColumnName("last_name")
+    .HasMaxLength(255);
+```
+
+**Note**: All name fields nullable (Telegram doesn't require them).
+
+#### Timestamp Columns
+
+```csharp
+// Lines 52-63
+builder.Property(u => u.CreatedAt)
+    .HasColumnName("created_at")
+    .HasColumnType("timestamp with time zone")
+    .IsRequired()
+    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+builder.Property(u => u.UpdatedAt)
+    .HasColumnName("updated_at")
+    .HasColumnType("timestamp with time zone")
+    .IsRequired()
+    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+```
+
+**PostgreSQL**: Uses `timestamp with time zone` for proper timezone handling.
+
+#### Relationships - Cascade Delete
+
+```csharp
+// Lines 66-70
+builder.HasMany(u => u.Surveys)
+    .WithOne(s => s.Creator)
+    .HasForeignKey(s => s.CreatorId)
+    .OnDelete(DeleteBehavior.Cascade)
+    .HasConstraintName("fk_surveys_creator");
+```
+
+**Cascade Delete**: Deleting a user deletes all their surveys (and transitively, questions, responses, and answers).
 
 ### SurveyConfiguration
 
 **Location**: `Data/Configurations/SurveyConfiguration.cs` (Lines 1-117)
 
-Configures the Survey entity with advanced indexing and relationships.
+Configures the Survey entity with advanced indexing strategies.
 
-#### Key Sections
-
-**Primary Key and Basic Properties**:
+#### Basic Properties
 
 ```csharp
-// Lines 14-32
+// Lines 15-32
 builder.ToTable("surveys");
 
-// Primary key
 builder.HasKey(s => s.Id);
 builder.Property(s => s.Id)
     .HasColumnName("id")
     .ValueGeneratedOnAdd();
 
-// Title
 builder.Property(s => s.Title)
     .HasColumnName("title")
     .HasMaxLength(500)
     .IsRequired();
 
-// Description
 builder.Property(s => s.Description)
     .HasColumnName("description")
     .HasColumnType("text");
 ```
 
-**Survey Code (for sharing)**:
+#### Survey Code - Unique Sharing Code
 
 ```csharp
-// Lines 34-42
-// Code - unique survey code for sharing
+// Lines 35-42
 builder.Property(s => s.Code)
     .HasColumnName("code")
     .HasMaxLength(10);
@@ -441,11 +451,14 @@ builder.HasIndex(s => s.Code)
     .HasFilter("code IS NOT NULL");
 ```
 
-**Boolean Flags with Defaults**:
+**Feature**: Unique alphanumeric code for sharing surveys (e.g., "ABC123"). Partial unique index allows null codes.
+
+**Use Case**: Users can share surveys via code instead of ID: `/survey ABC123`
+
+#### Boolean Flags with Defaults
 
 ```csharp
-// Lines 52-72
-// IsActive
+// Lines 53-72
 builder.Property(s => s.IsActive)
     .HasColumnName("is_active")
     .IsRequired()
@@ -455,38 +468,46 @@ builder.HasIndex(s => s.IsActive)
     .HasDatabaseName("idx_surveys_is_active")
     .HasFilter("is_active = true");
 
-// AllowMultipleResponses
 builder.Property(s => s.AllowMultipleResponses)
     .HasColumnName("allow_multiple_responses")
     .IsRequired()
     .HasDefaultValue(false);
 
-// ShowResults
 builder.Property(s => s.ShowResults)
     .HasColumnName("show_results")
     .IsRequired()
     .HasDefaultValue(true);
 ```
 
-**Performance Indexes**:
+**Filtered Index on IsActive**: Only indexes active surveys for performance (most queries filter by active).
+
+#### Performance Indexes
+
+**Composite Index** for common query pattern:
 
 ```csharp
-// Lines 88-95
-// Composite index for common query pattern (creator + active status)
+// Lines 89-90
 builder.HasIndex(s => new { s.CreatorId, s.IsActive })
     .HasDatabaseName("idx_surveys_creator_active");
+```
 
-// Index for sorting by creation date
+**Use Case**: Query pattern: "Get all active surveys for user X" (very common).
+
+**Descending Index** for sorting:
+
+```csharp
+// Lines 93-95
 builder.HasIndex(s => s.CreatedAt)
     .HasDatabaseName("idx_surveys_created_at")
     .IsDescending();
 ```
 
-**Relationships**:
+**Use Case**: Newest-first sorting (default display order).
+
+#### Relationships - Multiple Cascade Deletes
 
 ```csharp
-// Lines 97-114
-// Relationships
+// Lines 98-114
 builder.HasOne(s => s.Creator)
     .WithMany(u => u.Surveys)
     .HasForeignKey(s => s.CreatorId)
@@ -506,12 +527,7 @@ builder.HasMany(s => s.Responses)
     .HasConstraintName("fk_responses_survey");
 ```
 
-**Key Features**:
-- Unique partial index on survey code (only when not null)
-- Composite index for filtering by creator and active status
-- Descending index on created_at for newest-first queries
-- Cascade delete for questions and responses
-- Filtered index on active surveys only
+**Cascade Chain**: User → Survey → Questions/Responses → Answers
 
 ### QuestionConfiguration
 
@@ -519,9 +535,55 @@ builder.HasMany(s => s.Responses)
 
 Configures Question entity with JSONB storage and check constraints.
 
-#### JSONB Column and GIN Index
+#### Question Type with Check Constraint
 
-**Critical Feature**: PostgreSQL JSONB for flexible option storage:
+```csharp
+// Lines 38-49
+builder.Property(q => q.QuestionType)
+    .HasColumnName("question_type")
+    .HasMaxLength(50)
+    .IsRequired();
+
+builder.HasIndex(q => q.QuestionType)
+    .HasDatabaseName("idx_questions_type");
+
+// Check constraint for question type
+builder.ToTable(t => t.HasCheckConstraint(
+    "chk_question_type",
+    "question_type IN ('text', 'multiple_choice', 'single_choice', 'rating', 'yes_no')"));
+```
+
+**Database-Level Validation**: Check constraint ensures only valid question types stored.
+
+#### Order Index with Constraints
+
+```csharp
+// Lines 52-68
+builder.Property(q => q.OrderIndex)
+    .HasColumnName("order_index")
+    .IsRequired();
+
+// Composite index for ordered question retrieval
+builder.HasIndex(q => new { q.SurveyId, q.OrderIndex })
+    .HasDatabaseName("idx_questions_survey_order");
+
+// Unique constraint for survey_id + order_index
+builder.HasIndex(q => new { q.SurveyId, q.OrderIndex })
+    .IsUnique()
+    .HasDatabaseName("idx_questions_survey_order_unique");
+
+// Check constraint for order index
+builder.ToTable(t => t.HasCheckConstraint(
+    "chk_order_index",
+    "order_index >= 0"));
+```
+
+**Data Integrity**:
+- Unique constraint prevents duplicate order indexes within a survey
+- Check constraint ensures non-negative ordering
+- Index optimizes ordered retrieval
+
+#### JSONB Options Storage
 
 ```csharp
 // Lines 76-84
@@ -536,51 +598,16 @@ builder.HasIndex(q => q.OptionsJson)
     .HasMethod("gin");
 ```
 
-**Why JSONB?**
-- Flexible storage for different option types (text arrays, rating configs)
-- Fast searching with GIN indexes
-- Binary format for performance
-- PostgreSQL-specific optimization
+**PostgreSQL JSONB**:
+- Binary JSON format (faster than text JSON)
+- Supports indexing and querying
+- GIN (Generalized Inverted Index) for fast searches
+- Flexible schema for different question types
 
-#### Check Constraints
-
-**Data Integrity**: Database-level constraints:
-
-```csharp
-// Lines 46-49
-// Check constraint for question type
-builder.ToTable(t => t.HasCheckConstraint(
-    "chk_question_type",
-    "question_type IN ('text', 'multiple_choice', 'single_choice', 'rating', 'yes_no')"));
-
-// Lines 65-68
-// Check constraint for order index
-builder.ToTable(t => t.HasCheckConstraint(
-    "chk_order_index",
-    "order_index >= 0"));
+**Options Format**:
+```json
+["Option 1", "Option 2", "Option 3"]
 ```
-
-#### Unique Composite Index
-
-**Prevents Duplicate Order**:
-
-```csharp
-// Lines 56-63
-// Composite index for ordered question retrieval
-builder.HasIndex(q => new { q.SurveyId, q.OrderIndex })
-    .HasDatabaseName("idx_questions_survey_order");
-
-// Unique constraint for survey_id + order_index
-builder.HasIndex(q => new { q.SurveyId, q.OrderIndex })
-    .IsUnique()
-    .HasDatabaseName("idx_questions_survey_order_unique");
-```
-
-**Key Features**:
-- JSONB storage with GIN index for fast querying
-- Unique constraint on (SurveyId, OrderIndex) prevents duplicate ordering
-- Check constraints enforce valid question types and order values
-- Cascade delete for answers
 
 ### ResponseConfiguration
 
@@ -588,12 +615,10 @@ builder.HasIndex(q => new { q.SurveyId, q.OrderIndex })
 
 Configures Response entity with completion tracking.
 
-#### Key Features
-
-**Respondent Telegram ID** (NOT a foreign key):
+#### RespondentTelegramId - NOT a Foreign Key
 
 ```csharp
-// Lines 31-38
+// Lines 32-38
 // RespondentTelegramId - NOT a foreign key to allow anonymous responses
 builder.Property(r => r.RespondentTelegramId)
     .HasColumnName("respondent_telegram_id")
@@ -604,16 +629,18 @@ builder.HasIndex(r => new { r.SurveyId, r.RespondentTelegramId })
     .HasDatabaseName("idx_responses_survey_respondent");
 ```
 
-**Why not a foreign key?**
-- Allows responses from users not in the system (anonymous)
-- Telegram ID sufficient for tracking without user table entry
-- More flexible for public surveys
+**Design Decision**: `RespondentTelegramId` is NOT a foreign key to the User table.
 
-**Completion Tracking**:
+**Reasons**:
+1. Allows responses from users not in our system (anonymous/public surveys)
+2. Telegram ID sufficient for tracking without requiring user registration
+3. More flexible for public survey scenarios
+4. Still indexed for performance
+
+#### Completion Status with Filtered Index
 
 ```csharp
-// Lines 40-48
-// IsComplete
+// Lines 41-48
 builder.Property(r => r.IsComplete)
     .HasColumnName("is_complete")
     .IsRequired()
@@ -624,13 +651,16 @@ builder.HasIndex(r => r.IsComplete)
     .HasFilter("is_complete = true");
 ```
 
-**Filtered indexes** optimize queries for completed responses only.
+**Filtered Index**: Only indexes completed responses (common query pattern for statistics).
 
-**Timestamp Indexes**:
+#### Timestamp Tracking
 
 ```csharp
-// Lines 55-62
-// SubmittedAt
+// Lines 51-62
+builder.Property(r => r.StartedAt)
+    .HasColumnName("started_at")
+    .HasColumnType("timestamp with time zone");
+
 builder.Property(r => r.SubmittedAt)
     .HasColumnName("submitted_at")
     .HasColumnType("timestamp with time zone");
@@ -640,60 +670,98 @@ builder.HasIndex(r => r.SubmittedAt)
     .HasFilter("submitted_at IS NOT NULL");
 ```
 
+**Response Lifecycle**:
+1. **Started**: `StartedAt` set, `IsComplete = false`
+2. **In Progress**: User answering questions
+3. **Completed**: `SubmittedAt` set, `IsComplete = true`
+
 ### AnswerConfiguration
 
 **Location**: `Data/Configurations/AnswerConfiguration.cs` (Lines 1-89)
 
-Configures Answer entity with JSONB storage and check constraints.
+Configures Answer entity with JSONB storage and data validation.
 
-#### JSONB Answer Storage
-
-```csharp
-// Lines 53-61
-// AnswerJson - stored as JSONB in PostgreSQL
-builder.Property(a => a.AnswerJson)
-    .HasColumnName("answer_json")
-    .HasColumnType("jsonb");
-
-// GIN index for JSONB answer searching
-builder.HasIndex(a => a.AnswerJson)
-    .HasDatabaseName("idx_answers_answer_json")
-    .HasMethod("gin");
-```
-
-#### Data Validation Constraint
-
-**Ensures answer data exists**:
+#### Composite Unique Constraint
 
 ```csharp
-// Lines 63-66
-// Check constraint: at least one of answer_text or answer_json must be present
-builder.ToTable(t => t.HasCheckConstraint(
-    "chk_answer_not_null",
-    "answer_text IS NOT NULL OR answer_json IS NOT NULL"));
-```
+// Lines 40-46
+// Composite index for response + question
+builder.HasIndex(a => new { a.ResponseId, a.QuestionId })
+    .HasDatabaseName("idx_answers_response_question");
 
-#### Unique Answer Constraint
-
-**Prevents duplicate answers**:
-
-```csharp
-// Lines 43-46
 // Unique constraint: one answer per question per response
 builder.HasIndex(a => new { a.ResponseId, a.QuestionId })
     .IsUnique()
     .HasDatabaseName("idx_answers_response_question_unique");
 ```
 
-**Key Features**:
-- JSONB for structured answer data (choices, ratings)
-- Check constraint ensures at least one answer field populated
-- Unique constraint prevents duplicate answers
-- GIN index for fast JSONB querying
+**Data Integrity**: Prevents duplicate answers to the same question in one response.
+
+#### Dual Storage - Text and JSON
+
+```csharp
+// Lines 49-56
+builder.Property(a => a.AnswerText)
+    .HasColumnName("answer_text")
+    .HasColumnType("text");
+
+builder.Property(a => a.AnswerJson)
+    .HasColumnName("answer_json")
+    .HasColumnType("jsonb");
+```
+
+**Why Both?**:
+- `AnswerText`: Simple text answers (text questions)
+- `AnswerJson`: Structured data (choices, ratings, complex answers)
+
+#### JSONB with GIN Index
+
+```csharp
+// Lines 58-61
+// GIN index for JSONB answer searching
+builder.HasIndex(a => a.AnswerJson)
+    .HasDatabaseName("idx_answers_answer_json")
+    .HasMethod("gin");
+```
+
+**Answer JSON Formats**:
+
+**Text Answer**:
+```json
+{"text": "User's free-form response"}
+```
+
+**Single Choice**:
+```json
+{"selectedOption": "Option 2"}
+```
+
+**Multiple Choice**:
+```json
+{"selectedOptions": ["Option 1", "Option 3", "Option 5"]}
+```
+
+**Rating**:
+```json
+{"rating": 4}
+```
+
+#### Check Constraint - Data Validation
+
+```csharp
+// Lines 64-66
+builder.ToTable(t => t.HasCheckConstraint(
+    "chk_answer_not_null",
+    "answer_text IS NOT NULL OR answer_json IS NOT NULL"));
+```
+
+**Database-Level Validation**: At least one of `answer_text` or `answer_json` must be populated.
 
 ---
 
 ## Repository Layer
+
+The repository layer abstracts data access logic and provides a clean API for querying and manipulating entities.
 
 ### GenericRepository<T>
 
@@ -701,7 +769,7 @@ builder.HasIndex(a => new { a.ResponseId, a.QuestionId })
 
 Base repository providing common CRUD operations for all entities.
 
-#### Class Declaration
+#### Class Structure
 
 ```csharp
 // Lines 11-24
@@ -710,10 +778,6 @@ public class GenericRepository<T> : IRepository<T> where T : class
     protected readonly SurveyBotDbContext _context;
     protected readonly DbSet<T> _dbSet;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="GenericRepository{T}"/> class.
-    /// </summary>
-    /// <param name="context">The database context.</param>
     public GenericRepository(SurveyBotDbContext context)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
@@ -721,39 +785,38 @@ public class GenericRepository<T> : IRepository<T> where T : class
     }
 ```
 
-**Pattern**: Protected fields allow derived repositories to access context and DbSet.
+**Protected Fields**: Allow derived repositories to access context and DbSet directly.
 
-#### GetByIdAsync
+#### Core Operations
+
+**GetByIdAsync** - Find by primary key:
 
 ```csharp
-// Lines 26-30
-/// <inheritdoc />
+// Lines 27-30
 public virtual async Task<T?> GetByIdAsync(int id)
 {
     return await _dbSet.FindAsync(id);
 }
 ```
 
-**Note**: Uses `FindAsync` which checks local cache first, then queries database.
+**Note**: Uses `FindAsync()` which checks local cache first, then queries database.
 
-#### GetAllAsync
+**GetAllAsync** - Retrieve all entities:
 
 ```csharp
-// Lines 32-36
-/// <inheritdoc />
+// Lines 33-36
 public virtual async Task<IEnumerable<T>> GetAllAsync()
 {
     return await _dbSet.ToListAsync();
 }
 ```
 
-**Warning**: Returns all records. Override in derived classes for filtering/ordering.
+**Warning**: Returns ALL records. Override in derived classes for filtering/pagination.
 
-#### CreateAsync
+**CreateAsync** - Add new entity:
 
 ```csharp
-// Lines 38-50
-/// <inheritdoc />
+// Lines 39-50
 public virtual async Task<T> CreateAsync(T entity)
 {
     if (entity == null)
@@ -768,13 +831,12 @@ public virtual async Task<T> CreateAsync(T entity)
 }
 ```
 
-**Note**: Calls `SaveChangesAsync` which triggers timestamp updates.
+**Side Effect**: Calls `SaveChangesAsync()` which triggers automatic timestamp updates.
 
-#### UpdateAsync
+**UpdateAsync** - Modify existing entity:
 
 ```csharp
-// Lines 52-64
-/// <inheritdoc />
+// Lines 53-64
 public virtual async Task<T> UpdateAsync(T entity)
 {
     if (entity == null)
@@ -789,11 +851,10 @@ public virtual async Task<T> UpdateAsync(T entity)
 }
 ```
 
-#### DeleteAsync
+**DeleteAsync** - Remove entity:
 
 ```csharp
-// Lines 66-80
-/// <inheritdoc />
+// Lines 67-80
 public virtual async Task<bool> DeleteAsync(int id)
 {
     var entity = await GetByIdAsync(id);
@@ -810,20 +871,18 @@ public virtual async Task<bool> DeleteAsync(int id)
 }
 ```
 
-**Pattern**: Returns `false` if entity not found, `true` on successful delete.
+**Return Value**: `false` if entity not found, `true` on successful delete.
 
-#### ExistsAsync and CountAsync
+**ExistsAsync** and **CountAsync**:
 
 ```csharp
-// Lines 82-93
-/// <inheritdoc />
+// Lines 83-93
 public virtual async Task<bool> ExistsAsync(int id)
 {
     var entity = await _dbSet.FindAsync(id);
     return entity != null;
 }
 
-/// <inheritdoc />
 public virtual async Task<int> CountAsync()
 {
     return await _dbSet.CountAsync();
@@ -832,10 +891,9 @@ public virtual async Task<int> CountAsync()
 
 **Key Points**:
 - All methods are `virtual` for overriding in derived classes
-- All operations are async
-- SaveChangesAsync called after modifications
+- All operations are async for scalability
+- SaveChangesAsync called after modifications (ensures consistency)
 - Null checks on input parameters
-- Returns nullable types for queries
 
 ### SurveyRepository
 
@@ -843,28 +901,10 @@ public virtual async Task<int> CountAsync()
 
 Survey-specific repository with complex queries and eager loading.
 
-#### Constructor
+#### GetByIdWithQuestionsAsync - Eager Load Questions
 
 ```csharp
-// Lines 11-19
-public class SurveyRepository : GenericRepository<Survey>, ISurveyRepository
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SurveyRepository"/> class.
-    /// </summary>
-    /// <param name="context">The database context.</param>
-    public SurveyRepository(SurveyBotDbContext context) : base(context)
-    {
-    }
-```
-
-#### GetByIdWithQuestionsAsync
-
-**Eager loads questions ordered by index**:
-
-```csharp
-// Lines 21-29
-/// <inheritdoc />
+// Lines 22-29
 public async Task<Survey?> GetByIdWithQuestionsAsync(int id)
 {
     return await _dbSet
@@ -875,19 +915,16 @@ public async Task<Survey?> GetByIdWithQuestionsAsync(int id)
 }
 ```
 
-**Key Features**:
-- `AsNoTracking()` for read-only queries (better performance)
-- `Include()` for eager loading (prevents N+1 queries)
-- `OrderBy` in Include for sorted questions
-- Multiple includes for complete data
+**Optimizations**:
+- `AsNoTracking()`: Read-only query (no change tracking overhead)
+- `Include()`: Eager loading prevents N+1 queries
+- `OrderBy` in Include: Questions sorted by display order
+- Multiple includes: Loads all necessary related data
 
-#### GetByIdWithDetailsAsync
-
-**Loads everything including responses and answers**:
+#### GetByIdWithDetailsAsync - Full Data Load
 
 ```csharp
-// Lines 31-40
-/// <inheritdoc />
+// Lines 32-40
 public async Task<Survey?> GetByIdWithDetailsAsync(int id)
 {
     return await _dbSet
@@ -899,17 +936,16 @@ public async Task<Survey?> GetByIdWithDetailsAsync(int id)
 }
 ```
 
-**Note**: No `AsNoTracking()` here because we might modify loaded entities.
+**No AsNoTracking**: Allows modifications to loaded entities.
 
 **ThenInclude**: Loads nested relationships (Answers within Responses).
 
-#### GetByCreatorIdAsync
+**Use Case**: Statistics calculation, detailed analysis.
 
-**Gets all surveys for a user**:
+#### GetByCreatorIdAsync - User's Surveys
 
 ```csharp
-// Lines 42-51
-/// <inheritdoc />
+// Lines 43-51
 public async Task<IEnumerable<Survey>> GetByCreatorIdAsync(int creatorId)
 {
     return await _dbSet
@@ -921,15 +957,12 @@ public async Task<IEnumerable<Survey>> GetByCreatorIdAsync(int creatorId)
 }
 ```
 
-**Pattern**: Newest surveys first with full data.
+**Pattern**: Newest surveys first (common UI requirement).
 
-#### GetActiveSurveysAsync
-
-**Public surveys available for responses**:
+#### GetActiveSurveysAsync - Public Surveys
 
 ```csharp
-// Lines 53-63
-/// <inheritdoc />
+// Lines 54-63
 public async Task<IEnumerable<Survey>> GetActiveSurveysAsync()
 {
     return await _dbSet
@@ -942,15 +975,12 @@ public async Task<IEnumerable<Survey>> GetActiveSurveysAsync()
 }
 ```
 
-**Use Case**: Display available surveys to users.
+**Use Case**: Display available surveys to users (Telegram bot listing).
 
-#### SearchByTitleAsync
-
-**PostgreSQL case-insensitive search**:
+#### SearchByTitleAsync - PostgreSQL Full-Text Search
 
 ```csharp
 // Lines 82-95
-/// <inheritdoc />
 public async Task<IEnumerable<Survey>> SearchByTitleAsync(string searchTerm)
 {
     if (string.IsNullOrWhiteSpace(searchTerm))
@@ -967,15 +997,16 @@ public async Task<IEnumerable<Survey>> SearchByTitleAsync(string searchTerm)
 }
 ```
 
-**EF.Functions.ILike**: PostgreSQL-specific case-insensitive LIKE.
+**EF.Functions.ILike**: PostgreSQL-specific case-insensitive LIKE operator.
 
-#### Survey Code Methods
+**Pattern**: `%searchTerm%` matches anywhere in title.
 
-**New Feature**: Survey code generation and retrieval:
+#### Survey Code Operations
+
+**GetByCodeAsync** - Find by sharing code:
 
 ```csharp
 // Lines 131-141
-/// <inheritdoc />
 public async Task<Survey?> GetByCodeAsync(string code)
 {
     if (string.IsNullOrWhiteSpace(code))
@@ -987,9 +1018,14 @@ public async Task<Survey?> GetByCodeAsync(string code)
         .Include(s => s.Creator)
         .FirstOrDefaultAsync(s => s.Code == code.ToUpper());
 }
+```
 
-// Lines 143-156
-/// <inheritdoc />
+**ToUpper()**: Codes stored and compared in uppercase for consistency.
+
+**GetByCodeWithQuestionsAsync** - Code lookup with questions:
+
+```csharp
+// Lines 144-156
 public async Task<Survey?> GetByCodeWithQuestionsAsync(string code)
 {
     if (string.IsNullOrWhiteSpace(code))
@@ -1003,9 +1039,12 @@ public async Task<Survey?> GetByCodeWithQuestionsAsync(string code)
         .Include(s => s.Creator)
         .FirstOrDefaultAsync(s => s.Code == code.ToUpper());
 }
+```
 
-// Lines 158-167
-/// <inheritdoc />
+**CodeExistsAsync** - Check code availability:
+
+```csharp
+// Lines 159-167
 public async Task<bool> CodeExistsAsync(string code)
 {
     if (string.IsNullOrWhiteSpace(code))
@@ -1017,15 +1056,14 @@ public async Task<bool> CodeExistsAsync(string code)
 }
 ```
 
-**Pattern**: Codes stored and compared in uppercase for consistency.
+**Use Case**: Code generation collision detection.
 
-#### Override Base Methods
+#### Overriding Base Methods
 
-**Always include Creator**:
+Always include Creator for surveys:
 
 ```csharp
-// Lines 113-118
-/// <inheritdoc />
+// Lines 113-128
 public override async Task<Survey?> GetByIdAsync(int id)
 {
     return await _dbSet
@@ -1033,8 +1071,6 @@ public override async Task<Survey?> GetByIdAsync(int id)
         .FirstOrDefaultAsync(s => s.Id == id);
 }
 
-// Lines 120-128
-/// <inheritdoc />
 public override async Task<IEnumerable<Survey>> GetAllAsync()
 {
     return await _dbSet
@@ -1045,410 +1081,54 @@ public override async Task<IEnumerable<Survey>> GetAllAsync()
 }
 ```
 
-**Best Practice**: Override base methods to add necessary includes.
-
-### QuestionRepository
-
-**Location**: `Repositories/QuestionRepository.cs` (Lines 1-148)
-
-Question-specific repository with ordering and bulk operations.
-
-#### GetBySurveyIdAsync
-
-**Ordered question list**:
-
-```csharp
-// Lines 21-28
-/// <inheritdoc />
-public async Task<IEnumerable<Question>> GetBySurveyIdAsync(int surveyId)
-{
-    return await _dbSet
-        .Where(q => q.SurveyId == surveyId)
-        .OrderBy(q => q.OrderIndex)
-        .ToListAsync();
-}
-```
-
-**Critical**: Always ordered by OrderIndex for correct display.
-
-#### GetNextOrderIndexAsync
-
-**Auto-increment order index**:
-
-```csharp
-// Lines 77-85
-/// <inheritdoc />
-public async Task<int> GetNextOrderIndexAsync(int surveyId)
-{
-    var maxOrderIndex = await _dbSet
-        .Where(q => q.SurveyId == surveyId)
-        .MaxAsync(q => (int?)q.OrderIndex);
-
-    return (maxOrderIndex ?? -1) + 1;
-}
-```
-
-**Pattern**:
-- Cast to `int?` to handle empty collections
-- Returns 0 for first question (max = null → -1 + 1 = 0)
-
-#### ReorderQuestionsAsync
-
-**Bulk reordering with transaction**:
-
-```csharp
-// Lines 40-75
-/// <inheritdoc />
-public async Task<bool> ReorderQuestionsAsync(Dictionary<int, int> questionOrders)
-{
-    if (questionOrders == null || questionOrders.Count == 0)
-    {
-        return false;
-    }
-
-    using var transaction = await _context.Database.BeginTransactionAsync();
-
-    try
-    {
-        foreach (var (questionId, newOrderIndex) in questionOrders)
-        {
-            var question = await GetByIdAsync(questionId);
-
-            if (question == null)
-            {
-                await transaction.RollbackAsync();
-                return false;
-            }
-
-            question.OrderIndex = newOrderIndex;
-        }
-
-        await _context.SaveChangesAsync();
-        await transaction.CommitAsync();
-
-        return true;
-    }
-    catch
-    {
-        await transaction.RollbackAsync();
-        throw;
-    }
-}
-```
-
-**Key Features**:
-- Explicit transaction for atomicity
-- Rollback if any question not found
-- All-or-nothing update
-- Exception propagation after rollback
-
-#### Filtering Methods
-
-```csharp
-// Lines 87-94
-/// <inheritdoc />
-public async Task<IEnumerable<Question>> GetRequiredQuestionsBySurveyIdAsync(int surveyId)
-{
-    return await _dbSet
-        .Where(q => q.SurveyId == surveyId && q.IsRequired)
-        .OrderBy(q => q.OrderIndex)
-        .ToListAsync();
-}
-
-// Lines 96-103
-/// <inheritdoc />
-public async Task<IEnumerable<Question>> GetByTypeAsync(int surveyId, QuestionType questionType)
-{
-    return await _dbSet
-        .Where(q => q.SurveyId == surveyId && q.QuestionType == questionType)
-        .OrderBy(q => q.OrderIndex)
-        .ToListAsync();
-}
-```
-
-### ResponseRepository
-
-**Location**: `Repositories/ResponseRepository.cs` (Lines 1-160)
-
-Response-specific repository with completion and filtering.
-
-#### GetIncompleteResponseAsync
-
-**Resume incomplete survey**:
-
-```csharp
-// Lines 62-74
-/// <inheritdoc />
-public async Task<Response?> GetIncompleteResponseAsync(int surveyId, long telegramId)
-{
-    return await _dbSet
-        .AsNoTracking()
-        .Include(r => r.Answers)
-            .ThenInclude(a => a.Question)
-        .Include(r => r.Survey)
-            .ThenInclude(s => s.Questions.OrderBy(q => q.OrderIndex))
-        .FirstOrDefaultAsync(r => r.SurveyId == surveyId
-            && r.RespondentTelegramId == telegramId
-            && !r.IsComplete);
-}
-```
-
-**Use Case**: User starts survey, closes bot, returns later to continue.
-
-**Complex Includes**: Loads all necessary data for resuming.
-
-#### Completion Tracking
-
-```csharp
-// Lines 76-83
-/// <inheritdoc />
-public async Task<bool> HasUserCompletedSurveyAsync(int surveyId, long telegramId)
-{
-    return await _dbSet
-        .AnyAsync(r => r.SurveyId == surveyId
-            && r.RespondentTelegramId == telegramId
-            && r.IsComplete);
-}
-
-// Lines 85-91
-/// <inheritdoc />
-public async Task<int> GetCompletedCountAsync(int surveyId)
-{
-    return await _dbSet
-        .Where(r => r.SurveyId == surveyId && r.IsComplete)
-        .CountAsync();
-}
-```
-
-#### Date Range Filtering
-
-```csharp
-// Lines 93-104
-/// <inheritdoc />
-public async Task<IEnumerable<Response>> GetByDateRangeAsync(int surveyId, DateTime startDate, DateTime endDate)
-{
-    return await _dbSet
-        .Include(r => r.Answers)
-        .Where(r => r.SurveyId == surveyId
-            && r.SubmittedAt.HasValue
-            && r.SubmittedAt >= startDate
-            && r.SubmittedAt <= endDate)
-        .OrderBy(r => r.SubmittedAt)
-        .ToListAsync();
-}
-```
-
-**Use Case**: Analytics and reporting for specific time periods.
-
-#### MarkAsCompleteAsync
-
-**Update response status**:
-
-```csharp
-// Lines 106-122
-/// <inheritdoc />
-public async Task<bool> MarkAsCompleteAsync(int responseId)
-{
-    var response = await GetByIdAsync(responseId);
-
-    if (response == null)
-    {
-        return false;
-    }
-
-    response.IsComplete = true;
-    response.SubmittedAt = DateTime.UtcNow;
-
-    await _context.SaveChangesAsync();
-
-    return true;
-}
-```
-
-**Atomic Operation**: Both fields updated together.
-
-### UserRepository
-
-**Location**: `Repositories/UserRepository.cs` (Lines 1-146)
-
-User-specific repository with Telegram integration.
-
-#### GetByTelegramIdAsync
-
-**Primary user lookup**:
-
-```csharp
-// Lines 21-26
-/// <inheritdoc />
-public async Task<User?> GetByTelegramIdAsync(long telegramId)
-{
-    return await _dbSet
-        .FirstOrDefaultAsync(u => u.TelegramId == telegramId);
-}
-```
-
-**Use Case**: Every bot interaction starts with Telegram ID lookup.
-
-#### CreateOrUpdateAsync (Upsert Pattern)
-
-**Critical Method**: Handles user registration and updates:
-
-```csharp
-// Lines 70-99
-/// <inheritdoc />
-public async Task<User> CreateOrUpdateAsync(long telegramId, string? username, string? firstName, string? lastName)
-{
-    var existingUser = await GetByTelegramIdAsync(telegramId);
-
-    if (existingUser != null)
-    {
-        // Update existing user information
-        existingUser.Username = username;
-        existingUser.FirstName = firstName;
-        existingUser.LastName = lastName;
-
-        await _context.SaveChangesAsync();
-        return existingUser;
-    }
-
-    // Create new user
-    var newUser = new User
-    {
-        TelegramId = telegramId,
-        Username = username,
-        FirstName = firstName,
-        LastName = lastName
-    };
-
-    await _dbSet.AddAsync(newUser);
-    await _context.SaveChangesAsync();
-
-    return newUser;
-}
-```
-
-**Why Upsert?**
-- Telegram users can change username/name
-- Ensures user info stays current
-- Prevents duplicate user records
-- Simplifies bot interaction logic
-
-#### Search and Filter Methods
-
-```csharp
-// Lines 120-136
-/// <inheritdoc />
-public async Task<IEnumerable<User>> SearchByNameAsync(string searchTerm)
-{
-    if (string.IsNullOrWhiteSpace(searchTerm))
-    {
-        return await GetAllAsync();
-    }
-
-    var lowerSearchTerm = searchTerm.ToLower();
-
-    return await _dbSet
-        .Where(u =>
-            (u.FirstName != null && u.FirstName.ToLower().Contains(lowerSearchTerm)) ||
-            (u.LastName != null && u.LastName.ToLower().Contains(lowerSearchTerm)) ||
-            (u.Username != null && u.Username.ToLower().Contains(lowerSearchTerm)))
-        .OrderBy(u => u.Username ?? u.FirstName ?? u.LastName)
-        .ToListAsync();
-}
-```
-
-**Pattern**: Searches across multiple fields with null handling.
-
-### AnswerRepository
-
-**Location**: `Repositories/AnswerRepository.cs` (Lines 1-134)
-
-Answer-specific repository with batch operations.
-
-#### GetByResponseIdAsync
-
-**Load all answers for a response**:
-
-```csharp
-// Lines 21-29
-/// <inheritdoc />
-public async Task<IEnumerable<Answer>> GetByResponseIdAsync(int responseId)
-{
-    return await _dbSet
-        .Include(a => a.Question)
-        .Where(a => a.ResponseId == responseId)
-        .OrderBy(a => a.Question.OrderIndex)
-        .ToListAsync();
-}
-```
-
-**Important**: Orders by question order, not answer creation time.
-
-#### CreateBatchAsync
-
-**Bulk answer creation**:
-
-```csharp
-// Lines 50-62
-/// <inheritdoc />
-public async Task<IEnumerable<Answer>> CreateBatchAsync(IEnumerable<Answer> answers)
-{
-    if (answers == null || !answers.Any())
-    {
-        return Enumerable.Empty<Answer>();
-    }
-
-    await _dbSet.AddRangeAsync(answers);
-    await _context.SaveChangesAsync();
-
-    return answers;
-}
-```
-
-**Performance**: Single database roundtrip for multiple answers.
+**Best Practice**: Override base methods to add necessary eager loading.
+
+### Other Repositories
+
+**QuestionRepository** (`Repositories/QuestionRepository.cs`, 148 lines):
+- `GetBySurveyIdAsync`: Ordered questions for a survey
+- `GetNextOrderIndexAsync`: Auto-increment order index
+- `ReorderQuestionsAsync`: Bulk reordering with transaction
+- `GetRequiredQuestionsBySurveyIdAsync`: Filter by required flag
+- `GetByTypeAsync`: Filter by question type
+
+**ResponseRepository** (`Repositories/ResponseRepository.cs`, 160 lines):
+- `GetIncompleteResponseAsync`: Resume incomplete survey
+- `HasUserCompletedSurveyAsync`: Check completion status
+- `GetCompletedCountAsync`: Count completed responses
+- `GetByDateRangeAsync`: Analytics date filtering
+- `MarkAsCompleteAsync`: Update completion status
+
+**UserRepository** (`Repositories/UserRepository.cs`, 146 lines):
+- `GetByTelegramIdAsync`: Primary user lookup
+- `CreateOrUpdateAsync`: Upsert pattern (critical for Telegram integration)
+- `GetByUsernameAsync`: Username lookup
+- `SearchByNameAsync`: Multi-field search
+- `UpdateLastLoginAsync`: Track last login time
+
+**AnswerRepository** (`Repositories/AnswerRepository.cs`, 134 lines):
+- `GetByResponseIdAsync`: All answers for a response
+- `GetByQuestionIdAsync`: All answers for a question
+- `CreateBatchAsync`: Bulk answer creation
+- `GetByResponseAndQuestionAsync`: Specific answer lookup
+- `DeleteByResponseIdAsync`: Batch delete
 
 ---
 
 ## Service Layer
 
-Business logic layer implementing domain operations with validation and authorization.
+The service layer implements business logic, validation, authorization, and orchestrates repository operations.
 
 ### AuthService
 
 **Location**: `Services/AuthService.cs` (Lines 1-174)
 
-JWT token generation and authentication.
+JWT token generation and authentication service.
 
-#### Dependencies
-
-```csharp
-// Lines 18-32
-public class AuthService : IAuthService
-{
-    private readonly IUserRepository _userRepository;
-    private readonly JwtSettings _jwtSettings;
-    private readonly ILogger<AuthService> _logger;
-
-    public AuthService(
-        IUserRepository userRepository,
-        IOptions<JwtSettings> jwtSettings,
-        ILogger<AuthService> logger)
-    {
-        _userRepository = userRepository;
-        _jwtSettings = jwtSettings.Value;
-        _logger = logger;
-    }
-```
-
-#### LoginAsync
-
-**User authentication with token generation**:
+#### LoginAsync - User Authentication
 
 ```csharp
-// Lines 34-67
-/// <summary>
-/// Authenticates a user by Telegram ID and generates JWT tokens.
-/// </summary>
+// Lines 37-67
 public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request)
 {
     _logger.LogInformation("Login attempt for Telegram ID: {TelegramId}", request.TelegramId);
@@ -1483,21 +1163,16 @@ public async Task<LoginResponseDto> LoginAsync(LoginRequestDto request)
 ```
 
 **Key Features**:
-- Upsert user (create or update)
-- Generate JWT access token
-- Generate refresh token (cryptographically secure)
-- Set expiration time
-- Return complete authentication DTO
+- Upsert user (create if new, update if exists)
+- No password validation (Telegram authentication handled externally)
+- Generates JWT access token
+- Generates cryptographically secure refresh token
+- Returns complete authentication response
 
-#### GenerateAccessToken
-
-**JWT token creation with claims**:
+#### GenerateAccessToken - JWT Creation
 
 ```csharp
-// Lines 69-100
-/// <summary>
-/// Generates a JWT access token with user claims.
-/// </summary>
+// Lines 72-100
 public string GenerateAccessToken(int userId, long telegramId, string? username)
 {
     var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
@@ -1530,21 +1205,18 @@ public string GenerateAccessToken(int userId, long telegramId, string? username)
 ```
 
 **Claims Included**:
-- `NameIdentifier`: Internal user ID (for authorization)
-- `TelegramId`: Telegram user ID
-- `Jti`: Token unique ID
+- `NameIdentifier`: Internal database user ID (for authorization)
+- `TelegramId`: Telegram user ID (for Telegram operations)
+- `Jti`: Token unique identifier
 - `Iat`: Issued at timestamp
-- `Name` / `Username`: User's username (if available)
+- `Name` / `Username`: User's Telegram username (if available)
 
-#### GenerateRefreshToken
+**Signature**: HMAC-SHA256 with secret key from configuration.
 
-**Cryptographically secure random token**:
+#### GenerateRefreshToken - Secure Random
 
 ```csharp
-// Lines 102-111
-/// <summary>
-/// Generates a cryptographically secure refresh token.
-/// </summary>
+// Lines 105-111
 public string GenerateRefreshToken()
 {
     var randomNumber = new byte[32];
@@ -1554,17 +1226,14 @@ public string GenerateRefreshToken()
 }
 ```
 
-**Note**: MVP implementation. Production should store refresh tokens in database.
+**Security**: Uses `RandomNumberGenerator` (cryptographically secure).
 
-#### ValidateToken
+**Note**: MVP implementation. Production should store refresh tokens in database with expiration.
 
-**Token validation**:
+#### ValidateToken - Token Verification
 
 ```csharp
-// Lines 113-147
-/// <summary>
-/// Validates a JWT token.
-/// </summary>
+// Lines 116-147
 public bool ValidateToken(string token)
 {
     if (string.IsNullOrWhiteSpace(token))
@@ -1600,11 +1269,11 @@ public bool ValidateToken(string token)
 ```
 
 **Validation Checks**:
-- Issuer matches
-- Audience matches
-- Token not expired
-- Signature valid
-- Zero clock skew (strict expiration)
+1. Issuer matches configuration
+2. Audience matches configuration
+3. Token not expired
+4. Signature valid
+5. Zero clock skew (strict expiration enforcement)
 
 ### SurveyService
 
@@ -1612,43 +1281,10 @@ public bool ValidateToken(string token)
 
 Complete survey lifecycle management with business logic.
 
-#### Dependencies
+#### CreateSurveyAsync - Survey Creation
 
 ```csharp
-// Lines 18-41
-public class SurveyService : ISurveyService
-{
-    private readonly ISurveyRepository _surveyRepository;
-    private readonly IResponseRepository _responseRepository;
-    private readonly IAnswerRepository _answerRepository;
-    private readonly IMapper _mapper;
-    private readonly ILogger<SurveyService> _logger;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SurveyService"/> class.
-    /// </summary>
-    public SurveyService(
-        ISurveyRepository surveyRepository,
-        IResponseRepository responseRepository,
-        IAnswerRepository answerRepository,
-        IMapper mapper,
-        ILogger<SurveyService> logger)
-    {
-        _surveyRepository = surveyRepository;
-        _responseRepository = responseRepository;
-        _answerRepository = answerRepository;
-        _mapper = mapper;
-        _logger = logger;
-    }
-```
-
-#### CreateSurveyAsync
-
-**Survey creation with code generation**:
-
-```csharp
-// Lines 43-74
-/// <inheritdoc/>
+// Lines 44-74
 public async Task<SurveyDto> CreateSurveyAsync(int userId, CreateSurveyDto dto)
 {
     _logger.LogInformation("Creating new survey for user {UserId}: {Title}", userId, dto.Title);
@@ -1659,7 +1295,7 @@ public async Task<SurveyDto> CreateSurveyAsync(int userId, CreateSurveyDto dto)
     // Create survey entity
     var survey = _mapper.Map<Survey>(dto);
     survey.CreatorId = userId;
-    survey.IsActive = false; // Always create as inactive, user must explicitly activate
+    survey.IsActive = false; // Always create as inactive
 
     // Generate unique survey code
     survey.Code = await SurveyCodeGenerator.GenerateUniqueCodeAsync(
@@ -1682,30 +1318,18 @@ public async Task<SurveyDto> CreateSurveyAsync(int userId, CreateSurveyDto dto)
 }
 ```
 
-**Key Features**:
-- Validates input DTO
-- Creates survey inactive by default (safety)
-- Generates unique shareable code
-- Maps entity to DTO
-- Initializes response counts
+**Business Rules**:
+1. Validate input DTO
+2. Map to domain entity
+3. Set creator
+4. **Create inactive by default** (safety - must explicitly activate)
+5. Generate unique shareable code
+6. Initialize response counts
 
-#### Survey Code Generation
-
-**Utility method for unique codes**:
-
-Uses `SurveyCodeGenerator.GenerateUniqueCodeAsync` from Core layer:
-- Generates random alphanumeric codes
-- Checks for uniqueness via repository
-- Retries if collision detected
-- Uppercase for consistency
-
-#### UpdateSurveyAsync
-
-**Survey modification with protection**:
+#### UpdateSurveyAsync - Survey Modification
 
 ```csharp
-// Lines 76-127
-/// <inheritdoc/>
+// Lines 77-127
 public async Task<SurveyDto> UpdateSurveyAsync(int surveyId, int userId, UpdateSurveyDto dto)
 {
     _logger.LogInformation("Updating survey {SurveyId} by user {UserId}", surveyId, userId);
@@ -1744,54 +1368,24 @@ public async Task<SurveyDto> UpdateSurveyAsync(int surveyId, int userId, UpdateS
     // Save changes
     await _surveyRepository.UpdateAsync(survey);
 
-    _logger.LogInformation("Survey {SurveyId} updated successfully", surveyId);
-
-    // Get response counts
-    var responseCount = await _surveyRepository.GetResponseCountAsync(surveyId);
-    var completedCount = await _responseRepository.GetCompletedCountAsync(surveyId);
-
-    // Map to DTO
-    var result = _mapper.Map<SurveyDto>(survey);
-    result.TotalResponses = responseCount;
-    result.CompletedResponses = completedCount;
-
-    return result;
+    // ... [rest of method]
 }
 ```
 
 **Business Rules**:
 1. Survey must exist
 2. User must own survey (authorization)
-3. Cannot modify active survey with responses (data integrity)
-4. Updates timestamp automatically
-5. Returns updated counts
+3. **Cannot modify active survey with responses** (data integrity protection)
+4. Update allowed properties only
+5. Timestamp automatically updated
 
-#### DeleteSurveyAsync
-
-**Soft delete vs hard delete**:
+#### DeleteSurveyAsync - Smart Delete Logic
 
 ```csharp
-// Lines 129-171
-/// <inheritdoc/>
+// Lines 130-171
 public async Task<bool> DeleteSurveyAsync(int surveyId, int userId)
 {
-    _logger.LogInformation("Deleting survey {SurveyId} by user {UserId}", surveyId, userId);
-
-    // Get survey
-    var survey = await _surveyRepository.GetByIdAsync(surveyId);
-    if (survey == null)
-    {
-        _logger.LogWarning("Survey {SurveyId} not found", surveyId);
-        throw new SurveyNotFoundException(surveyId);
-    }
-
-    // Check authorization
-    if (survey.CreatorId != userId)
-    {
-        _logger.LogWarning("User {UserId} attempted to delete survey {SurveyId} owned by {OwnerId}",
-            userId, surveyId, survey.CreatorId);
-        throw new Core.Exceptions.UnauthorizedAccessException(userId, "Survey", surveyId);
-    }
+    // ... [authorization checks]
 
     // Check if survey has responses
     var hasResponses = await _surveyRepository.HasResponsesAsync(surveyId);
@@ -1817,37 +1411,19 @@ public async Task<bool> DeleteSurveyAsync(int surveyId, int userId)
 }
 ```
 
-**Smart Delete Logic**:
-- **Has responses**: Soft delete (deactivate) to preserve data
-- **No responses**: Hard delete (remove from database)
-- Protects valuable response data from accidental deletion
+**Smart Delete**:
+- **Has responses**: Soft delete (deactivate only) - preserves valuable response data
+- **No responses**: Hard delete (remove from database) - cleans up unused surveys
 
-#### ActivateSurveyAsync
+**Data Protection**: Prevents accidental deletion of surveys with collected responses.
 
-**Validation before activation**:
+#### ActivateSurveyAsync - Validation Before Activation
 
 ```csharp
 // Lines 260-306
-/// <inheritdoc/>
 public async Task<SurveyDto> ActivateSurveyAsync(int surveyId, int userId)
 {
-    _logger.LogInformation("Activating survey {SurveyId} by user {UserId}", surveyId, userId);
-
-    // Get survey with questions
-    var survey = await _surveyRepository.GetByIdWithQuestionsAsync(surveyId);
-    if (survey == null)
-    {
-        _logger.LogWarning("Survey {SurveyId} not found", surveyId);
-        throw new SurveyNotFoundException(surveyId);
-    }
-
-    // Check authorization
-    if (survey.CreatorId != userId)
-    {
-        _logger.LogWarning("User {UserId} attempted to activate survey {SurveyId} owned by {OwnerId}",
-            userId, surveyId, survey.CreatorId);
-        throw new Core.Exceptions.UnauthorizedAccessException(userId, "Survey", surveyId);
-    }
+    // ... [get survey and authorization]
 
     // Validate survey has at least one question
     if (survey.Questions == null || survey.Questions.Count == 0)
@@ -1863,49 +1439,19 @@ public async Task<SurveyDto> ActivateSurveyAsync(int surveyId, int userId)
 
     await _surveyRepository.UpdateAsync(survey);
 
-    _logger.LogInformation("Survey {SurveyId} activated successfully", surveyId);
-
-    // Get response counts
-    var responseCount = await _surveyRepository.GetResponseCountAsync(surveyId);
-    var completedCount = await _responseRepository.GetCompletedCountAsync(surveyId);
-
-    // Map to DTO
-    var result = _mapper.Map<SurveyDto>(survey);
-    result.TotalResponses = responseCount;
-    result.CompletedResponses = completedCount;
-
-    return result;
+    // ... [return DTO]
 }
 ```
 
-**Validation**: Cannot activate empty survey (must have at least one question).
+**Validation**: Cannot activate empty survey. Must have at least one question.
 
-#### GetSurveyStatisticsAsync
-
-**Comprehensive analytics**:
+#### GetSurveyStatisticsAsync - Comprehensive Analytics
 
 ```csharp
-// Lines 350-410
-/// <inheritdoc/>
+// Lines 350-410 (partial)
 public async Task<SurveyStatisticsDto> GetSurveyStatisticsAsync(int surveyId, int userId)
 {
-    _logger.LogInformation("Getting statistics for survey {SurveyId} requested by user {UserId}", surveyId, userId);
-
-    // Get survey with questions and responses
-    var survey = await _surveyRepository.GetByIdWithDetailsAsync(surveyId);
-    if (survey == null)
-    {
-        _logger.LogWarning("Survey {SurveyId} not found", surveyId);
-        throw new SurveyNotFoundException(surveyId);
-    }
-
-    // Check authorization
-    if (survey.CreatorId != userId)
-    {
-        _logger.LogWarning("User {UserId} attempted to access statistics for survey {SurveyId} owned by {OwnerId}",
-            userId, surveyId, survey.CreatorId);
-        throw new Core.Exceptions.UnauthorizedAccessException(userId, "Survey", surveyId);
-    }
+    // ... [authorization]
 
     // Get all responses
     var allResponses = survey.Responses.ToList();
@@ -1927,7 +1473,7 @@ public async Task<SurveyStatisticsDto> GetSurveyStatisticsAsync(int surveyId, in
         LastResponseAt = allResponses.OrderByDescending(r => r.StartedAt).FirstOrDefault()?.StartedAt
     };
 
-    // Calculate average completion time for completed responses
+    // Calculate average completion time
     if (completedResponses.Any())
     {
         var completionTimes = completedResponses
@@ -1942,9 +1488,8 @@ public async Task<SurveyStatisticsDto> GetSurveyStatisticsAsync(int surveyId, in
     }
 
     // Calculate question-level statistics
-    statistics.QuestionStatistics = await CalculateQuestionStatisticsAsync(survey.Questions.ToList(), completedResponses);
-
-    _logger.LogInformation("Statistics calculated for survey {SurveyId}", surveyId);
+    statistics.QuestionStatistics = await CalculateQuestionStatisticsAsync(
+        survey.Questions.ToList(), completedResponses);
 
     return statistics;
 }
@@ -1952,86 +1497,17 @@ public async Task<SurveyStatisticsDto> GetSurveyStatisticsAsync(int surveyId, in
 
 **Metrics Calculated**:
 - Total responses (all states)
-- Completed responses
-- Incomplete responses
+- Completed vs incomplete responses
 - Completion rate percentage
-- Unique respondents
-- Average completion time (in seconds)
+- Unique respondents count
+- Average completion time (seconds)
 - First and last response timestamps
-- Per-question statistics
+- Per-question statistics (choice distribution, rating averages, etc.)
 
-#### Question Statistics
-
-**Per-question analysis**:
-
-```csharp
-// Lines 512-560
-/// <summary>
-/// Calculates statistics for each question in the survey.
-/// </summary>
-private async Task<List<QuestionStatisticsDto>> CalculateQuestionStatisticsAsync(
-    List<Question> questions,
-    List<Response> completedResponses)
-{
-    var statistics = new List<QuestionStatisticsDto>();
-
-    foreach (var question in questions.OrderBy(q => q.OrderIndex))
-    {
-        var questionStat = new QuestionStatisticsDto
-        {
-            QuestionId = question.Id,
-            QuestionText = question.QuestionText,
-            QuestionType = question.QuestionType
-        };
-
-        // Get all answers for this question from completed responses
-        var responseIds = completedResponses.Select(r => r.Id).ToList();
-        var answers = question.Answers
-            .Where(a => responseIds.Contains(a.ResponseId))
-            .ToList();
-
-        questionStat.TotalAnswers = answers.Count;
-        questionStat.SkippedCount = completedResponses.Count - answers.Count;
-        questionStat.ResponseRate = completedResponses.Count > 0
-            ? Math.Round((double)answers.Count / completedResponses.Count * 100, 2)
-            : 0;
-
-        // Calculate type-specific statistics
-        switch (question.QuestionType)
-        {
-            case QuestionType.MultipleChoice:
-            case QuestionType.SingleChoice:
-                questionStat.ChoiceDistribution = CalculateChoiceDistribution(answers, question.OptionsJson);
-                break;
-
-            case QuestionType.Rating:
-                questionStat.RatingStatistics = CalculateRatingStatistics(answers);
-                break;
-
-            case QuestionType.Text:
-                questionStat.TextStatistics = CalculateTextStatistics(answers);
-                break;
-        }
-
-        statistics.Add(questionStat);
-    }
-
-    return statistics;
-}
-```
-
-**Type-Specific Stats**:
-- **Choice questions**: Distribution of selections with percentages
-- **Rating questions**: Average, min, max, distribution
-- **Text questions**: Average length, min/max length
-
-#### GetSurveyByCodeAsync
-
-**Public survey access**:
+#### GetSurveyByCodeAsync - Public Survey Access
 
 ```csharp
 // Lines 420-458
-/// <inheritdoc/>
 public async Task<SurveyDto> GetSurveyByCodeAsync(string code)
 {
     _logger.LogInformation("Getting survey by code: {Code}", code);
@@ -2058,529 +1534,151 @@ public async Task<SurveyDto> GetSurveyByCodeAsync(string code)
         throw new SurveyNotFoundException($"Survey with code '{code}' is not available");
     }
 
-    // Get response counts
-    var responseCount = await _surveyRepository.GetResponseCountAsync(survey.Id);
-    var completedCount = await _responseRepository.GetCompletedCountAsync(survey.Id);
-
-    // Map to DTO
-    var result = _mapper.Map<SurveyDto>(survey);
-    result.TotalResponses = responseCount;
-    result.CompletedResponses = completedCount;
-
-    _logger.LogInformation("Survey {SurveyId} retrieved by code {Code}", survey.Id, code);
-
-    return result;
+    // ... [return DTO with counts]
 }
 ```
 
-**Security**: Only returns active surveys (inactive surveys not publicly accessible).
+**Security**: Only returns active surveys via code. Inactive surveys not publicly accessible.
 
-### QuestionService
+**Use Case**: Telegram bot command `/survey ABC123`
 
-**Location**: `Services/QuestionService.cs` (Lines 1-462)
+### Other Services
 
-Question management with type-specific validation.
+**QuestionService** (`Services/QuestionService.cs`, 462 lines):
+- `AddQuestionAsync`: Create question with type-specific validation
+- `UpdateQuestionAsync`: Modify question (with protection rules)
+- `DeleteQuestionAsync`: Remove question
+- `ReorderQuestionsAsync`: Change question order
+- `ValidateQuestionOptionsAsync`: Type-specific option validation
 
-#### Validation Constants
+**ResponseService** (`Services/ResponseService.cs`, 623 lines):
+- `StartResponseAsync`: Begin survey response
+- `SaveAnswerAsync`: Save/update answer with validation
+- `CompleteResponseAsync`: Finalize response
+- `ValidateAnswerFormatAsync`: Answer format validation
+- Answer validation methods for each question type
 
-```csharp
-// Lines 22-27
-// Constants for validation
-private const int MinOptionsCount = 2;
-private const int MaxOptionsCount = 10;
-private const int MaxOptionLength = 200;
-private const int MinRating = 1;
-private const int MaxRating = 5;
+**UserService** (`Services/UserService.cs`, 289 lines):
+- `RegisterAsync`: User registration with JWT token (upsert pattern)
+- `GetUserByIdAsync`: Retrieve user details
+- `GetUserByTelegramIdAsync`: Telegram ID lookup
+- `UpdateUserAsync`: Update user information
+
+---
+
+## Database Migrations
+
+Entity Framework Core migrations provide database schema version control.
+
+### Existing Migrations
+
+**Location**: `Migrations/` directory
+
+1. **20251105190107_InitialCreate.cs**
+   - Creates all tables (users, surveys, questions, responses, answers)
+   - Sets up foreign key relationships
+   - Adds indexes (single, composite, unique, partial, GIN)
+   - Configures JSONB columns for PostgreSQL
+   - Sets up cascade delete behaviors
+
+2. **20251106000001_AddLastLoginAtToUser.cs**
+   - Adds `last_login_at` column to `users` table
+   - Nullable timestamp for tracking login activity
+   - No default value (null until first login tracked)
+
+3. **20251109000001_AddSurveyCodeColumn.cs**
+   - Adds `code` column to `surveys` table
+   - Max length 10 characters, nullable
+   - Creates unique partial index: `idx_surveys_code` with filter `code IS NOT NULL`
+   - Supports survey sharing feature
+
+4. **SurveyBotDbContextModelSnapshot.cs**
+   - Current complete model state
+   - Used by EF Core for generating new migrations
+   - Regenerated with each migration
+
+### Migration Commands
+
+**All commands run from API project directory**: `src/SurveyBot.API`
+
+#### Create New Migration
+
+```bash
+dotnet ef migrations add MigrationName --project ../SurveyBot.Infrastructure
 ```
 
-#### AddQuestionAsync
+**Naming Convention**: Descriptive name (e.g., `AddSurveyCodeColumn`, not `Update1`)
 
-**Question creation with validation**:
+#### Apply Migrations to Database
 
-```csharp
-// Lines 44-108
-/// <inheritdoc/>
-public async Task<QuestionDto> AddQuestionAsync(int surveyId, int userId, CreateQuestionDto dto)
-{
-    _logger.LogInformation("Adding question to survey {SurveyId} by user {UserId}", surveyId, userId);
+```bash
+# Apply all pending migrations
+dotnet ef database update --project ../SurveyBot.Infrastructure
 
-    // Get survey with questions
-    var survey = await _surveyRepository.GetByIdWithQuestionsAsync(surveyId);
-    if (survey == null)
-    {
-        _logger.LogWarning("Survey {SurveyId} not found", surveyId);
-        throw new SurveyNotFoundException(surveyId);
-    }
+# Apply to specific migration
+dotnet ef database update MigrationName --project ../SurveyBot.Infrastructure
 
-    // Check authorization - user must own the survey
-    if (survey.CreatorId != userId)
-    {
-        _logger.LogWarning("User {UserId} attempted to add question to survey {SurveyId} owned by {OwnerId}",
-            userId, surveyId, survey.CreatorId);
-        throw new Core.Exceptions.UnauthorizedAccessException(userId, "Survey", surveyId);
-    }
-
-    // Check if survey has responses - cannot add questions if survey has responses
-    var hasResponses = await _surveyRepository.HasResponsesAsync(surveyId);
-    if (hasResponses)
-    {
-        _logger.LogWarning("Cannot add question to survey {SurveyId} that has responses", surveyId);
-        throw new SurveyOperationException(
-            "Cannot add questions to a survey that has responses. Create a new survey or deactivate this one first.");
-    }
-
-    // Validate question options based on type
-    var validationResult = ValidateQuestionOptionsAsync(dto.QuestionType, dto.Options);
-    if (!validationResult.IsValid)
-    {
-        _logger.LogWarning("Question validation failed for survey {SurveyId}: {Errors}",
-            surveyId, string.Join(", ", validationResult.Errors));
-        throw new QuestionValidationException(
-            "Question validation failed: " + string.Join(", ", validationResult.Errors));
-    }
-
-    // Create question entity
-    var question = new Question
-    {
-        SurveyId = surveyId,
-        QuestionText = dto.QuestionText,
-        QuestionType = dto.QuestionType,
-        IsRequired = dto.IsRequired,
-        OrderIndex = await _questionRepository.GetNextOrderIndexAsync(surveyId)
-    };
-
-    // Serialize options for choice-based questions
-    if (dto.QuestionType == QuestionType.SingleChoice || dto.QuestionType == QuestionType.MultipleChoice)
-    {
-        question.OptionsJson = JsonSerializer.Serialize(dto.Options);
-    }
-
-    // Save to database
-    var createdQuestion = await _questionRepository.CreateAsync(question);
-
-    _logger.LogInformation("Question {QuestionId} added to survey {SurveyId} successfully",
-        createdQuestion.Id, surveyId);
-
-    // Map to DTO
-    return MapToDto(createdQuestion);
-}
+# Rollback to previous migration
+dotnet ef database update PreviousMigrationName --project ../SurveyBot.Infrastructure
 ```
 
-**Business Rules**:
-1. Survey must exist
-2. User must own survey
-3. Cannot add questions to survey with responses (data integrity)
-4. Options must be valid for question type
-5. OrderIndex auto-assigned
+#### Remove Last Migration
 
-#### ValidateQuestionOptionsAsync
-
-**Type-specific option validation**:
-
-```csharp
-// Lines 355-422
-/// <inheritdoc/>
-public QuestionValidationResult ValidateQuestionOptionsAsync(QuestionType type, List<string>? options)
-{
-    switch (type)
-    {
-        case QuestionType.Text:
-            // Text questions should not have options
-            if (options != null && options.Any())
-            {
-                return QuestionValidationResult.Failure("Text questions should not have options.");
-            }
-            return QuestionValidationResult.Success();
-
-        case QuestionType.SingleChoice:
-        case QuestionType.MultipleChoice:
-            // Choice-based questions must have options
-            if (options == null || !options.Any())
-            {
-                return QuestionValidationResult.Failure("Choice-based questions must have at least 2 options.");
-            }
-
-            if (options.Count < MinOptionsCount)
-            {
-                return QuestionValidationResult.Failure($"Choice-based questions must have at least {MinOptionsCount} options.");
-            }
-
-            if (options.Count > MaxOptionsCount)
-            {
-                return QuestionValidationResult.Failure($"Questions cannot have more than {MaxOptionsCount} options.");
-            }
-
-            // Check for empty options
-            if (options.Any(string.IsNullOrWhiteSpace))
-            {
-                return QuestionValidationResult.Failure("All options must have text.");
-            }
-
-            // Check option length
-            var longOptions = options.Where(o => o.Length > MaxOptionLength).ToList();
-            if (longOptions.Any())
-            {
-                return QuestionValidationResult.Failure($"Option text cannot exceed {MaxOptionLength} characters.");
-            }
-
-            // Check for duplicate options
-            var duplicates = options.GroupBy(o => o.Trim(), StringComparer.OrdinalIgnoreCase)
-                .Where(g => g.Count() > 1)
-                .Select(g => g.Key)
-                .ToList();
-
-            if (duplicates.Any())
-            {
-                return QuestionValidationResult.Failure($"Duplicate options are not allowed: {string.Join(", ", duplicates)}");
-            }
-
-            return QuestionValidationResult.Success();
-
-        case QuestionType.Rating:
-            // Rating questions should not have options
-            if (options != null && options.Any())
-            {
-                return QuestionValidationResult.Failure("Rating questions should not have options.");
-            }
-            return QuestionValidationResult.Success();
-
-        default:
-            throw new InvalidQuestionTypeException(type);
-    }
-}
+```bash
+# Only if NOT applied to database yet
+dotnet ef migrations remove --project ../SurveyBot.Infrastructure
 ```
 
-**Validation Rules**:
-- **Text**: No options allowed
-- **Single/Multiple Choice**: 2-10 options required, no duplicates, max 200 chars each
-- **Rating**: No options allowed
+**Warning**: Cannot remove applied migrations. Must rollback first.
 
-### ResponseService
+#### Generate SQL Script
 
-**Location**: `Services/ResponseService.cs` (Lines 1-623)
+```bash
+# Generate script for all migrations
+dotnet ef migrations script --project ../SurveyBot.Infrastructure --output migration.sql
 
-Response and answer management with validation.
+# Generate script for specific range
+dotnet ef migrations script FromMigration ToMigration --project ../SurveyBot.Infrastructure
 
-#### StartResponseAsync
-
-**Begin survey response**:
-
-```csharp
-// Lines 50-91
-/// <inheritdoc/>
-public async Task<ResponseDto> StartResponseAsync(int surveyId, long telegramUserId, string? username = null, string? firstName = null)
-{
-    _logger.LogInformation("Starting response for survey {SurveyId} by Telegram user {TelegramUserId}", surveyId, telegramUserId);
-
-    // Validate survey exists and is active
-    var survey = await _surveyRepository.GetByIdAsync(surveyId);
-    if (survey == null)
-    {
-        _logger.LogWarning("Survey {SurveyId} not found", surveyId);
-        throw new SurveyNotFoundException(surveyId);
-    }
-
-    if (!survey.IsActive)
-    {
-        _logger.LogWarning("Survey {SurveyId} is not active", surveyId);
-        throw new SurveyOperationException("This survey is not currently active.");
-    }
-
-    // Check for duplicate completed responses
-    var hasCompleted = await _responseRepository.HasUserCompletedSurveyAsync(surveyId, telegramUserId);
-    if (hasCompleted && !survey.AllowMultipleResponses)
-    {
-        _logger.LogWarning("User {TelegramUserId} has already completed survey {SurveyId}", telegramUserId, surveyId);
-        throw new DuplicateResponseException(surveyId, telegramUserId);
-    }
-
-    // Create new response
-    var response = new Response
-    {
-        SurveyId = surveyId,
-        RespondentTelegramId = telegramUserId,
-        IsComplete = false,
-        StartedAt = DateTime.UtcNow
-    };
-
-    var createdResponse = await _responseRepository.CreateAsync(response);
-
-    _logger.LogInformation("Response {ResponseId} started for survey {SurveyId} by user {TelegramUserId}",
-        createdResponse.Id, surveyId, telegramUserId);
-
-    return await MapToResponseDtoAsync(createdResponse, username, firstName);
-}
+# Generate idempotent script (safe to run multiple times)
+dotnet ef migrations script --idempotent --project ../SurveyBot.Infrastructure
 ```
 
-**Checks**:
-1. Survey exists and is active
-2. User hasn't already completed (unless multiple responses allowed)
-3. Creates incomplete response
+**Use Case**: Review SQL before applying to production.
 
-#### SaveAnswerAsync
+### Migration Best Practices
 
-**Save answer with validation**:
+1. **Always Backup**: Backup production database before migrations
+2. **Test First**: Apply to development/staging environments first
+3. **Review SQL**: Generate and review SQL script for production
+4. **Never Edit Applied Migrations**: Create new migration instead
+5. **Descriptive Names**: Use clear, specific migration names
+6. **Small Migrations**: One logical change per migration
+7. **Handle Data Migration**: Include data transformation in `Up()` method if needed
+8. **Provide Rollback**: Implement `Down()` method for reverting changes
+9. **Check Constraints**: Verify check constraints, indexes, and foreign keys
+10. **Test Rollback**: Ensure `Down()` method works correctly
 
-```csharp
-// Lines 93-181
-/// <inheritdoc/>
-public async Task<ResponseDto> SaveAnswerAsync(
-    int responseId,
-    int questionId,
-    string? answerText = null,
-    List<string>? selectedOptions = null,
-    int? ratingValue = null,
-    int? userId = null)
-{
-    _logger.LogInformation("Saving answer for response {ResponseId}, question {QuestionId}", responseId, questionId);
+### Migration Workflow
 
-    // Get response with survey
-    var response = await _responseRepository.GetByIdWithAnswersAsync(responseId);
-    if (response == null)
-    {
-        _logger.LogWarning("Response {ResponseId} not found", responseId);
-        throw new ResponseNotFoundException(responseId);
-    }
+**Development Workflow**:
 
-    // Check if response is already completed
-    if (response.IsComplete)
-    {
-        _logger.LogWarning("Cannot save answer to completed response {ResponseId}", responseId);
-        throw new SurveyOperationException("Cannot modify a completed response.");
-    }
+1. Modify entity or configuration
+2. Create migration: `dotnet ef migrations add DescriptiveName`
+3. Review generated migration code
+4. Apply to local database: `dotnet ef database update`
+5. Test application with new schema
+6. Commit migration files to source control
 
-    // Authorize if userId is provided - user must own the survey
-    if (userId.HasValue)
-    {
-        await AuthorizeUserForResponseAsync(response, userId.Value);
-    }
+**Production Deployment**:
 
-    // Validate question exists and belongs to survey
-    var question = await _questionRepository.GetByIdAsync(questionId);
-    if (question == null)
-    {
-        _logger.LogWarning("Question {QuestionId} not found", questionId);
-        throw new QuestionNotFoundException(questionId);
-    }
-
-    if (question.SurveyId != response.SurveyId)
-    {
-        _logger.LogWarning("Question {QuestionId} does not belong to survey {SurveyId}",
-            questionId, response.SurveyId);
-        throw new QuestionValidationException("Question does not belong to this survey.");
-    }
-
-    // Validate answer format
-    var validationResult = await ValidateAnswerFormatAsync(questionId, answerText, selectedOptions, ratingValue);
-    if (!validationResult.IsValid)
-    {
-        _logger.LogWarning("Invalid answer format for question {QuestionId}: {Error}",
-            questionId, validationResult.ErrorMessage);
-        throw new InvalidAnswerFormatException(questionId, question.QuestionType, validationResult.ErrorMessage!);
-    }
-
-    // Check if answer already exists for this question
-    var existingAnswer = await _answerRepository.GetByResponseAndQuestionAsync(responseId, questionId);
-
-    if (existingAnswer != null)
-    {
-        // Update existing answer
-        existingAnswer.AnswerText = answerText;
-        existingAnswer.AnswerJson = CreateAnswerJson(question.QuestionType, selectedOptions, ratingValue);
-        existingAnswer.CreatedAt = DateTime.UtcNow;
-
-        await _answerRepository.UpdateAsync(existingAnswer);
-        _logger.LogInformation("Updated existing answer {AnswerId} for response {ResponseId}", existingAnswer.Id, responseId);
-    }
-    else
-    {
-        // Create new answer
-        var answer = new Answer
-        {
-            ResponseId = responseId,
-            QuestionId = questionId,
-            AnswerText = answerText,
-            AnswerJson = CreateAnswerJson(question.QuestionType, selectedOptions, ratingValue),
-            CreatedAt = DateTime.UtcNow
-        };
-
-        await _answerRepository.CreateAsync(answer);
-        _logger.LogInformation("Created new answer for response {ResponseId}, question {QuestionId}", responseId, questionId);
-    }
-
-    // Return updated response
-    var updatedResponse = await _responseRepository.GetByIdWithAnswersAsync(responseId);
-    return await MapToResponseDtoAsync(updatedResponse!);
-}
-```
-
-**Features**:
-- Validates response not completed
-- Validates question belongs to survey
-- Validates answer format for question type
-- Updates existing answer or creates new
-- Returns updated response with all answers
-
-#### Answer Validation Methods
-
-**Text Answer**:
-
-```csharp
-// Lines 515-528
-private ValidationResult ValidateTextAnswer(string? answerText, bool isRequired)
-{
-    if (isRequired && string.IsNullOrWhiteSpace(answerText))
-    {
-        return ValidationResult.Failure("Text answer is required");
-    }
-
-    if (!string.IsNullOrEmpty(answerText) && answerText.Length > MaxTextAnswerLength)
-    {
-        return ValidationResult.Failure($"Text answer cannot exceed {MaxTextAnswerLength} characters");
-    }
-
-    return ValidationResult.Success();
-}
-```
-
-**Single Choice**:
-
-```csharp
-// Lines 530-565
-private ValidationResult ValidateSingleChoiceAnswer(List<string>? selectedOptions, string? optionsJson, bool isRequired)
-{
-    if (isRequired && (selectedOptions == null || !selectedOptions.Any()))
-    {
-        return ValidationResult.Failure("An option must be selected");
-    }
-
-    if (selectedOptions == null || !selectedOptions.Any())
-    {
-        return ValidationResult.Success(); // Optional question with no answer
-    }
-
-    if (selectedOptions.Count > 1)
-    {
-        return ValidationResult.Failure("Only one option can be selected for single choice questions");
-    }
-
-    // Validate option exists in question options
-    if (!string.IsNullOrEmpty(optionsJson))
-    {
-        try
-        {
-            var validOptions = JsonSerializer.Deserialize<List<string>>(optionsJson);
-            if (validOptions != null && !validOptions.Contains(selectedOptions[0]))
-            {
-                return ValidationResult.Failure("Selected option is not valid for this question");
-            }
-        }
-        catch (JsonException)
-        {
-            _logger.LogWarning("Failed to parse options JSON");
-        }
-    }
-
-    return ValidationResult.Success();
-}
-```
-
-**Rating**:
-
-```csharp
-// Lines 603-621
-private ValidationResult ValidateRatingAnswer(int? ratingValue, bool isRequired)
-{
-    if (isRequired && !ratingValue.HasValue)
-    {
-        return ValidationResult.Failure("Rating is required");
-    }
-
-    if (!ratingValue.HasValue)
-    {
-        return ValidationResult.Success(); // Optional question with no answer
-    }
-
-    if (ratingValue < MinRatingValue || ratingValue > MaxRatingValue)
-    {
-        return ValidationResult.Failure($"Rating must be between {MinRatingValue} and {MaxRatingValue}");
-    }
-
-    return ValidationResult.Success();
-}
-```
-
-### UserService
-
-**Location**: `Services/UserService.cs` (Lines 1-289)
-
-User management with Telegram integration.
-
-#### RegisterAsync (Upsert)
-
-**User registration/update**:
-
-```csharp
-// Lines 42-88
-/// <summary>
-/// Registers a new user or updates an existing user (upsert pattern).
-/// This is designed for Telegram bot integration where users are automatically
-/// registered on first interaction via /start command.
-/// </summary>
-public async Task<UserWithTokenDto> RegisterAsync(RegisterDto registerDto)
-{
-    _logger.LogInformation(
-        "User registration/login attempt for Telegram ID: {TelegramId}, Username: {Username}",
-        registerDto.TelegramId,
-        registerDto.Username);
-
-    // Use the repository's CreateOrUpdateAsync method for upsert pattern
-    // This ensures no duplicate users are created
-    var user = await _userRepository.CreateOrUpdateAsync(
-        registerDto.TelegramId,
-        registerDto.Username,
-        registerDto.FirstName,
-        registerDto.LastName);
-
-    // Update last login timestamp
-    user.LastLoginAt = DateTime.UtcNow;
-    await _userRepository.UpdateAsync(user);
-
-    _logger.LogInformation(
-        "User {Action} successfully: UserId={UserId}, TelegramId={TelegramId}",
-        user.CreatedAt == user.UpdatedAt ? "registered" : "updated",
-        user.Id,
-        user.TelegramId);
-
-    // Generate JWT token
-    var accessToken = _authService.GenerateAccessToken(
-        user.Id,
-        user.TelegramId,
-        user.Username);
-
-    var refreshToken = _authService.GenerateRefreshToken();
-    var expiresAt = DateTime.UtcNow.AddHours(_jwtSettings.TokenLifetimeHours);
-
-    _logger.LogInformation("Generated JWT token for user ID: {UserId}", user.Id);
-
-    // Map to DTOs
-    var userDto = MapToUserDto(user);
-
-    return new UserWithTokenDto
-    {
-        User = userDto,
-        AccessToken = accessToken,
-        RefreshToken = refreshToken,
-        ExpiresAt = expiresAt
-    };
-}
-```
-
-**Features**:
-- Upserts user (create or update)
-- Updates last login timestamp
-- Generates JWT token
-- Returns user with token
+1. Generate SQL script: `dotnet ef migrations script --idempotent`
+2. Review script for performance impact
+3. Schedule maintenance window if needed
+4. Backup production database
+5. Apply script to production database
+6. Verify application functionality
+7. Monitor for issues
 
 ---
 
@@ -2590,15 +1688,12 @@ public async Task<UserWithTokenDto> RegisterAsync(RegisterDto registerDto)
 
 **Location**: `Data/DataSeeder.cs` (Lines 1-587)
 
-Comprehensive test data generation for development and testing.
+Generates comprehensive test data for development and testing.
 
 #### Main Seeding Method
 
 ```csharp
 // Lines 22-53
-/// <summary>
-/// Seeds all development data. Safe to call multiple times - will skip if data already exists.
-/// </summary>
 public async Task SeedAsync()
 {
     try
@@ -2632,56 +1727,59 @@ public async Task SeedAsync()
 
 **Safe**: Checks for existing data, doesn't re-seed if data present.
 
-#### Sample Surveys Created
+**Order**: Respects foreign key dependencies (Users → Surveys → Questions → Responses → Answers).
+
+#### Sample Data Created
+
+**Users**:
+- John Doe (Telegram ID: 123456789)
+- Jane Smith (Telegram ID: 987654321)
+- Bob Wilson (Telegram ID: 555555555)
+
+**Surveys**:
 
 1. **Customer Satisfaction Survey** (Active)
-   - Rating question (1-5 scale)
-   - Multiple choice (services used)
-   - Single choice (how they heard about us)
-   - Text question (feedback)
+   - Rating question: "How satisfied are you?" (1-5 scale)
+   - Multiple choice: "Which services have you used?"
+   - Single choice: "How did you hear about us?"
+   - Text question: "Additional feedback"
 
 2. **Product Feedback Survey** (Active, allows multiple responses)
-   - Single choice (use case)
-   - Rating question (ease of use)
-   - Multiple choice (valuable features)
-   - Text question (feature requests)
+   - Single choice: "Primary use case"
+   - Rating question: "Ease of use rating"
+   - Multiple choice: "Most valuable features"
+   - Text question: "Feature requests"
 
 3. **Event Registration Survey** (Inactive, for testing)
-   - Text question (full name)
-   - Single choice (track interest)
-   - Multiple choice (workshop selection)
-   - Rating question (expertise level)
+   - Text question: "Full name"
+   - Single choice: "Track interest"
+   - Multiple choice: "Workshop selection"
+   - Rating question: "Expertise level"
 
-#### Sample Response Data
+**Responses**:
+- Complete positive response (5-star rating)
+- Complete mixed response (3-star rating)
+- Complete power user response (multiple features selected)
+- Complete business user response
+- Incomplete response (for testing resume functionality)
 
-**Complete responses with varied answers**:
-- Positive feedback response (5-star rating)
-- Mixed feedback response (3-star rating)
-- Power user response (multiple features selected)
-- Small business response (mobile-focused)
-- Incomplete response (for testing resume)
+#### Use Cases
 
-**Use Cases**:
-- Development testing
-- Demo data
-- Integration testing
-- UI development
+1. **Development**: Local database with realistic data
+2. **Testing**: Integration tests with known data
+3. **Demos**: Showcase functionality with sample surveys
+4. **UI Development**: Frontend development without API dependency
 
 ### DatabaseExtensions
 
 **Location**: `Data/Extensions/DatabaseExtensions.cs` (Lines 1-61)
 
-Helper methods for database operations.
+Extension methods for database operations.
 
-#### Seeding Extension
+#### SeedDatabaseAsync
 
 ```csharp
 // Lines 17-25
-/// <summary>
-/// Seeds the database with development data.
-/// </summary>
-/// <param name="serviceProvider">The service provider.</param>
-/// <returns>A task representing the asynchronous operation.</returns>
 public static async Task SeedDatabaseAsync(this IServiceProvider serviceProvider)
 {
     using var scope = serviceProvider.CreateScope();
@@ -2693,15 +1791,19 @@ public static async Task SeedDatabaseAsync(this IServiceProvider serviceProvider
 }
 ```
 
-#### Migration Extension
+**Usage in Program.cs**:
+```csharp
+// Development environment only
+if (app.Environment.IsDevelopment())
+{
+    await app.Services.SeedDatabaseAsync();
+}
+```
+
+#### MigrateDatabaseAsync
 
 ```csharp
 // Lines 27-38
-/// <summary>
-/// Applies any pending migrations to the database.
-/// </summary>
-/// <param name="serviceProvider">The service provider.</param>
-/// <returns>A task representing the asynchronous operation.</returns>
 public static async Task MigrateDatabaseAsync(this IServiceProvider serviceProvider)
 {
     using var scope = serviceProvider.CreateScope();
@@ -2711,16 +1813,12 @@ public static async Task MigrateDatabaseAsync(this IServiceProvider serviceProvi
 }
 ```
 
-#### Reset Extension
+**Applies pending migrations**: Automatically brings database up to latest version.
+
+#### ResetAndSeedDatabaseAsync
 
 ```csharp
 // Lines 40-60
-/// <summary>
-/// Drops and recreates the database, then seeds with development data.
-/// WARNING: This will delete all existing data!
-/// </summary>
-/// <param name="serviceProvider">The service provider.</param>
-/// <returns>A task representing the asynchronous operation.</returns>
 public static async Task ResetAndSeedDatabaseAsync(this IServiceProvider serviceProvider)
 {
     using var scope = serviceProvider.CreateScope();
@@ -2737,69 +1835,9 @@ public static async Task ResetAndSeedDatabaseAsync(this IServiceProvider service
 }
 ```
 
-**DANGER**: `ResetAndSeedDatabaseAsync` deletes all data. Only use in development!
+**DANGER**: Deletes all data. **Development only!**
 
----
-
-## Migrations
-
-### Migration Files
-
-Located in `Migrations/` directory:
-
-1. **20251105190107_InitialCreate.cs**
-   - Creates all tables
-   - Sets up foreign keys
-   - Adds indexes
-   - Configures JSONB columns
-
-2. **20251106000001_AddLastLoginAtToUser.cs**
-   - Adds `last_login_at` column to users table
-   - Nullable datetime for tracking login activity
-
-3. **20251109000001_AddSurveyCodeColumn.cs**
-   - Adds `code` column to surveys table
-   - Unique partial index on code
-   - Max length 10 characters
-
-4. **SurveyBotDbContextModelSnapshot.cs**
-   - Current model state
-   - Used by EF Core for migration generation
-
-### Running Migrations
-
-**From API project directory** (`src/SurveyBot.API`):
-
-```bash
-# Add new migration
-dotnet ef migrations add MigrationName --project ../SurveyBot.Infrastructure
-
-# Apply migrations
-dotnet ef database update --project ../SurveyBot.Infrastructure
-
-# Rollback to specific migration
-dotnet ef database update PreviousMigrationName --project ../SurveyBot.Infrastructure
-
-# Remove last migration (if not applied)
-dotnet ef migrations remove --project ../SurveyBot.Infrastructure
-
-# Generate SQL script
-dotnet ef migrations script --project ../SurveyBot.Infrastructure
-
-# Generate script for specific range
-dotnet ef migrations script FromMigration ToMigration --project ../SurveyBot.Infrastructure
-```
-
-### Migration Best Practices
-
-1. **Always backup** production database before migrations
-2. **Test migrations** on development/staging first
-3. **Review generated SQL** before applying to production
-4. **Never edit** already applied migrations
-5. **Use descriptive names** (e.g., AddSurveyCodeColumn not Update1)
-6. **Keep migrations small** - one logical change per migration
-7. **Handle data migration** in Up() method if needed
-8. **Provide Down() method** for rollback capability
+**Use Case**: Reset local database to clean state with fresh test data.
 
 ---
 
@@ -2809,240 +1847,442 @@ dotnet ef migrations script FromMigration ToMigration --project ../SurveyBot.Inf
 
 **Location**: `DependencyInjection.cs` (Lines 1-46)
 
-Extension method for registering all Infrastructure services.
+Extension method registering all Infrastructure services.
 
 ```csharp
-// Lines 14-45
-/// <summary>
-/// Extension methods for configuring Infrastructure layer services.
-/// </summary>
-public static class DependencyInjection
+// Lines 22-44
+public static IServiceCollection AddInfrastructure(
+    this IServiceCollection services,
+    IConfiguration configuration)
 {
-    /// <summary>
-    /// Adds Infrastructure layer services to the dependency injection container.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configuration">The application configuration.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
-    {
-        // Add DbContext
-        services.AddDbContext<SurveyBotDbContext>(options =>
-            options.UseNpgsql(
-                configuration.GetConnectionString("DefaultConnection"),
-                npgsqlOptions => npgsqlOptions.MigrationsAssembly(typeof(SurveyBotDbContext).Assembly.FullName)));
+    // Add DbContext
+    services.AddDbContext<SurveyBotDbContext>(options =>
+        options.UseNpgsql(
+            configuration.GetConnectionString("DefaultConnection"),
+            npgsqlOptions => npgsqlOptions.MigrationsAssembly(
+                typeof(SurveyBotDbContext).Assembly.FullName)));
 
-        // Register Repositories
-        services.AddScoped(typeof(IRepository<>), typeof(GenericRepository<>));
-        services.AddScoped<ISurveyRepository, SurveyRepository>();
-        services.AddScoped<IQuestionRepository, QuestionRepository>();
-        services.AddScoped<IResponseRepository, ResponseRepository>();
-        services.AddScoped<IAnswerRepository, AnswerRepository>();
-        services.AddScoped<IUserRepository, UserRepository>();
+    // Register Repositories
+    services.AddScoped(typeof(IRepository<>), typeof(GenericRepository<>));
+    services.AddScoped<ISurveyRepository, SurveyRepository>();
+    services.AddScoped<IQuestionRepository, QuestionRepository>();
+    services.AddScoped<IResponseRepository, ResponseRepository>();
+    services.AddScoped<IAnswerRepository, AnswerRepository>();
+    services.AddScoped<IUserRepository, UserRepository>();
 
-        // Register Services
-        services.AddScoped<ISurveyService, SurveyService>();
-        services.AddScoped<IQuestionService, QuestionService>();
-        services.AddScoped<IAuthService, AuthService>();
+    // Register Services
+    services.AddScoped<ISurveyService, SurveyService>();
+    services.AddScoped<IQuestionService, QuestionService>();
+    services.AddScoped<IAuthService, AuthService>();
 
-        return services;
-    }
+    return services;
 }
 ```
 
-**Usage in API**:
+**Usage in API Project** (`Program.cs`):
 
 ```csharp
-// In Program.cs
 builder.Services.AddInfrastructure(builder.Configuration);
 ```
 
-**Lifetime**: All services registered as `Scoped` (one instance per HTTP request).
+**Service Lifetimes**:
+- **DbContext**: Scoped (one instance per HTTP request)
+- **Repositories**: Scoped (one instance per HTTP request)
+- **Services**: Scoped (one instance per HTTP request)
+
+**Why Scoped?**:
+- DbContext is scoped by design
+- Repositories depend on DbContext (must match lifetime)
+- Services depend on repositories (must match lifetime)
+- One instance per request ensures consistency within request
+- Disposed at end of request (releases database connections)
+
+### Connection String Configuration
+
+**appsettings.json**:
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=surveybot_db;Username=postgres;Password=your_password;Pooling=true;MinPoolSize=0;MaxPoolSize=100"
+  }
+}
+```
+
+**Connection String Parameters**:
+- `Host`: PostgreSQL server hostname
+- `Port`: PostgreSQL port (default: 5432)
+- `Database`: Database name
+- `Username`: PostgreSQL user
+- `Password`: User password
+- `Pooling=true`: Enable connection pooling
+- `MinPoolSize=0`: Minimum connections in pool
+- `MaxPoolSize=100`: Maximum connections in pool
+
+**Environment-Specific Overrides**:
+
+**appsettings.Development.json**:
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=surveybot_dev;..."
+  }
+}
+```
+
+**appsettings.Production.json**:
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=production-server;Port=5432;Database=surveybot_prod;..."
+  }
+}
+```
+
+**User Secrets** (Development):
+```bash
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;..."
+```
 
 ---
 
-## Key Features
+## Performance Optimization
 
-### 1. Automatic Timestamp Management
+### Index Strategy
 
-**SaveChangesAsync override** automatically sets:
-- `CreatedAt` on entity creation
-- `UpdatedAt` on entity modification
-- All timestamps in UTC
+**Implemented Indexes**:
 
-**No manual timestamp management needed!**
+1. **Primary Key Indexes** (automatic): All `Id` columns
+2. **Foreign Key Indexes**: All foreign key columns (`creator_id`, `survey_id`, etc.)
+3. **Unique Indexes**: `telegram_id`, `code` (with partial filter)
+4. **Partial Indexes**: Filtered indexes on commonly queried subsets
+   - `is_active = true` (active surveys)
+   - `is_complete = true` (completed responses)
+   - `username IS NOT NULL` (users with usernames)
+5. **Composite Indexes**: Multi-column indexes for common query patterns
+   - `(creator_id, is_active)` - User's active surveys
+   - `(survey_id, order_index)` - Ordered questions
+   - `(survey_id, respondent_telegram_id)` - Response lookup
+   - `(response_id, question_id)` - Answer lookup (unique)
+6. **GIN Indexes**: PostgreSQL JSONB columns
+   - `options_json` on questions
+   - `answer_json` on answers
+7. **Descending Indexes**: For reverse ordering
+   - `created_at DESC` - Newest-first sorting
 
-### 2. Survey Code Generation
+**Index Guidelines**:
+- Index foreign keys (used in joins)
+- Index frequently filtered columns
+- Use partial indexes for common WHERE clauses
+- Composite indexes for multi-column queries
+- Don't over-index (write performance impact)
 
-**Unique shareable codes** for surveys:
-- 6-8 character alphanumeric codes
-- Uppercase for consistency
-- Collision detection and retry
-- Used for public survey access
+### Query Optimization Techniques
 
-### 3. JSONB Storage
+#### 1. Eager Loading (Include)
 
-**PostgreSQL JSONB columns** for:
-- Question options (flexible structure)
-- Answer data (choices, ratings)
-- Fast querying with GIN indexes
-- Schema flexibility
+**Prevent N+1 Queries**:
 
-### 4. Smart Delete Logic
+```csharp
+// BAD: N+1 queries
+var surveys = await _context.Surveys.ToListAsync();
+foreach (var survey in surveys)
+{
+    // Lazy loading triggers query for each survey
+    Console.WriteLine(survey.Creator.Username);
+}
 
-**Survey deletion**:
-- Has responses → Soft delete (deactivate)
-- No responses → Hard delete (remove)
-- Preserves valuable data
+// GOOD: Single query with eager loading
+var surveys = await _context.Surveys
+    .Include(s => s.Creator)
+    .ToListAsync();
+```
 
-### 5. Authorization Checks
+#### 2. AsNoTracking for Read-Only Queries
 
-**Every operation checks**:
-- User owns the resource
-- Resource exists
-- Operation is permitted
+**Performance Improvement**:
 
-### 6. Comprehensive Statistics
+```csharp
+// Tracked query (default)
+var survey = await _context.Surveys
+    .Include(s => s.Questions)
+    .FirstOrDefaultAsync(s => s.Id == id);
+// EF Core tracks all entities for change detection
 
-**Survey analytics**:
-- Response rates
-- Completion rates
-- Average completion time
-- Per-question distributions
-- Respondent counts
+// Read-only query (better performance)
+var survey = await _context.Surveys
+    .AsNoTracking()
+    .Include(s => s.Questions)
+    .FirstOrDefaultAsync(s => s.Id == id);
+// No change tracking overhead
+```
 
-### 7. Transaction Support
+**Use When**: Displaying data, no modifications planned.
 
-**Atomic operations** where needed:
-- Question reordering
-- Batch operations
-- Critical updates
+#### 3. Select Specific Columns
 
-### 8. Eager Loading
+**Only retrieve needed data**:
 
-**Prevent N+1 queries**:
-- Include navigation properties
-- ThenInclude for nested data
-- AsNoTracking for read-only
+```csharp
+// BAD: Loads all columns
+var surveys = await _context.Surveys.ToListAsync();
 
-### 9. Upsert Pattern
+// GOOD: Only needed columns
+var surveyTitles = await _context.Surveys
+    .Select(s => new { s.Id, s.Title, s.CreatedAt })
+    .ToListAsync();
+```
 
-**CreateOrUpdateAsync**:
-- Telegram user management
-- Prevents duplicates
-- Keeps data current
+#### 4. Pagination
 
-### 10. Validation at Every Level
+**Avoid loading all records**:
 
-**Multi-layer validation**:
-- Database constraints (check, unique)
-- Service-level validation
-- Type-specific validation
-- Business rule enforcement
+```csharp
+// BAD: Loads everything
+var surveys = await _context.Surveys.ToListAsync();
+
+// GOOD: Pagination
+var page = 1;
+var pageSize = 20;
+var surveys = await _context.Surveys
+    .OrderByDescending(s => s.CreatedAt)
+    .Skip((page - 1) * pageSize)
+    .Take(pageSize)
+    .ToListAsync();
+```
+
+#### 5. Filtered Queries
+
+**Database-side filtering**:
+
+```csharp
+// BAD: Filter in memory
+var allSurveys = await _context.Surveys.ToListAsync();
+var activeSurveys = allSurveys.Where(s => s.IsActive).ToList();
+
+// GOOD: Filter in database
+var activeSurveys = await _context.Surveys
+    .Where(s => s.IsActive)
+    .ToListAsync();
+```
+
+#### 6. Compiled Queries
+
+**For repeated queries**:
+
+```csharp
+private static readonly Func<SurveyBotDbContext, int, Task<Survey?>>
+    GetSurveyByIdCompiled =
+        EF.CompileAsyncQuery((SurveyBotDbContext context, int id) =>
+            context.Surveys
+                .Include(s => s.Questions)
+                .FirstOrDefault(s => s.Id == id));
+
+// Usage
+var survey = await GetSurveyByIdCompiled(_context, surveyId);
+```
+
+**Benefit**: Query compilation cached, faster subsequent executions.
+
+### Batch Operations
+
+**Bulk Insert**:
+
+```csharp
+// BAD: Individual inserts
+foreach (var answer in answers)
+{
+    await _context.Answers.AddAsync(answer);
+    await _context.SaveChangesAsync(); // Multiple DB round trips
+}
+
+// GOOD: Batch insert
+await _context.Answers.AddRangeAsync(answers);
+await _context.SaveChangesAsync(); // Single DB round trip
+```
+
+**Bulk Delete**:
+
+```csharp
+var answersToDelete = await _context.Answers
+    .Where(a => a.ResponseId == responseId)
+    .ToListAsync();
+_context.Answers.RemoveRange(answersToDelete);
+await _context.SaveChangesAsync();
+```
+
+### Connection Pooling
+
+**Configuration** (connection string):
+
+```
+Pooling=true;MinPoolSize=0;MaxPoolSize=100;Connection Lifetime=0
+```
+
+**Benefits**:
+- Reuses connections (faster than creating new)
+- Limits concurrent connections
+- Automatic connection management
+
+**Best Practices**:
+- Enable pooling (default in Npgsql)
+- Set reasonable max pool size
+- Don't hold connections longer than needed
+- Dispose DbContext promptly (automatic with DI)
 
 ---
 
-## Best Practices
+## Best Practices and Patterns
 
-### Repository Best Practices
+### Repository Pattern Best Practices
 
-1. **Use Virtual Methods**
-   ```csharp
-   public virtual async Task<T?> GetByIdAsync(int id)
-   ```
-   Allows derived classes to override with custom logic.
+1. **Use Virtual Methods**: Allow derived classes to override
 
-2. **Always Use Async**
-   All database operations must be async for scalability.
+```csharp
+public virtual async Task<T?> GetByIdAsync(int id)
+{
+    return await _dbSet.FindAsync(id);
+}
+```
 
-3. **Include Related Data**
-   ```csharp
-   .Include(s => s.Creator)
-   .Include(s => s.Questions)
-   ```
-   Prevents N+1 query problems.
+2. **All Operations Async**: Scalability and responsiveness
 
-4. **Use AsNoTracking for Reads**
-   ```csharp
-   .AsNoTracking()
-   ```
-   Better performance for read-only queries.
+```csharp
+// GOOD
+public async Task<Survey> CreateAsync(Survey survey)
 
-5. **Order Collections**
-   ```csharp
-   .OrderBy(q => q.OrderIndex)
-   ```
-   Consistent ordering for display.
+// BAD
+public Survey Create(Survey survey)
+```
 
-### Service Best Practices
+3. **Include Related Data**: Prevent N+1 queries
 
-1. **Validate Before Operations**
-   Always validate input before database operations.
+```csharp
+return await _dbSet
+    .Include(s => s.Creator)
+    .Include(s => s.Questions)
+    .ToListAsync();
+```
 
-2. **Check Authorization**
-   ```csharp
-   if (survey.CreatorId != userId)
-       throw new UnauthorizedAccessException();
-   ```
+4. **Use AsNoTracking for Reads**: Performance optimization
 
-3. **Use Logging**
-   Log important operations and errors.
+```csharp
+return await _dbSet
+    .AsNoTracking()
+    .Include(s => s.Questions)
+    .FirstOrDefaultAsync(s => s.Id == id);
+```
 
-4. **Throw Domain Exceptions**
-   ```csharp
-   throw new SurveyNotFoundException(surveyId);
-   ```
+5. **Order Collections**: Consistent display
 
-5. **Return DTOs, Not Entities**
-   Never expose domain entities to upper layers.
+```csharp
+.Include(s => s.Questions.OrderBy(q => q.OrderIndex))
+```
+
+### Service Pattern Best Practices
+
+1. **Validate Before Operations**: Early failure
+
+```csharp
+if (string.IsNullOrWhiteSpace(dto.Title))
+{
+    throw new SurveyValidationException("Title is required");
+}
+```
+
+2. **Check Authorization**: Every operation
+
+```csharp
+if (survey.CreatorId != userId)
+{
+    throw new UnauthorizedAccessException(userId, "Survey", surveyId);
+}
+```
+
+3. **Use Logging**: Track operations and errors
+
+```csharp
+_logger.LogInformation("Survey {SurveyId} created by user {UserId}", surveyId, userId);
+_logger.LogWarning("User {UserId} attempted unauthorized access", userId);
+_logger.LogError(ex, "Failed to create survey");
+```
+
+4. **Throw Domain Exceptions**: Not generic exceptions
+
+```csharp
+// GOOD
+throw new SurveyNotFoundException(surveyId);
+
+// BAD
+throw new Exception("Survey not found");
+```
+
+5. **Return DTOs, Not Entities**: Don't expose domain model
+
+```csharp
+// GOOD
+return _mapper.Map<SurveyDto>(survey);
+
+// BAD
+return survey; // Exposes entity directly
+```
 
 ### Entity Configuration Best Practices
 
-1. **Use Fluent API**
-   Prefer Fluent API over data annotations.
+1. **Prefer Fluent API**: Over data annotations
 
-2. **Name Indexes**
-   ```csharp
-   .HasDatabaseName("idx_surveys_code")
-   ```
+```csharp
+// GOOD: Fluent API
+builder.Property(s => s.Title)
+    .HasColumnName("title")
+    .HasMaxLength(500)
+    .IsRequired();
 
-3. **Use Check Constraints**
-   Enforce rules at database level.
+// AVOID: Data annotations
+[Column("title")]
+[MaxLength(500)]
+[Required]
+public string Title { get; set; }
+```
 
-4. **Configure Cascade Delete Carefully**
-   Think about data preservation.
+2. **Name Indexes**: Explicit naming
 
-5. **Use Partial Indexes**
-   ```csharp
-   .HasFilter("code IS NOT NULL")
-   ```
+```csharp
+builder.HasIndex(s => s.Code)
+    .IsUnique()
+    .HasDatabaseName("idx_surveys_code");
+```
 
-### Performance Best Practices
+3. **Use Check Constraints**: Database-level validation
 
-1. **Use Indexes**
-   - Foreign keys
-   - Frequently queried columns
-   - Composite indexes for common queries
+```csharp
+builder.ToTable(t => t.HasCheckConstraint(
+    "chk_order_index",
+    "order_index >= 0"));
+```
 
-2. **Avoid N+1 Queries**
-   Use Include() for related data.
+4. **Configure Cascade Delete**: Data integrity
 
-3. **Use Pagination**
-   Never load all records.
+```csharp
+builder.HasMany(s => s.Questions)
+    .WithOne(q => q.Survey)
+    .HasForeignKey(q => q.SurveyId)
+    .OnDelete(DeleteBehavior.Cascade);
+```
 
-4. **Use AsNoTracking**
-   For read-only queries.
+5. **Use Partial Indexes**: Optimization
 
-5. **Use Batch Operations**
-   AddRangeAsync instead of multiple AddAsync calls.
+```csharp
+builder.HasIndex(s => s.Code)
+    .IsUnique()
+    .HasFilter("code IS NOT NULL");
+```
 
----
+### Common Patterns
 
-## Common Patterns
+#### 1. Upsert Pattern
 
-### Upsert Pattern
-
-**CreateOrUpdateAsync** pattern:
+**CreateOrUpdateAsync** for user management:
 
 ```csharp
 public async Task<User> CreateOrUpdateAsync(long telegramId, ...)
@@ -3053,6 +2293,8 @@ public async Task<User> CreateOrUpdateAsync(long telegramId, ...)
     {
         // Update existing
         existingUser.Username = username;
+        existingUser.FirstName = firstName;
+        existingUser.LastName = lastName;
         await _context.SaveChangesAsync();
         return existingUser;
     }
@@ -3065,40 +2307,11 @@ public async Task<User> CreateOrUpdateAsync(long telegramId, ...)
 }
 ```
 
-### Authorization Pattern
+**Use Case**: Telegram users can change username/names. Always current.
 
-**Check ownership before operations**:
+#### 2. Transaction Pattern
 
-```csharp
-private async Task AuthorizeUserForResponseAsync(Response response, int userId)
-{
-    var survey = await _surveyRepository.GetByIdAsync(response.SurveyId);
-    if (survey == null)
-        throw new SurveyNotFoundException(response.SurveyId);
-
-    if (survey.CreatorId != userId)
-        throw new UnauthorizedAccessException(userId, "Response", response.Id);
-}
-```
-
-### Validation Pattern
-
-**Validation Result object**:
-
-```csharp
-public class ValidationResult
-{
-    public bool IsValid { get; set; }
-    public string? ErrorMessage { get; set; }
-
-    public static ValidationResult Success() => new() { IsValid = true };
-    public static ValidationResult Failure(string error) => new() { IsValid = false, ErrorMessage = error };
-}
-```
-
-### Transaction Pattern
-
-**Explicit transactions for atomicity**:
+**Atomic operations**:
 
 ```csharp
 using var transaction = await _context.Database.BeginTransactionAsync();
@@ -3106,6 +2319,9 @@ using var transaction = await _context.Database.BeginTransactionAsync();
 try
 {
     // Multiple operations
+    await UpdateOperation1();
+    await UpdateOperation2();
+
     await _context.SaveChangesAsync();
     await transaction.CommitAsync();
 }
@@ -3116,54 +2332,54 @@ catch
 }
 ```
 
----
+**Use Cases**: Question reordering, batch updates, complex operations.
 
-## Performance Optimization
+#### 3. Validation Result Pattern
 
-### Index Strategy
+**Structured validation**:
 
-1. **Foreign Keys**: Always indexed
-2. **Filter Columns**: Active status, completion status
-3. **Composite Indexes**: Common query patterns (CreatorId + IsActive)
-4. **Partial Indexes**: Filter non-null values
-5. **GIN Indexes**: JSONB column searching
-
-### Query Optimization
-
-1. **Eager Loading**
-   ```csharp
-   .Include(s => s.Questions)
-   .ThenInclude(q => q.Answers)
-   ```
-
-2. **Select Specific Columns**
-   ```csharp
-   .Select(s => new { s.Id, s.Title })
-   ```
-
-3. **Pagination**
-   ```csharp
-   .Skip((page - 1) * pageSize)
-   .Take(pageSize)
-   ```
-
-4. **AsNoTracking**
-   ```csharp
-   .AsNoTracking() // Read-only, no change tracking
-   ```
-
-### Batch Operations
-
-**Bulk insert**:
 ```csharp
-await _dbSet.AddRangeAsync(answers); // Single DB round trip
+public class ValidationResult
+{
+    public bool IsValid { get; set; }
+    public string? ErrorMessage { get; set; }
+
+    public static ValidationResult Success() =>
+        new() { IsValid = true };
+
+    public static ValidationResult Failure(string error) =>
+        new() { IsValid = false, ErrorMessage = error };
+}
+
+// Usage
+var result = ValidateAnswer(answer);
+if (!result.IsValid)
+{
+    throw new ValidationException(result.ErrorMessage);
+}
 ```
 
-**Bulk delete**:
+#### 4. Smart Delete Pattern
+
+**Soft vs hard delete**:
+
 ```csharp
-var responses = await _dbSet.Where(r => r.SurveyId == surveyId).ToListAsync();
-_dbSet.RemoveRange(responses);
+var hasResponses = await HasResponsesAsync(surveyId);
+
+if (hasResponses)
+{
+    // Soft delete - preserve data
+    survey.IsActive = false;
+    await UpdateAsync(survey);
+}
+else
+{
+    // Hard delete - clean up
+    await DeleteAsync(surveyId);
+}
 ```
+
+**Use Cases**: Surveys, important data preservation.
 
 ---
 
@@ -3173,19 +2389,19 @@ _dbSet.RemoveRange(responses);
 
 Infrastructure throws domain exceptions from Core:
 
-1. **SurveyNotFoundException**
-2. **QuestionNotFoundException**
-3. **ResponseNotFoundException**
-4. **SurveyValidationException**
-5. **QuestionValidationException**
-6. **InvalidAnswerFormatException**
-7. **UnauthorizedAccessException**
-8. **DuplicateResponseException**
-9. **SurveyOperationException**
+1. **SurveyNotFoundException**: Survey ID doesn't exist
+2. **QuestionNotFoundException**: Question ID doesn't exist
+3. **ResponseNotFoundException**: Response ID doesn't exist
+4. **SurveyValidationException**: Survey validation fails
+5. **QuestionValidationException**: Question validation fails
+6. **InvalidAnswerFormatException**: Answer doesn't match question type
+7. **UnauthorizedAccessException**: User doesn't own resource
+8. **DuplicateResponseException**: Multiple responses not allowed
+9. **SurveyOperationException**: Operation not permitted
 
 ### Exception Handling Pattern
 
-**Catch specific, then general**:
+**Service Layer**:
 
 ```csharp
 try
@@ -3204,307 +2420,480 @@ catch (DbUpdateException ex)
 }
 ```
 
+**Pattern**:
+1. Catch specific EF Core exceptions
+2. Log with context
+3. Throw domain exception with user-friendly message
+4. Include inner exception for debugging
+
 ### Logging Strategy
 
-**Structured logging with context**:
+**Structured Logging with Serilog**:
 
 ```csharp
+// Information - normal operation
 _logger.LogInformation(
     "Survey {SurveyId} created by user {UserId} with code {Code}",
     survey.Id, userId, survey.Code);
 
+// Warning - suspicious activity
 _logger.LogWarning(
     "User {UserId} attempted to access survey {SurveyId} owned by {OwnerId}",
     userId, surveyId, survey.CreatorId);
 
+// Error - operation failed
 _logger.LogError(ex,
     "Failed to delete survey {SurveyId}",
     surveyId);
 ```
 
+**Best Practices**:
+- Use structured logging (named parameters)
+- Log at appropriate levels
+- Include context (IDs, usernames)
+- Don't log sensitive data (passwords, tokens)
+- Log exceptions with stack traces
+
 ---
 
-## Testing Approaches
+## Testing Strategies
 
 ### Unit Testing Repositories
 
-**Mock DbContext**:
+**In-Memory Database**:
 
 ```csharp
-var options = new DbContextOptionsBuilder<SurveyBotDbContext>()
-    .UseInMemoryDatabase(databaseName: "TestDb")
-    .Options;
+[Fact]
+public async Task GetByIdAsync_ReturnsCorrectSurvey()
+{
+    // Arrange
+    var options = new DbContextOptionsBuilder<SurveyBotDbContext>()
+        .UseInMemoryDatabase(databaseName: "TestDb")
+        .Options;
 
-using var context = new SurveyBotDbContext(options);
-var repository = new SurveyRepository(context);
+    using var context = new SurveyBotDbContext(options);
+    var repository = new SurveyRepository(context);
 
-// Test repository methods
-var survey = await repository.GetByIdAsync(1);
-Assert.NotNull(survey);
+    var survey = new Survey { Id = 1, Title = "Test Survey", CreatorId = 1 };
+    context.Surveys.Add(survey);
+    await context.SaveChangesAsync();
+
+    // Act
+    var result = await repository.GetByIdAsync(1);
+
+    // Assert
+    Assert.NotNull(result);
+    Assert.Equal("Test Survey", result.Title);
+}
 ```
+
+**Note**: In-memory database doesn't support all PostgreSQL features (JSONB, GIN indexes).
 
 ### Unit Testing Services
 
-**Mock repositories**:
+**Mock Repositories**:
 
 ```csharp
-var mockRepo = new Mock<ISurveyRepository>();
-mockRepo.Setup(r => r.GetByIdAsync(1))
-    .ReturnsAsync(new Survey { Id = 1, Title = "Test" });
+[Fact]
+public async Task CreateSurveyAsync_GeneratesUniqueCode()
+{
+    // Arrange
+    var mockRepo = new Mock<ISurveyRepository>();
+    mockRepo.Setup(r => r.CodeExistsAsync(It.IsAny<string>()))
+        .ReturnsAsync(false); // Code is unique
+    mockRepo.Setup(r => r.CreateAsync(It.IsAny<Survey>()))
+        .ReturnsAsync((Survey s) => s);
 
-var service = new SurveyService(mockRepo.Object, ...);
-var result = await service.GetSurveyByIdAsync(1, userId);
+    var mockMapper = new Mock<IMapper>();
+    mockMapper.Setup(m => m.Map<Survey>(It.IsAny<CreateSurveyDto>()))
+        .Returns(new Survey());
+    mockMapper.Setup(m => m.Map<SurveyDto>(It.IsAny<Survey>()))
+        .Returns(new SurveyDto());
 
-Assert.Equal("Test", result.Title);
+    var service = new SurveyService(
+        mockRepo.Object,
+        Mock.Of<IResponseRepository>(),
+        Mock.Of<IAnswerRepository>(),
+        mockMapper.Object,
+        Mock.Of<ILogger<SurveyService>>());
+
+    // Act
+    var result = await service.CreateSurveyAsync(1, new CreateSurveyDto
+    {
+        Title = "Test Survey",
+        Description = "Test"
+    });
+
+    // Assert
+    Assert.NotNull(result);
+    mockRepo.Verify(r => r.CodeExistsAsync(It.IsAny<string>()), Times.Once);
+    mockRepo.Verify(r => r.CreateAsync(It.IsAny<Survey>()), Times.Once);
+}
 ```
 
 ### Integration Testing
 
-**Test with real database**:
+**Test with Real Database**:
 
 ```csharp
-var factory = new WebApplicationFactory<Program>();
-var client = factory.CreateClient();
+public class SurveyIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+{
+    private readonly WebApplicationFactory<Program> _factory;
 
-var response = await client.PostAsync("/api/surveys",
-    new StringContent(json, Encoding.UTF8, "application/json"));
+    public SurveyIntegrationTests(WebApplicationFactory<Program> factory)
+    {
+        _factory = factory;
+    }
 
-Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    [Fact]
+    public async Task CreateSurvey_ReturnsCreatedSurvey()
+    {
+        // Arrange
+        var client = _factory.CreateClient();
+        var request = new CreateSurveyDto
+        {
+            Title = "Integration Test Survey",
+            Description = "Testing"
+        };
+        var json = JsonSerializer.Serialize(request);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        // Act
+        var response = await client.PostAsync("/api/surveys", content);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var survey = JsonSerializer.Deserialize<SurveyDto>(responseBody);
+        Assert.NotNull(survey);
+        Assert.Equal("Integration Test Survey", survey.Title);
+    }
+}
+```
+
+### Test Database Setup
+
+**Use separate test database**:
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Database=surveybot_test;..."
+  }
+}
+```
+
+**Reset between tests**:
+
+```csharp
+public async Task ResetDatabaseAsync()
+{
+    await _context.Database.EnsureDeletedAsync();
+    await _context.Database.MigrateAsync();
+}
 ```
 
 ---
 
 ## Common Issues and Solutions
 
-### Issue 1: DbContext Lifetime
+### Issue 1: DbContext Disposed Early
 
 **Problem**: DbContext disposed before lazy-loaded navigation properties accessed.
 
-**Solution**: Use eager loading with Include():
+**Solution**: Use eager loading with `Include()`:
+
 ```csharp
-.Include(s => s.Questions)
-.Include(s => s.Creator)
+// BAD: Lazy loading after DbContext disposed
+var survey = await _repository.GetByIdAsync(id);
+// DbContext disposed here (end of scope)
+foreach (var question in survey.Questions) // Exception!
+{
+    // ...
+}
+
+// GOOD: Eager loading
+var survey = await _repository.GetByIdWithQuestionsAsync(id);
+// All data loaded, DbContext can be disposed
+foreach (var question in survey.Questions) // Works!
+{
+    // ...
+}
 ```
 
-### Issue 2: Circular References in JSON
+### Issue 2: Circular Reference in JSON Serialization
 
-**Problem**: Entity navigation properties cause infinite loops in serialization.
+**Problem**: Entity navigation properties cause infinite loops.
 
-**Solution**: Use DTOs, not entities, in API responses:
+**Solution**: Return DTOs, not entities:
+
 ```csharp
-var dto = _mapper.Map<SurveyDto>(survey);
-return dto; // Not survey entity directly
+// BAD: Return entity
+return survey; // Circular: Survey → Questions → Survey → ...
+
+// GOOD: Return DTO
+return _mapper.Map<SurveyDto>(survey); // No circular references
 ```
 
-### Issue 3: N+1 Queries
+**Alternative**: Configure JSON serializer to ignore cycles:
+
+```csharp
+services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    });
+```
+
+### Issue 3: N+1 Query Problem
 
 **Problem**: Loading collection causes query for each item.
 
-**Solution**: Use Include() for related data:
+**Symptoms**: Slow performance, many database queries.
+
+**Solution**: Use `Include()` for eager loading:
+
 ```csharp
-.Include(s => s.Questions)
-  .ThenInclude(q => q.Answers)
+// BAD: N+1 queries
+var surveys = await _context.Surveys.ToListAsync(); // 1 query
+foreach (var survey in surveys)
+{
+    Console.WriteLine(survey.Creator.Username); // N queries (one per survey)
+}
+
+// GOOD: Single query with eager loading
+var surveys = await _context.Surveys
+    .Include(s => s.Creator)
+    .ToListAsync(); // Single query
 ```
 
-### Issue 4: Concurrent Updates
+### Issue 4: Concurrent Update Conflicts
 
-**Problem**: Two users update same entity simultaneously.
+**Problem**: Two users update same entity simultaneously, one overwrites other's changes.
 
-**Solution**: Add timestamp/rowversion column and enable optimistic concurrency:
+**Solution**: Add row version for optimistic concurrency:
+
 ```csharp
+// In entity
+[Timestamp]
+public byte[] RowVersion { get; set; }
+
+// Or in configuration
 builder.Property(e => e.RowVersion)
     .IsRowVersion();
 ```
 
-### Issue 5: JSONB Querying
+**Handle DbUpdateConcurrencyException**:
 
-**Problem**: Need to query inside JSONB columns.
-
-**Solution**: Use PostgreSQL JSON operators:
 ```csharp
+try
+{
+    await _context.SaveChangesAsync();
+}
+catch (DbUpdateConcurrencyException ex)
+{
+    throw new SurveyOperationException("Survey was modified by another user", ex);
+}
+```
+
+### Issue 5: JSONB Query Performance
+
+**Problem**: Slow queries filtering on JSONB columns.
+
+**Solution**: Create GIN index:
+
+```csharp
+builder.HasIndex(q => q.OptionsJson)
+    .HasDatabaseName("idx_questions_options_json")
+    .HasMethod("gin");
+```
+
+**Query JSONB**:
+
+```csharp
+// PostgreSQL JSON operators
 .Where(q => EF.Functions.JsonContains(q.OptionsJson, "\"Option1\""))
 ```
 
-Or create GIN index for better performance.
-
 ### Issue 6: Migration Conflicts
 
-**Problem**: Multiple developers create migrations simultaneously.
+**Problem**: Multiple developers create migrations simultaneously, conflicts.
 
 **Solution**:
-1. Pull latest code
-2. Remove your migration
-3. Update database
-4. Re-create migration
-5. Check for conflicts
 
-### Issue 7: Connection Pooling
+1. Pull latest code: `git pull`
+2. Remove your migration: `dotnet ef migrations remove`
+3. Update database: `dotnet ef database update`
+4. Re-create migration: `dotnet ef migrations add YourMigrationName`
+5. Verify no conflicts
+6. Commit and push
 
-**Problem**: Too many database connections.
+### Issue 7: Connection Pool Exhaustion
 
-**Solution**: Configure connection pooling in connection string:
+**Problem**: "Connection pool exhausted" error.
+
+**Causes**:
+- DbContext not disposed
+- Long-running operations
+- Connection leaks
+
+**Solutions**:
+
+1. **Ensure DbContext disposed** (automatic with DI):
+
+```csharp
+// GOOD: DI handles disposal
+public class SurveyService
+{
+    private readonly SurveyBotDbContext _context;
+    // Context automatically disposed at end of request
+}
 ```
-"DefaultConnection": "Host=localhost;Port=5432;Database=surveybot_db;Username=user;Password=pass;Pooling=true;MinPoolSize=0;MaxPoolSize=100"
+
+2. **Increase pool size** (connection string):
+
+```
+MaxPoolSize=200
 ```
 
-### Issue 8: Slow Queries
+3. **Use async operations** (don't block threads):
+
+```csharp
+// GOOD
+await _context.SaveChangesAsync();
+
+// BAD
+_context.SaveChanges(); // Blocks thread
+```
+
+### Issue 8: Slow Database Queries
 
 **Problem**: Queries taking too long.
 
-**Solution**:
-1. Add indexes on frequently queried columns
-2. Use AsNoTracking() for read-only queries
-3. Implement pagination
-4. Use compiled queries for repeated queries
-5. Enable query logging to identify slow queries
+**Diagnosis**:
 
----
-
-## Code Examples
-
-### Example 1: Creating a Survey with Questions
+1. Enable query logging:
 
 ```csharp
-// Service layer
-var surveyDto = new CreateSurveyDto
-{
-    Title = "Customer Feedback",
-    Description = "Help us improve",
-    AllowMultipleResponses = false,
-    ShowResults = true
-};
-
-var survey = await _surveyService.CreateSurveyAsync(userId, surveyDto);
-
-// Add questions
-var question1 = new CreateQuestionDto
-{
-    QuestionText = "How satisfied are you?",
-    QuestionType = QuestionType.Rating,
-    IsRequired = true
-};
-
-await _questionService.AddQuestionAsync(survey.Id, userId, question1);
-
-// Activate survey
-await _surveyService.ActivateSurveyAsync(survey.Id, userId);
+optionsBuilder.LogTo(Console.WriteLine, LogLevel.Information);
 ```
 
-### Example 2: Responding to a Survey
+2. Use query execution plans (PostgreSQL):
 
-```csharp
-// Start response
-var response = await _responseService.StartResponseAsync(surveyId, telegramUserId);
-
-// Save answers
-await _responseService.SaveAnswerAsync(
-    response.Id,
-    questionId,
-    ratingValue: 5);
-
-// Complete response
-await _responseService.CompleteResponseAsync(response.Id);
+```sql
+EXPLAIN ANALYZE SELECT * FROM surveys WHERE is_active = true;
 ```
 
-### Example 3: Getting Survey Statistics
+**Solutions**:
+
+1. **Add missing indexes** (check WHERE clauses)
+2. **Use AsNoTracking()** for read-only queries
+3. **Implement pagination** (limit result sets)
+4. **Use compiled queries** for repeated queries
+5. **Optimize includes** (only load needed data)
+
+### Issue 9: DateTime Timezone Issues
+
+**Problem**: DateTime values lose timezone information.
+
+**Solution**: Always use UTC:
 
 ```csharp
-var stats = await _surveyService.GetSurveyStatisticsAsync(surveyId, userId);
+// GOOD
+entity.CreatedAt = DateTime.UtcNow;
 
-Console.WriteLine($"Total Responses: {stats.TotalResponses}");
-Console.WriteLine($"Completion Rate: {stats.CompletionRate}%");
-Console.WriteLine($"Average Time: {stats.AverageCompletionTime} seconds");
+// BAD
+entity.CreatedAt = DateTime.Now; // Local time, loses timezone
+```
 
-foreach (var questionStat in stats.QuestionStatistics)
+**Database Configuration**:
+
+```csharp
+builder.Property(u => u.CreatedAt)
+    .HasColumnType("timestamp with time zone"); // PostgreSQL
+```
+
+### Issue 10: EF Core Tracking Issues
+
+**Problem**: Changes not saved or unexpected behavior.
+
+**Diagnosis**:
+
+```csharp
+var entries = _context.ChangeTracker.Entries();
+foreach (var entry in entries)
 {
-    Console.WriteLine($"Question: {questionStat.QuestionText}");
-    Console.WriteLine($"Response Rate: {questionStat.ResponseRate}%");
+    Console.WriteLine($"{entry.Entity.GetType().Name}: {entry.State}");
 }
 ```
 
-### Example 4: Custom Repository Query
+**Solution**: Understand entity states:
+
+- **Added**: New entity, will be inserted
+- **Modified**: Existing entity changed, will be updated
+- **Deleted**: Entity removed, will be deleted
+- **Unchanged**: No changes, no operation
+- **Detached**: Not tracked by context
+
+**Fix tracking issues**:
 
 ```csharp
-// In SurveyRepository
-public async Task<IEnumerable<Survey>> GetPopularSurveysAsync(int limit)
-{
-    return await _dbSet
-        .AsNoTracking()
-        .Include(s => s.Creator)
-        .Include(s => s.Responses)
-        .Where(s => s.IsActive)
-        .OrderByDescending(s => s.Responses.Count)
-        .Take(limit)
-        .ToListAsync();
-}
-```
+// Attach detached entity
+_context.Attach(entity);
 
-### Example 5: Transaction with Rollback
+// Mark as modified
+_context.Entry(entity).State = EntityState.Modified;
 
-```csharp
-// In QuestionService
-public async Task<bool> ReorderQuestionsAsync(int surveyId, int[] questionIds)
-{
-    using var transaction = await _context.Database.BeginTransactionAsync();
-
-    try
-    {
-        for (int i = 0; i < questionIds.Length; i++)
-        {
-            var question = await _questionRepository.GetByIdAsync(questionIds[i]);
-            if (question == null)
-            {
-                await transaction.RollbackAsync();
-                return false;
-            }
-            question.OrderIndex = i;
-        }
-
-        await _context.SaveChangesAsync();
-        await transaction.CommitAsync();
-        return true;
-    }
-    catch
-    {
-        await transaction.RollbackAsync();
-        throw;
-    }
-}
+// Stop tracking
+_context.Entry(entity).State = EntityState.Detached;
 ```
 
 ---
 
 ## Summary
 
-**SurveyBot.Infrastructure** is a well-structured data access layer implementing:
+**SurveyBot.Infrastructure** is a well-architected data access layer implementing:
 
-- Clean separation of concerns (Repositories, Services)
-- PostgreSQL-specific optimizations (JSONB, GIN indexes)
-- Comprehensive business logic with validation
+**Core Features**:
+- Clean Architecture compliance (depends only on Core)
+- Repository pattern for data access abstraction
+- Service layer with comprehensive business logic
+- Fluent API entity configurations
+- PostgreSQL-specific optimizations (JSONB, GIN indexes, partial indexes)
 - Automatic timestamp management
-- Survey code generation
 - Smart delete logic (soft vs hard)
-- Authorization at every level
-- Comprehensive statistics
-- Transaction support
-- Eager loading to prevent N+1 queries
-- Upsert pattern for Telegram users
-- Type-specific validation
+- Survey code generation and validation
+- Comprehensive authorization checks
+- EF Core migrations for schema version control
 
-**Key Files** (with line counts):
-- `SurveyBotDbContext.cs` - 108 lines
+**Performance**:
+- Eager loading prevents N+1 queries
+- AsNoTracking for read-only queries
+- Composite indexes for common query patterns
+- Partial indexes for filtered queries
+- Connection pooling
+- Batch operations
+
+**Data Integrity**:
+- Foreign key relationships with cascade delete
+- Unique constraints
+- Check constraints (database-level validation)
+- Transaction support for atomic operations
+- Optimistic concurrency (via row version if implemented)
+
+**Key Files**:
+- `SurveyBotDbContext.cs` - 109 lines
 - `SurveyService.cs` - 724 lines
 - `ResponseService.cs` - 623 lines
 - `QuestionService.cs` - 462 lines
-- `DataSeeder.cs` - 587 lines
+- `AuthService.cs` - 174 lines
 - `SurveyRepository.cs` - 169 lines
+- `DataSeeder.cs` - 587 lines
 
-**Total Project**: ~5,000+ lines of production code implementing robust data access and business logic.
+**Total**: ~3,500+ lines of production code implementing robust data access layer with comprehensive business logic.
 
 ---
 
-**Last Updated**: 2025-11-10
-**Version**: 1.0.0-MVP
-**Target Framework**: .NET 8.0
-**Database**: PostgreSQL 15+
-**EF Core Version**: 9.0.10
+**Last Updated**: 2025-11-12
+**Maintained By**: SurveyBot Development Team
+**For Questions**: Refer to main CLAUDE.md or project documentation
