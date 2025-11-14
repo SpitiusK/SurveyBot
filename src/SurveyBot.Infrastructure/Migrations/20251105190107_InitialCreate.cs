@@ -69,13 +69,13 @@ namespace SurveyBot.Infrastructure.Migrations
                     is_required = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     options_json = table.Column<string>(type: "jsonb", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_questions", x => x.id);
                     table.CheckConstraint("chk_order_index", "order_index >= 0");
-                    table.CheckConstraint("chk_question_type", "question_type IN ('text', 'multiple_choice', 'single_choice', 'rating', 'yes_no')");
+                    table.CheckConstraint("chk_question_type", "question_type IN (0, 1, 2, 3)");
                     table.ForeignKey(
                         name: "fk_questions_survey",
                         column: x => x.survey_id,

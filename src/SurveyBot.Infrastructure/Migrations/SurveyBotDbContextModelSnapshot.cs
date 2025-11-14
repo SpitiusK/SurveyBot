@@ -120,7 +120,8 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasColumnName("survey_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
                     b.HasKey("Id");
 
@@ -143,7 +144,7 @@ namespace SurveyBot.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("chk_order_index", "order_index >= 0");
 
-                            t.HasCheckConstraint("chk_question_type", "question_type IN ('text', 'multiple_choice', 'single_choice', 'rating', 'yes_no')");
+                            t.HasCheckConstraint("chk_question_type", "question_type IN (0, 1, 2, 3)");
                         });
                 });
 

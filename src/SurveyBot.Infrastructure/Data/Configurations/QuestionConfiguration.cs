@@ -43,10 +43,10 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
         builder.HasIndex(q => q.QuestionType)
             .HasDatabaseName("idx_questions_type");
 
-        // Check constraint for question type
+        // Check constraint for question type (0=Text, 1=SingleChoice, 2=MultipleChoice, 3=Rating)
         builder.ToTable(t => t.HasCheckConstraint(
             "chk_question_type",
-            "question_type IN ('text', 'multiple_choice', 'single_choice', 'rating', 'yes_no')"));
+            "question_type IN (0, 1, 2, 3)"));
 
         // OrderIndex
         builder.Property(q => q.OrderIndex)
@@ -89,6 +89,12 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
             .HasColumnType("timestamp with time zone")
             .IsRequired()
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+        // UpdatedAt
+        builder.Property(q => q.UpdatedAt)
+            .HasColumnName("updated_at")
+            .HasColumnType("timestamp with time zone")
+            .IsRequired();
 
         // Relationships
         builder.HasOne(q => q.Survey)
