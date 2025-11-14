@@ -46,6 +46,12 @@ try
         builder.Services.AddDbContext<SurveyBotDbContext>(options =>
         {
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            
+            // Log the connection string for debugging (mask password)
+            var maskedConnectionString = connectionString?.Replace("Password=surveybot_dev_password", "Password=***");
+            Console.WriteLine($"[DEBUG] Using connection string: {maskedConnectionString}");
+            Log.Information("Database connection string configured: {ConnectionString}", maskedConnectionString);
+            
             options.UseNpgsql(connectionString);
 
             // Enable detailed logging in development

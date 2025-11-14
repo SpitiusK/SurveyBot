@@ -21,6 +21,15 @@ public class UserRepository : GenericRepository<User>, IUserRepository
     /// <inheritdoc />
     public async Task<User?> GetByTelegramIdAsync(long telegramId)
     {
+        
+        // Debug: Log the actual connection string being used
+        var connectionString = _context.Database.GetConnectionString();
+        Console.WriteLine($"[DEBUG UserRepository] Connection string: {connectionString}");
+        
+        // Debug: Log database provider and state
+        Console.WriteLine($"[DEBUG UserRepository] Database provider: {_context.Database.ProviderName}");
+        Console.WriteLine($"[DEBUG UserRepository] Can connect: {await _context.Database.CanConnectAsync()}");
+        
         return await _dbSet
             .FirstOrDefaultAsync(u => u.TelegramId == telegramId);
     }
@@ -70,6 +79,7 @@ public class UserRepository : GenericRepository<User>, IUserRepository
     /// <inheritdoc />
     public async Task<User> CreateOrUpdateAsync(long telegramId, string? username, string? firstName, string? lastName)
     {
+        Console.WriteLine($"[DEBUG CreateOrUpdateAsync] Starting for telegramId: {telegramId}");
         var existingUser = await GetByTelegramIdAsync(telegramId);
 
         if (existingUser != null)
