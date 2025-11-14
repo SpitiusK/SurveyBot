@@ -201,6 +201,62 @@ try
 
     var app = builder.Build();
 
+    // Apply database migrations automatically
+    try
+    {
+        Log.Information("Applying database migrations...");
+        using (var scope = app.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
+
+            // Check if database can connect
+            var canConnect = await dbContext.Database.CanConnectAsync();
+            if (!canConnect)
+            {
+                Log.Warning("Cannot connect to database. Waiting for database to be ready...");
+                // Retry logic for database connection (useful for Docker startup)
+                int retries = 10;
+                int delay = 3000; // 3 seconds
+
+                for (int i = 0; i < retries; i++)
+                {
+                    await Task.Delay(delay);
+                    canConnect = await dbContext.Database.CanConnectAsync();
+                    if (canConnect)
+                    {
+                        Log.Information("Database connection established after {Retries} retries", i + 1);
+                        break;
+                    }
+                    Log.Warning("Retry {RetryCount}/{MaxRetries} - Database not ready yet", i + 1, retries);
+                }
+
+                if (!canConnect)
+                {
+                    Log.Error("Failed to connect to database after {Retries} retries", retries);
+                    throw new InvalidOperationException("Cannot connect to database");
+                }
+            }
+
+            // Apply pending migrations
+            var pendingMigrations = await dbContext.Database.GetPendingMigrationsAsync();
+            if (pendingMigrations.Any())
+            {
+                Log.Information("Found {Count} pending migrations. Applying...", pendingMigrations.Count());
+                await dbContext.Database.MigrateAsync();
+                Log.Information("Database migrations applied successfully");
+            }
+            else
+            {
+                Log.Information("Database is up to date. No pending migrations");
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Error applying database migrations");
+        throw; // Don't continue if migrations fail
+    }
+
     // Initialize Telegram Bot
     try
     {

@@ -1,0 +1,73 @@
+# .dockerignore - Exclude files from Docker build context
+
+# Build results
+**/bin/
+**/obj/
+**/out/
+**/.vs/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+# NuGet packages
+*.nupkg
+*.snupkg
+**/packages/*
+
+# Visual Studio cache/options
+.vs/
+.vscode/
+*.code-workspace
+
+# Rider
+.idea/
+*.sln.iml
+
+# Docker
+**/Dockerfile
+**/docker-compose*
+.dockerignore
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+**/*.md
+!README.md
+
+# Logs
+**/logs/
+*.log
+
+# Environment files
+.env
+.env.*
+
+# Frontend
+frontend/
+**/node_modules/
+**/dist/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
