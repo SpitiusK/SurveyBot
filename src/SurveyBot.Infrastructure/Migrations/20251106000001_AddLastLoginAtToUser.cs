@@ -14,8 +14,8 @@ namespace SurveyBot.Infrastructure.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<DateTime>(
-                name: "LastLoginAt",
-                table: "Users",
+                name: "last_login_at",
+                table: "users",
                 type: "timestamp with time zone",
                 nullable: true);
         }
@@ -24,8 +24,8 @@ namespace SurveyBot.Infrastructure.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "LastLoginAt",
-                table: "Users");
+                name: "last_login_at",
+                table: "users");
         }
     }
 }

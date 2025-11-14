@@ -212,6 +212,11 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("allow_multiple_responses");
 
+                    b.Property<string>("Code")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("code");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -251,6 +256,11 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("idx_surveys_code")
+                        .HasFilter("code IS NOT NULL");
 
                     b.HasIndex("CreatedAt")
                         .IsDescending()
@@ -293,6 +303,10 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("last_name");
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_login_at");
 
                     b.Property<long>("TelegramId")
                         .HasColumnType("bigint")

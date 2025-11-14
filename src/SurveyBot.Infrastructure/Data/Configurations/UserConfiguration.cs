@@ -48,6 +48,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("last_name")
             .HasMaxLength(255);
 
+        // LastLoginAt
+        builder.Property(u => u.LastLoginAt)
+            .HasColumnName("last_login_at")
+            .HasColumnType("timestamp with time zone");
+
         // CreatedAt
         builder.Property(u => u.CreatedAt)
             .HasColumnName("created_at")
