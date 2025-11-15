@@ -590,13 +590,17 @@ public class SurveyService : ISurveyService
 
                 try
                 {
-                    // Parse answer JSON - could be single value or array for multiple choice
+                    // Parse answer JSON
+                    // Single choice format: {"selectedOption": "Option 2"}
+                    // Multiple choice format: {"selectedOptions": ["Option 1", "Option 3"]}
                     var answerData = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
 
-                    if (answerData.ValueKind == JsonValueKind.Array)
+                    // Try to get selectedOptions (multiple choice)
+                    if (answerData.TryGetProperty("selectedOptions", out var selectedOptionsElement) &&
+                        selectedOptionsElement.ValueKind == JsonValueKind.Array)
                     {
                         // Multiple choice
-                        foreach (var item in answerData.EnumerateArray())
+                        foreach (var item in selectedOptionsElement.EnumerateArray())
                         {
                             var choice = item.GetString();
                             if (choice != null && choiceCounts.ContainsKey(choice))
@@ -605,14 +609,20 @@ public class SurveyService : ISurveyService
                             }
                         }
                     }
-                    else if (answerData.ValueKind == JsonValueKind.String)
+                    // Try to get selectedOption (single choice)
+                    else if (answerData.TryGetProperty("selectedOption", out var selectedOptionElement))
                     {
                         // Single choice
-                        var choice = answerData.GetString();
+                        var choice = selectedOptionElement.GetString();
                         if (choice != null && choiceCounts.ContainsKey(choice))
                         {
                             choiceCounts[choice]++;
                         }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Answer {AnswerId} has unexpected JSON format: {Json}",
+                            answer.Id, answer.AnswerJson);
                     }
                 }
                 catch (JsonException ex)
@@ -656,8 +666,18 @@ public class SurveyService : ISurveyService
 
             try
             {
-                var rating = JsonSerializer.Deserialize<int>(answer.AnswerJson);
-                ratings.Add(rating);
+                // Parse the answer JSON which is in format: {"rating": 4}
+                var answerData = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+
+                if (answerData.TryGetProperty("rating", out var ratingElement))
+                {
+                    var rating = ratingElement.GetInt32();
+                    ratings.Add(rating);
+                }
+                else
+                {
+                    _logger.LogWarning("Rating property not found in answer {AnswerId}", answer.Id);
+                }
             }
             catch (JsonException ex)
             {
