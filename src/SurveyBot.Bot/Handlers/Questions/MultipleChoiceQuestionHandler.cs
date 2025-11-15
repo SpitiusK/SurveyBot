@@ -24,9 +24,6 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
     private readonly QuestionErrorHandler _errorHandler;
     private readonly ILogger<MultipleChoiceQuestionHandler> _logger;
 
-    // Track user selections in memory (temporary until they click Done)
-    private readonly Dictionary<string, HashSet<int>> _tempSelections = new();
-
     public QuestionType QuestionType => QuestionType.MultipleChoice;
 
     public MultipleChoiceQuestionHandler(
@@ -75,12 +72,12 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
                       $"{requiredText}\n" +
                       $"Select all that apply, then click Done:";
 
-        // Initialize empty selection for this user/question
-        var selectionKey = GetSelectionKey(chatId, question.Id);
-        _tempSelections[selectionKey] = new HashSet<int>();
+        // Initialize empty selection for this user/question in conversation state
+        var selections = new HashSet<int>();
+        await SetSelectionsAsync(chatId, question.Id, selections);
 
         // Build inline keyboard with checkable options
-        var keyboard = BuildKeyboard(question, _tempSelections[selectionKey]);
+        var keyboard = BuildKeyboard(question, selections);
 
         _logger.LogDebug(
             "Displaying multiple choice question {QuestionId} with {OptionCount} options in chat {ChatId}",
@@ -118,26 +115,20 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
 
         var callbackData = callbackQuery.Data;
         var chatId = callbackQuery.Message?.Chat.Id ?? userId;
-        var selectionKey = GetSelectionKey(chatId, question.Id);
 
-        // Ensure selection set exists
-        if (!_tempSelections.ContainsKey(selectionKey))
-        {
-            _tempSelections[selectionKey] = new HashSet<int>();
-        }
-
-        var selections = _tempSelections[selectionKey];
+        // Get current selections from conversation state
+        var selections = await GetSelectionsAsync(userId, question.Id);
 
         // Check if user clicked "Done"
         if (callbackData == $"done_q{question.Id}")
         {
-            return await HandleDoneAsync(callbackQuery, question, selections, selectionKey, cancellationToken);
+            return await HandleDoneAsync(callbackQuery, question, selections, userId, cancellationToken);
         }
 
         // Check if user clicked "Skip"
         if (callbackData == $"skip_q{question.Id}")
         {
-            return await HandleSkipAsync(callbackQuery, question, selectionKey, cancellationToken);
+            return await HandleSkipAsync(callbackQuery, question, userId, cancellationToken);
         }
 
         // Otherwise, it's a toggle selection
@@ -169,23 +160,29 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
         }
 
         // Toggle selection
+        bool isNowSelected;
         if (selections.Contains(optionIndex))
         {
             selections.Remove(optionIndex);
+            isNowSelected = false;
             _logger.LogDebug("Deselected option {OptionIndex} for question {QuestionId}", optionIndex, question.Id);
         }
         else
         {
             selections.Add(optionIndex);
+            isNowSelected = true;
             _logger.LogDebug("Selected option {OptionIndex} for question {QuestionId}", optionIndex, question.Id);
         }
+
+        // Save updated selections to conversation state
+        await SetSelectionsAsync(userId, question.Id, selections);
 
         // Update keyboard to reflect new selections
         var keyboard = BuildKeyboard(question, selections);
 
         await _botService.Client.AnswerCallbackQuery(
             callbackQueryId: callbackQuery.Id,
-            text: selections.Contains(optionIndex) ? "✓ Selected" : "Deselected",
+            text: isNowSelected ? "✓ Selected" : "Deselected",
             cancellationToken: cancellationToken);
 
         // Update the message with new keyboard
@@ -315,7 +312,7 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
         CallbackQuery callbackQuery,
         QuestionDto question,
         HashSet<int> selections,
-        string selectionKey,
+        long userId,
         CancellationToken cancellationToken)
     {
         // Validate that at least one option is selected for required questions
@@ -387,8 +384,8 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
             }
         }
 
-        // Clean up temporary selections
-        _tempSelections.Remove(selectionKey);
+        // Clean up temporary selections from conversation state
+        await ClearSelectionsAsync(userId, question.Id);
 
         return answerJson;
     }
@@ -399,7 +396,7 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
     private async Task<string?> HandleSkipAsync(
         CallbackQuery callbackQuery,
         QuestionDto question,
-        string selectionKey,
+        long userId,
         CancellationToken cancellationToken)
     {
         if (question.IsRequired)
@@ -413,8 +410,8 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
             return null;
         }
 
-        // Clean up temporary selections
-        _tempSelections.Remove(selectionKey);
+        // Clean up temporary selections from conversation state
+        await ClearSelectionsAsync(userId, question.Id);
 
         // Return empty array for skipped optional question
         var answerJson = JsonSerializer.Serialize(new { selectedOptions = new List<string>() });
@@ -447,11 +444,62 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
     }
 
     /// <summary>
-    /// Generates unique key for tracking user selections.
+    /// Gets the metadata key for storing selections in conversation state.
     /// </summary>
-    private string GetSelectionKey(long chatId, int questionId)
+    private string GetMetadataKey(int questionId)
     {
-        return $"{chatId}_{questionId}";
+        return $"mc_selections_q{questionId}";
+    }
+
+    /// <summary>
+    /// Retrieves current selections from conversation state.
+    /// </summary>
+    private async Task<HashSet<int>> GetSelectionsAsync(long userId, int questionId)
+    {
+        var state = await _stateManager.GetStateAsync(userId);
+        if (state == null)
+            return new HashSet<int>();
+
+        var key = GetMetadataKey(questionId);
+        if (state.Metadata.TryGetValue(key, out var value) && value is HashSet<int> selections)
+        {
+            return selections;
+        }
+
+        return new HashSet<int>();
+    }
+
+    /// <summary>
+    /// Stores selections in conversation state.
+    /// </summary>
+    private async Task SetSelectionsAsync(long userId, int questionId, HashSet<int> selections)
+    {
+        var state = await _stateManager.GetStateAsync(userId);
+        if (state == null)
+        {
+            _logger.LogWarning("Cannot set selections - no conversation state for user {UserId}", userId);
+            return;
+        }
+
+        var key = GetMetadataKey(questionId);
+        state.Metadata[key] = selections;
+
+        // State is automatically persisted in ConversationStateManager's ConcurrentDictionary
+    }
+
+    /// <summary>
+    /// Clears selections from conversation state.
+    /// </summary>
+    private async Task ClearSelectionsAsync(long userId, int questionId)
+    {
+        var state = await _stateManager.GetStateAsync(userId);
+        if (state == null)
+            return;
+
+        var key = GetMetadataKey(questionId);
+        state.Metadata.Remove(key);
+
+        // State is automatically persisted in ConversationStateManager's ConcurrentDictionary
     }
 
     #endregion
