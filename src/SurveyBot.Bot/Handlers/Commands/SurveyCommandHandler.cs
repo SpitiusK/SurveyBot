@@ -67,18 +67,30 @@ public class SurveyCommandHandler : ICommandHandler
                 telegramUser.Username ?? "no_username");
 
             // Parse survey identifier from command
-            var surveyId = ParseSurveyIdentifier(message.Text);
-            if (surveyId == null)
+            var identifier = ParseSurveyIdentifier(message.Text);
+            if (identifier == null)
             {
                 await SendUsageMessageAsync(chatId, cancellationToken);
                 return;
             }
 
-            // Validate survey exists and is active
-            var survey = await _surveyRepository.GetByIdWithQuestionsAsync(surveyId.Value);
+            // Validate survey exists and is active - support both ID and code
+            Core.Entities.Survey? survey = null;
+
+            // Try parsing as integer ID first
+            if (int.TryParse(identifier, out var surveyId) && surveyId > 0)
+            {
+                survey = await _surveyRepository.GetByIdWithQuestionsAsync(surveyId);
+            }
+            else
+            {
+                // Otherwise treat as survey code
+                survey = await _surveyRepository.GetByCodeWithQuestionsAsync(identifier);
+            }
+
             if (survey == null)
             {
-                await SendSurveyNotFoundAsync(chatId, surveyId.Value, cancellationToken);
+                await SendSurveyNotFoundAsync(chatId, identifier, cancellationToken);
                 return;
             }
 
@@ -95,7 +107,7 @@ public class SurveyCommandHandler : ICommandHandler
             }
 
             // Check for existing responses
-            var existingResponse = await _responseRepository.GetIncompleteResponseAsync(surveyId.Value, userId);
+            var existingResponse = await _responseRepository.GetIncompleteResponseAsync(survey.Id, userId);
             if (existingResponse != null)
             {
                 // Resume existing response
@@ -106,7 +118,7 @@ public class SurveyCommandHandler : ICommandHandler
             // Check for duplicate responses (if not allowed)
             if (!survey.AllowMultipleResponses)
             {
-                var completedResponses = await _responseRepository.GetByUserAndSurveyAsync(surveyId.Value, userId);
+                var completedResponses = await _responseRepository.GetByUserAndSurveyAsync(survey.Id, userId);
                 var completedResponse = completedResponses.FirstOrDefault(r => r.IsComplete);
                 if (completedResponse != null)
                 {
@@ -118,7 +130,7 @@ public class SurveyCommandHandler : ICommandHandler
             // Create new response record
             var response = await _responseRepository.CreateAsync(new Core.Entities.Response
             {
-                SurveyId = surveyId.Value,
+                SurveyId = survey.Id,
                 RespondentTelegramId = userId,
                 IsComplete = false,
                 StartedAt = DateTime.UtcNow
@@ -128,13 +140,13 @@ public class SurveyCommandHandler : ICommandHandler
                 "Created response {ResponseId} for user {TelegramId} on survey {SurveyId}",
                 response.Id,
                 userId,
-                surveyId);
+                survey.Id);
 
             // Initialize conversation state
             var questions = survey.Questions.OrderBy(q => q.OrderIndex).ToList();
             var totalQuestions = questions.Count;
 
-            await _stateManager.StartSurveyAsync(userId, surveyId.Value, response.Id, totalQuestions);
+            await _stateManager.StartSurveyAsync(userId, survey.Id, response.Id, totalQuestions);
 
             // Send survey intro message
             await SendSurveyIntroAsync(chatId, survey.Title, survey.Description, totalQuestions, cancellationToken);
@@ -174,7 +186,7 @@ public class SurveyCommandHandler : ICommandHandler
     /// Parses survey ID from command text.
     /// Supports: /survey 123 or /survey ABCD12 (code - future)
     /// </summary>
-    private int? ParseSurveyIdentifier(string? commandText)
+    private string? ParseSurveyIdentifier(string? commandText)
     {
         if (string.IsNullOrWhiteSpace(commandText))
             return null;
@@ -185,14 +197,8 @@ public class SurveyCommandHandler : ICommandHandler
 
         var identifier = parts[1].Trim();
 
-        // Try parsing as integer ID
-        if (int.TryParse(identifier, out var surveyId) && surveyId > 0)
-            return surveyId;
-
-        // Future: Handle survey codes (e.g., ABCD12)
-        // For now, only support numeric IDs
-
-        return null;
+        // Return identifier as-is - can be either ID (numeric) or code (alphanumeric)
+        return string.IsNullOrWhiteSpace(identifier) ? null : identifier;
     }
 
     /// <summary>
@@ -360,11 +366,11 @@ public class SurveyCommandHandler : ICommandHandler
             cancellationToken: cancellationToken);
     }
 
-    private async Task SendSurveyNotFoundAsync(long chatId, int surveyId, CancellationToken cancellationToken)
+    private async Task SendSurveyNotFoundAsync(long chatId, string identifier, CancellationToken cancellationToken)
     {
         await _botService.Client.SendMessage(
             chatId: chatId,
-            text: $"Survey with ID {surveyId} not found.\n\n" +
+            text: $"Survey '{identifier}' not found or is not active.\n\n" +
                   "Use /surveys to browse available surveys.",
             cancellationToken: cancellationToken);
     }

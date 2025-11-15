@@ -315,23 +315,25 @@ public class UpdateHandler : IUpdateHandler
         string[] parts,
         CancellationToken cancellationToken)
     {
-        // Handle survey:take:{surveyId} callback
+        // Handle survey:take:{surveyCode} callback
         if (parts.Length >= 3 && parts[1] == "take")
         {
-            if (!int.TryParse(parts[2], out var surveyId))
+            var surveyCode = parts[2];
+
+            if (string.IsNullOrWhiteSpace(surveyCode))
             {
-                _logger.LogWarning("Invalid survey ID in callback: {SurveyId}", parts[2]);
+                _logger.LogWarning("Invalid survey code in callback: {SurveyCode}", parts[2]);
                 await _botService.Client.AnswerCallbackQuery(
                     callbackQueryId: callbackQuery.Id,
-                    text: "Invalid survey ID",
+                    text: "Invalid survey code",
                     showAlert: true,
                     cancellationToken: cancellationToken);
                 return false;
             }
 
             _logger.LogInformation(
-                "Starting survey {SurveyId} for user {TelegramId} via callback",
-                surveyId,
+                "Starting survey {SurveyCode} for user {TelegramId} via callback",
+                surveyCode,
                 callbackQuery.From.Id);
 
             // Get the survey command handler
@@ -359,7 +361,7 @@ public class UpdateHandler : IUpdateHandler
                 if (messageObject != null)
                 {
                     // Modify the text property
-                    messageObject["text"] = $"/survey {surveyId}";
+                    messageObject["text"] = $"/survey {surveyCode}";
 
                     // CRITICAL FIX: Update the 'from' field to use the callback query sender (real user)
                     // instead of the original message sender (bot), otherwise state gets set for wrong user

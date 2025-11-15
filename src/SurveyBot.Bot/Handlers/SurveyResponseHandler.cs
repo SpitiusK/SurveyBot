@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using AutoMapper;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Bot.Configuration;
 using SurveyBot.Bot.Interfaces;
@@ -7,6 +8,7 @@ using SurveyBot.Bot.Models;
 using SurveyBot.Bot.Services;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.DTOs.Survey;
+using SurveyBot.Core.Interfaces;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 
@@ -21,6 +23,8 @@ public class SurveyResponseHandler
     private readonly IBotService _botService;
     private readonly IConversationStateManager _stateManager;
     private readonly IEnumerable<IQuestionHandler> _questionHandlers;
+    private readonly ISurveyRepository _surveyRepository;
+    private readonly IMapper _mapper;
     private readonly HttpClient _httpClient;
     private readonly BotConfiguration _configuration;
     private readonly BotPerformanceMonitor _performanceMonitor;
@@ -31,6 +35,8 @@ public class SurveyResponseHandler
         IBotService botService,
         IConversationStateManager stateManager,
         IEnumerable<IQuestionHandler> questionHandlers,
+        ISurveyRepository surveyRepository,
+        IMapper mapper,
         HttpClient httpClient,
         Microsoft.Extensions.Options.IOptions<BotConfiguration> configuration,
         BotPerformanceMonitor performanceMonitor,
@@ -40,6 +46,8 @@ public class SurveyResponseHandler
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
         _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
         _questionHandlers = questionHandlers ?? throw new ArgumentNullException(nameof(questionHandlers));
+        _surveyRepository = surveyRepository ?? throw new ArgumentNullException(nameof(surveyRepository));
+        _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _configuration = configuration?.Value ?? throw new ArgumentNullException(nameof(configuration));
         _performanceMonitor = performanceMonitor ?? throw new ArgumentNullException(nameof(performanceMonitor));
@@ -310,19 +318,17 @@ public class SurveyResponseHandler
                     {
                         try
                         {
-                            var response = await _httpClient.GetAsync($"/api/surveys/{surveyId}", cancellationToken);
+                            // Fetch from repository instead of HTTP API
+                            var survey = await _surveyRepository.GetByIdWithQuestionsAsync(surveyId);
 
-                            if (!response.IsSuccessStatusCode)
+                            if (survey == null)
                             {
-                                _logger.LogWarning(
-                                    "Failed to fetch survey {SurveyId}: {StatusCode}",
-                                    surveyId,
-                                    response.StatusCode);
+                                _logger.LogWarning("Survey {SurveyId} not found", surveyId);
                                 return null;
                             }
 
-                            var apiResponse = await response.Content.ReadFromJsonAsync<SurveyBot.Bot.Models.ApiResponse<SurveyDto>>(cancellationToken);
-                            return apiResponse?.Data;
+                            // Map entity to DTO
+                            return _mapper.Map<SurveyDto>(survey);
                         }
                         catch (Exception ex)
                         {

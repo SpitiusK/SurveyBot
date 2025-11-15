@@ -213,7 +213,7 @@ public class SurveysCommandHandler : ICommandHandler
             {
                 InlineKeyboardButton.WithCallbackData(
                     $"📋 {buttonText}",
-                    $"survey:take:{survey.Id}")
+                    $"survey:take:{survey.Code}")
             });
         }
 
