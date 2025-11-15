@@ -6,15 +6,20 @@ const api: AxiosInstance = axios.create({
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true', // Bypass ngrok warning page
   },
 });
 
-// Request interceptor - Add auth token
+// Request interceptor - Add auth token and ngrok bypass header
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('authToken');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    // Ensure ngrok bypass header is always present
+    if (config.headers) {
+      config.headers['ngrok-skip-browser-warning'] = 'true';
     }
     return config;
   },
@@ -77,6 +82,7 @@ api.interceptors.response.use(
             {
               headers: {
                 Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+                'ngrok-skip-browser-warning': 'true', // Bypass ngrok warning page
               },
             }
           );
