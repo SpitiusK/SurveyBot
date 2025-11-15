@@ -219,6 +219,18 @@ public class UpdateHandler : IUpdateHandler
                         return await HandleCancelCallbackAsync(callbackQuery, cancellationToken);
                     }
 
+                    // Check if callback is an answer to a question
+                    // - Single choice: answer_q{questionId}_opt{optionIndex}
+                    // - Multiple choice: toggle_q{questionId}_opt{optionIndex} or done_q{questionId}
+                    // - Rating: rating_q{questionId}_r{rating}
+                    if (callbackQuery.Data.StartsWith("answer_") ||
+                        callbackQuery.Data.StartsWith("toggle_") ||
+                        callbackQuery.Data.StartsWith("done_") ||
+                        callbackQuery.Data.StartsWith("rating_"))
+                    {
+                        return await _surveyResponseHandler.HandleCallbackResponseAsync(callbackQuery, cancellationToken);
+                    }
+
                     // Parse callback data
                     var parts = callbackQuery.Data.Split(':');
                     var action = parts.Length > 0 ? parts[0] : string.Empty;
