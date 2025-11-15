@@ -321,7 +321,7 @@ public class SurveyResponseHandler
                                 return null;
                             }
 
-                            var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<SurveyDto>>(cancellationToken);
+                            var apiResponse = await response.Content.ReadFromJsonAsync<SurveyBot.Bot.Models.ApiResponse<SurveyDto>>(cancellationToken);
                             return apiResponse?.Data;
                         }
                         catch (Exception ex)
