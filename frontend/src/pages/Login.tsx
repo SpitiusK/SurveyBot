@@ -44,6 +44,9 @@ const Login: React.FC = () => {
     },
   });
 
+  // Debug: Log API Base URL
+  console.log('API Base URL:', import.meta.env.VITE_API_BASE_URL);
+
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
