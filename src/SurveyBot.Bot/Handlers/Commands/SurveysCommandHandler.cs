@@ -50,6 +50,15 @@ public class SurveysCommandHandler : ICommandHandler
                 "Processing /surveys command from user {TelegramId}",
                 telegramId);
 
+            // Parse page number from command (default: 0)
+            var parts = message.Text?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+            var pageNumber = 0;
+
+            if (parts.Length > 1 && int.TryParse(parts[1], out var page) && page >= 0)
+            {
+                pageNumber = page;
+            }
+
             // Get all active surveys
             var activeSurveys = (await _surveyRepository.GetActiveSurveysAsync()).ToList();
 
@@ -64,7 +73,7 @@ public class SurveysCommandHandler : ICommandHandler
             }
             else
             {
-                await SendSurveysListMessage(chatId, activeSurveys, page: 0, cancellationToken);
+                await SendSurveysListMessage(chatId, activeSurveys, page: pageNumber, cancellationToken);
             }
 
             _logger.LogInformation(

@@ -193,8 +193,9 @@ public class UpdateHandler : IUpdateHandler
                     {
                         "cmd" => await HandleCallbackCommandAsync(callbackQuery, parts, cancellationToken),
                         "survey" => await HandleSurveyCallbackAsync(callbackQuery, parts, cancellationToken),
+                        "surveys" => await HandleSurveysCallbackAsync(callbackQuery, parts, cancellationToken), // Pagination and noop
                         "action" => await HandleActionCallbackAsync(callbackQuery, parts, cancellationToken),
-                        "listsurveys" => await HandleActionCallbackAsync(callbackQuery, parts, cancellationToken), // Pagination
+                        "listsurveys" => await HandleActionCallbackAsync(callbackQuery, parts, cancellationToken), // Legacy pagination
                         _ => await HandleUnknownCallbackAsync(callbackQuery, cancellationToken)
                     };
 
@@ -279,9 +280,78 @@ public class UpdateHandler : IUpdateHandler
         string[] parts,
         CancellationToken cancellationToken)
     {
-        // Survey actions: view, toggle, etc.
-        // This will be implemented in future tasks
+        // Handle survey:take:{surveyId} callback
+        if (parts.Length >= 3 && parts[1] == "take")
+        {
+            if (!int.TryParse(parts[2], out var surveyId))
+            {
+                _logger.LogWarning("Invalid survey ID in callback: {SurveyId}", parts[2]);
+                await _botService.Client.AnswerCallbackQuery(
+                    callbackQueryId: callbackQuery.Id,
+                    text: "Invalid survey ID",
+                    showAlert: true,
+                    cancellationToken: cancellationToken);
+                return false;
+            }
 
+            _logger.LogInformation(
+                "Starting survey {SurveyId} for user {TelegramId} via callback",
+                surveyId,
+                callbackQuery.From.Id);
+
+            // Get the survey command handler
+            var surveyHandler = _commandRouter.GetAllHandlers()
+                .FirstOrDefault(h => h.Command.Equals("survey", StringComparison.OrdinalIgnoreCase));
+
+            if (surveyHandler == null)
+            {
+                _logger.LogError("Survey command handler not found");
+                await _botService.Client.AnswerCallbackQuery(
+                    callbackQueryId: callbackQuery.Id,
+                    text: "Survey handler not available",
+                    showAlert: true,
+                    cancellationToken: cancellationToken);
+                return false;
+            }
+
+            // Use JSON serialization to create a modified message with the survey command
+            var originalMessage = callbackQuery.Message!;
+            try
+            {
+                var messageJson = JsonConvert.SerializeObject(originalMessage);
+                var messageObject = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(messageJson);
+
+                if (messageObject != null)
+                {
+                    // Modify the text property
+                    messageObject["text"] = $"/survey {surveyId}";
+
+                    // Deserialize back to Message
+                    var modifiedMessage = messageObject.ToObject<Message>();
+
+                    if (modifiedMessage != null)
+                    {
+                        // Execute the handler with the modified message
+                        await surveyHandler.HandleAsync(modifiedMessage, cancellationToken);
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create modified message for survey callback");
+                await _botService.Client.AnswerCallbackQuery(
+                    callbackQueryId: callbackQuery.Id,
+                    text: "Failed to start survey",
+                    showAlert: true,
+                    cancellationToken: cancellationToken);
+                return false;
+            }
+
+            return false;
+        }
+
+        // Other survey actions not yet implemented
         _logger.LogInformation(
             "Survey callback not yet implemented: {CallbackData}",
             callbackQuery.Data);
@@ -293,6 +363,84 @@ public class UpdateHandler : IUpdateHandler
             cancellationToken: cancellationToken);
 
         return true;
+    }
+
+    private async Task<bool> HandleSurveysCallbackAsync(
+        CallbackQuery callbackQuery,
+        string[] parts,
+        CancellationToken cancellationToken)
+    {
+        // Handle surveys:page:{pageNumber} callback
+        if (parts.Length >= 3 && parts[1] == "page")
+        {
+            if (!int.TryParse(parts[2], out var pageNumber))
+            {
+                _logger.LogWarning("Invalid page number in callback: {PageNumber}", parts[2]);
+                await _botService.Client.AnswerCallbackQuery(
+                    callbackQueryId: callbackQuery.Id,
+                    text: "Invalid page number",
+                    showAlert: true,
+                    cancellationToken: cancellationToken);
+                return false;
+            }
+
+            _logger.LogInformation(
+                "Processing surveys pagination callback: page {Page}",
+                pageNumber);
+
+            // Get the surveys command handler
+            var surveysHandler = _commandRouter.GetAllHandlers()
+                .FirstOrDefault(h => h.Command.Equals("surveys", StringComparison.OrdinalIgnoreCase));
+
+            if (surveysHandler == null)
+            {
+                _logger.LogError("Surveys command handler not found");
+                return false;
+            }
+
+            // Use JSON serialization to create a modified message with page parameter
+            var originalMessage = callbackQuery.Message!;
+            try
+            {
+                var messageJson = JsonConvert.SerializeObject(originalMessage);
+                var messageObject = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(messageJson);
+
+                if (messageObject != null)
+                {
+                    // Modify the text property to include page number
+                    messageObject["text"] = $"/surveys {pageNumber}";
+
+                    // Deserialize back to Message
+                    var modifiedMessage = messageObject.ToObject<Message>();
+
+                    if (modifiedMessage != null)
+                    {
+                        // Execute the handler with the modified message
+                        await surveysHandler.HandleAsync(modifiedMessage, cancellationToken);
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to create modified message for pagination");
+            }
+
+            return false;
+        }
+
+        // Handle surveys:noop callback (page indicator button - do nothing)
+        if (parts.Length >= 2 && parts[1] == "noop")
+        {
+            // Just answer the callback, don't do anything
+            await _botService.Client.AnswerCallbackQuery(
+                callbackQueryId: callbackQuery.Id,
+                cancellationToken: cancellationToken);
+            return true;
+        }
+
+        _logger.LogWarning("Unknown surveys callback: {CallbackData}", callbackQuery.Data);
+        return false;
     }
 
     private async Task<bool> HandleActionCallbackAsync(
