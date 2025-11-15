@@ -67,7 +67,7 @@ public class AuthController : ControllerBase
 
             var result = await _authService.LoginAsync(request);
 
-            _logger.LogInformation("Login successful for user ID: {UserId}", result.UserId);
+            _logger.LogInformation("Login successful for user ID: {UserId}", result.User.Id);
 
             return Ok(ApiResponse<LoginResponseDto>.Ok(result, "Login successful"));
         }

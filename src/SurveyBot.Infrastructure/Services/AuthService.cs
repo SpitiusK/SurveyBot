@@ -57,12 +57,20 @@ public class AuthService : IAuthService
 
         return new LoginResponseDto
         {
-            AccessToken = accessToken,
-            RefreshToken = refreshToken,
+            Token = accessToken,
+            User = new Core.DTOs.User.UserDto
+            {
+                Id = user.Id,
+                TelegramId = user.TelegramId,
+                Username = user.Username,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                CreatedAt = user.CreatedAt,
+                UpdatedAt = user.UpdatedAt,
+                LastLoginAt = user.LastLoginAt
+            },
             ExpiresAt = expiresAt,
-            UserId = user.Id,
-            TelegramId = user.TelegramId,
-            Username = user.Username
+            RefreshToken = refreshToken
         };
     }
 

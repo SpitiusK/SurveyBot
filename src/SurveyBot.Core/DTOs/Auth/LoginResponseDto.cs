@@ -1,3 +1,5 @@
+using SurveyBot.Core.DTOs.User;
+
 namespace SurveyBot.Core.DTOs.Auth;
 
 /// <summary>
@@ -8,12 +10,12 @@ public class LoginResponseDto
     /// <summary>
     /// Gets or sets the JWT access token.
     /// </summary>
-    public string AccessToken { get; set; } = string.Empty;
+    public string Token { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the refresh token (optional for MVP).
+    /// Gets or sets the user information.
     /// </summary>
-    public string? RefreshToken { get; set; }
+    public UserDto User { get; set; } = null!;
 
     /// <summary>
     /// Gets or sets the token expiration time in UTC.
@@ -21,17 +23,7 @@ public class LoginResponseDto
     public DateTime ExpiresAt { get; set; }
 
     /// <summary>
-    /// Gets or sets the user ID.
+    /// Gets or sets the refresh token (optional for MVP).
     /// </summary>
-    public int UserId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the Telegram ID.
-    /// </summary>
-    public long TelegramId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the username.
-    /// </summary>
-    public string? Username { get; set; }
+    public string? RefreshToken { get; set; }
 }
