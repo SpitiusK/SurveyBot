@@ -375,19 +375,22 @@ public class SurveyResponseHandler
             // Parse answer JSON to extract the appropriate field based on answer structure
             var answer = JsonSerializer.Deserialize<JsonElement>(answerJson);
 
-            // Create submit DTO with appropriate fields
+            // Create submit DTO with the correct structure (wrapped in "answer" property)
             var submitDto = new
             {
-                questionId = questionId,
-                answerText = answer.TryGetProperty("text", out var text) ? text.GetString() : null,
-                selectedOptions = answer.TryGetProperty("selectedOptions", out var options)
-                    ? options.EnumerateArray().Select(e => e.GetString()).ToList()
-                    : (answer.TryGetProperty("selectedOption", out var option)
-                        ? new List<string?> { option.GetString() }
-                        : null),
-                ratingValue = answer.TryGetProperty("rating", out var rating) && rating.ValueKind != JsonValueKind.Null
-                    ? rating.GetInt32()
-                    : (int?)null
+                answer = new
+                {
+                    questionId = questionId,
+                    answerText = answer.TryGetProperty("text", out var text) ? text.GetString() : null,
+                    selectedOptions = answer.TryGetProperty("selectedOptions", out var options)
+                        ? options.EnumerateArray().Select(e => e.GetString()).ToList()
+                        : (answer.TryGetProperty("selectedOption", out var option)
+                            ? new List<string?> { option.GetString() }
+                            : null),
+                    ratingValue = answer.TryGetProperty("rating", out var rating) && rating.ValueKind != JsonValueKind.Null
+                        ? rating.GetInt32()
+                        : (int?)null
+                }
             };
 
             var response = await _httpClient.PostAsJsonAsync(
