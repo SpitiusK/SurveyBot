@@ -36,6 +36,18 @@ try
     // Add Controllers
     builder.Services.AddControllers();
 
+    // Configure CORS for frontend access
+    builder.Services.AddCors(options =>
+    {
+        options.AddDefaultPolicy(policy =>
+        {
+            policy.WithOrigins("http://localhost:3000", "http://localhost:5173") // Vite default ports
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        });
+    });
+
     // Configure AutoMapper
     builder.Services.AddAutoMapper(typeof(Program).Assembly);
 
@@ -309,6 +321,9 @@ try
             options.ShowExtensions();
         });
     }
+
+    // Enable CORS (must be before UseAuthentication)
+    app.UseCors();
 
     app.UseHttpsRedirection();
 
