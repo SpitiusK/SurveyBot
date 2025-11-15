@@ -142,10 +142,29 @@ public class UpdateHandler : IUpdateHandler
 
         // Check if user is in an active survey
         var state = await _stateManager.GetStateAsync(userId);
+
+        // Enhanced logging to debug state issues
+        if (state == null)
+        {
+            _logger.LogDebug("User {UserId} has no state", userId);
+        }
+        else
+        {
+            _logger.LogDebug(
+                "User {UserId} state - SurveyId: {SurveyId}, QuestionIndex: {QuestionIndex}, State: {State}",
+                userId,
+                state.CurrentSurveyId,
+                state.CurrentQuestionIndex,
+                state.CurrentState);
+        }
+
         if (state != null && state.CurrentSurveyId.HasValue && state.CurrentQuestionIndex.HasValue)
         {
             // User is in active survey - route to survey response handler
-            _logger.LogDebug("User {UserId} is in active survey, routing to response handler", userId);
+            _logger.LogInformation(
+                "User {UserId} is in active survey {SurveyId}, routing to response handler",
+                userId,
+                state.CurrentSurveyId);
             return await _surveyResponseHandler.HandleMessageResponseAsync(message, cancellationToken);
         }
 
