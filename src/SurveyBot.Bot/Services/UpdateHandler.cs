@@ -361,6 +361,11 @@ public class UpdateHandler : IUpdateHandler
                     // Modify the text property
                     messageObject["text"] = $"/survey {surveyId}";
 
+                    // CRITICAL FIX: Update the 'from' field to use the callback query sender (real user)
+                    // instead of the original message sender (bot), otherwise state gets set for wrong user
+                    var fromJson = JsonConvert.SerializeObject(callbackQuery.From);
+                    messageObject["from"] = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(fromJson);
+
                     // Deserialize back to Message
                     var modifiedMessage = messageObject.ToObject<Message>();
 
