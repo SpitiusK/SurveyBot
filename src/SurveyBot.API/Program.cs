@@ -41,7 +41,30 @@ try
     {
         options.AddDefaultPolicy(policy =>
         {
-            policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "5167d6c0729b.ngrok-free.app") // Vite default ports
+            policy.WithOrigins(
+                      "http://localhost:3000",                  // Local frontend (React dev server)
+                      "http://localhost:5173",                  // Local frontend (Vite)
+                      "https://5167d6c0729b.ngrok-free.app",    // ngrok frontend URL
+                      "https://792c129c7d0c.ngrok-free.app"     // ngrok backend URL
+                   )
+                  .SetIsOriginAllowedToAllowWildcardSubdomains() // Allow ngrok subdomains
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        });
+
+        // Add permissive policy for ngrok specifically (allows any ngrok URL dynamically)
+        options.AddPolicy("NgrokPolicy", policy =>
+        {
+            policy.SetIsOriginAllowed(origin =>
+                   {
+                       // Allow all ngrok URLs
+                       return origin.Contains("ngrok-free.app") ||
+                              origin.Contains("ngrok.app") ||
+                              origin.Contains("ngrok.io") ||
+                              origin == "http://localhost:3000" ||
+                              origin == "http://localhost:5173";
+                   })
                   .AllowAnyHeader()
                   .AllowAnyMethod()
                   .AllowCredentials();
