@@ -45,7 +45,7 @@ try
                       "http://localhost:3000",                  // Local frontend (React dev server)
                       "http://localhost:5173",                  // Local frontend (Vite)
                       "https://5167d6c0729b.ngrok-free.app",    // ngrok frontend URL
-                      "https://792c129c7d0c.ngrok-free.app"     // ngrok backend URL
+                      "https://3c6dfc99c860.ngrok-free.app"     // ngrok backend URL
                    )
                   .SetIsOriginAllowedToAllowWildcardSubdomains() // Allow ngrok subdomains
                   .AllowAnyHeader()
