@@ -52,6 +52,9 @@ public static class BotServiceExtensions
         // Register navigation handler (for back/skip navigation)
         services.AddScoped<NavigationHandler>();
 
+        // Register survey response handler (for processing survey answers)
+        services.AddScoped<SurveyResponseHandler>();
+
         // Register cancel callback handler
         services.AddScoped<CancelCallbackHandler>();
 

@@ -19,6 +19,8 @@ public class UpdateHandler : IUpdateHandler
     private readonly CommandRouter _commandRouter;
     private readonly NavigationHandler _navigationHandler;
     private readonly CancelCallbackHandler _cancelCallbackHandler;
+    private readonly SurveyResponseHandler _surveyResponseHandler;
+    private readonly IConversationStateManager _stateManager;
     private readonly BotPerformanceMonitor _performanceMonitor;
     private readonly ILogger<UpdateHandler> _logger;
 
@@ -27,6 +29,8 @@ public class UpdateHandler : IUpdateHandler
         CommandRouter commandRouter,
         NavigationHandler navigationHandler,
         CancelCallbackHandler cancelCallbackHandler,
+        SurveyResponseHandler surveyResponseHandler,
+        IConversationStateManager stateManager,
         BotPerformanceMonitor performanceMonitor,
         ILogger<UpdateHandler> logger)
     {
@@ -34,6 +38,8 @@ public class UpdateHandler : IUpdateHandler
         _commandRouter = commandRouter ?? throw new ArgumentNullException(nameof(commandRouter));
         _navigationHandler = navigationHandler ?? throw new ArgumentNullException(nameof(navigationHandler));
         _cancelCallbackHandler = cancelCallbackHandler ?? throw new ArgumentNullException(nameof(cancelCallbackHandler));
+        _surveyResponseHandler = surveyResponseHandler ?? throw new ArgumentNullException(nameof(surveyResponseHandler));
+        _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
         _performanceMonitor = performanceMonitor ?? throw new ArgumentNullException(nameof(performanceMonitor));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -124,16 +130,26 @@ public class UpdateHandler : IUpdateHandler
 
     private async Task<bool> HandleTextMessageAsync(Message message, CancellationToken cancellationToken)
     {
-        // For now, we'll just acknowledge the message
-        // In the future, this will handle survey responses and other interactions
+        if (message.From == null)
+            return false;
+
+        var userId = message.From.Id;
 
         _logger.LogDebug(
             "Received text message from user {TelegramId}: {Text}",
-            message.From?.Id,
+            userId,
             message.Text);
 
-        // We don't handle regular messages yet - they'll be used for survey responses
-        // Send a helpful message
+        // Check if user is in an active survey
+        var state = await _stateManager.GetStateAsync(userId);
+        if (state != null && state.CurrentSurveyId.HasValue && state.CurrentQuestionIndex.HasValue)
+        {
+            // User is in active survey - route to survey response handler
+            _logger.LogDebug("User {UserId} is in active survey, routing to response handler", userId);
+            return await _surveyResponseHandler.HandleMessageResponseAsync(message, cancellationToken);
+        }
+
+        // Not in a survey - send helpful message
         var helpText = "I understand commands like /start and /help. " +
                       "To interact with surveys, use the inline keyboard buttons.";
 
