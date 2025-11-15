@@ -13,6 +13,11 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
+    allowedHosts: [
+      'localhost',
+      '127.0.0.1',
+      '5167d6c0729b.ngrok-free.app' // ваш текущий ngrok URL
+    ],
     proxy: {
       '/api': {
         target: 'http://localhost:5000',

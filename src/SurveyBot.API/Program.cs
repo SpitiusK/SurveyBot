@@ -41,7 +41,7 @@ try
     {
         options.AddDefaultPolicy(policy =>
         {
-            policy.WithOrigins("http://localhost:3000", "http://localhost:5173") // Vite default ports
+            policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "5167d6c0729b.ngrok-free.app") // Vite default ports
                   .AllowAnyHeader()
                   .AllowAnyMethod()
                   .AllowCredentials();
