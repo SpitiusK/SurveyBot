@@ -33,12 +33,11 @@ const ChoiceChart = ({ questionStat, question: _question, isSingleChoice }: Choi
   }
 
   // Prepare data for charts
-  const chartData = Object.entries(choiceDistribution).map(([option, count]) => ({
-    name: option,
-    value: count,
-    percentage: questionStat.totalAnswers > 0
-      ? ((count / questionStat.totalAnswers) * 100).toFixed(1)
-      : '0',
+  // choiceDistribution is Record<string, { option, count, percentage }>
+  const chartData = Object.values(choiceDistribution).map((choice) => ({
+    name: choice.option,
+    value: choice.count,
+    percentage: choice.percentage.toFixed(1),
   }));
 
   // Sort by value descending

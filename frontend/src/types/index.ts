@@ -128,12 +128,18 @@ export interface Response {
 }
 
 // Statistics Types
+export interface ChoiceStatistics {
+  option: string;
+  count: number;
+  percentage: number;
+}
+
 export interface QuestionStatistics {
   questionId: number;
   questionText: string;
   questionType: QuestionType;
   totalAnswers: number;
-  choiceDistribution?: Record<string, number>;
+  choiceDistribution?: Record<string, ChoiceStatistics>;
   averageRating?: number;
   textAnswers?: string[];
 }
