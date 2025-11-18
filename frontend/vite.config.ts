@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { getAllowedHosts } from './src/config/ngrok.config'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -13,12 +14,8 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
-    allowedHosts: [
-      'localhost',
-      '127.0.0.1',
-      '5167d6c0729b.ngrok-free.app', // Frontend ngrok URL
-      '3c6dfc99c860.ngrok-free.app'  // Backend ngrok URL
-    ],
+    // Dynamically load allowed hosts from ngrok.config.ts
+    allowedHosts: getAllowedHosts(),
     // Proxy is optional when using ngrok API URL directly
     // Uncomment below if you want to use localhost backend instead
     // proxy: {

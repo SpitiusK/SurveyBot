@@ -1,85 +1,41 @@
-# SurveyBot Admin Panel - Frontend Documentation
+# SurveyBot Frontend - React Admin Panel Documentation
 
-**Last Updated**: 2025-11-12
-**Version**: 1.0.0
-**Framework**: React 19.2.0 + TypeScript + Vite 7.2.2
+[← Back to Main Documentation](../CLAUDE.md)
+
+**Layer**: Presentation Layer (React SPA)
+**Framework**: React 19.2.0 + TypeScript 5.9.3 + Vite 7.2.2
 **UI Library**: Material-UI 6.5.0
+**Last Updated**: 2025-11-18
 
 ---
 
-## Table of Contents
-- [Project Overview](#project-overview)
-- [Technology Stack](#technology-stack)
-- [Project Structure](#project-structure)
-- [Setup & Installation](#setup--installation)
-- [Development Workflow](#development-workflow)
-- [API Integration](#api-integration)
-- [Core Features](#core-features)
-- [Components Architecture](#components-architecture)
-- [State Management](#state-management)
-- [Authentication](#authentication)
-- [Forms & Validation](#forms--validation)
-- [Styling](#styling)
-- [TypeScript Configuration](#typescript-configuration)
-- [Build & Deployment](#build--deployment)
-- [Development Tools](#development-tools)
-- [Troubleshooting](#troubleshooting)
+## Overview
 
----
+The SurveyBot Frontend is a React-based Single Page Application (SPA) providing a comprehensive web interface for survey management. It communicates with the SurveyBot.API backend via REST API and serves as an alternative to the Telegram bot interface.
 
-## Project Overview
+### Purpose
+- Web-based survey creation and management
+- Response analytics and visualization
+- Dashboard with overview metrics
+- Multi-step survey builder with drag-and-drop
 
-**SurveyBot Admin Panel** is a React-based web application that provides a comprehensive user interface for managing surveys created via the SurveyBot Telegram bot. The application communicates with the SurveyBot.API backend to enable survey creation, management, response viewing, and analytics.
+### Technology Stack
 
-### Key Capabilities
-- **Survey Management**: Create, edit, activate/deactivate, and delete surveys
-- **Interactive Survey Builder**: Multi-step wizard with drag-and-drop question reordering
-- **Response Analytics**: View responses, statistics, and export to CSV
-- **Dashboard**: Overview metrics and recent activity
-- **Authentication**: Telegram-based login with JWT tokens
-- **Responsive Design**: Works on desktop, tablet, and mobile devices
-
-### Target Users
-- Survey creators who need a web interface (alternative to Telegram bot)
-- Administrators managing multiple surveys
-- Analysts reviewing survey responses and statistics
-
----
-
-## Technology Stack
-
-### Core Technologies
-- **React 19.2.0** - UI library with latest features (use transitions, concurrent rendering)
-- **TypeScript 5.9.3** - Type-safe development
-- **Vite 7.2.2** - Build tool (fast HMR, optimized builds)
-- **React Router DOM 7.9.5** - Client-side routing with data loading
-
-### UI & Styling
-- **Material-UI (MUI) 6.5.0** - Component library with theming
-- **@emotion/react & @emotion/styled** - CSS-in-JS styling
-- **Tailwind CSS 4.1.17** - Utility-first CSS (preflight disabled to avoid MUI conflicts)
-- **@mui/icons-material 6.5.0** - Material Design icons
-
-### Forms & Validation
-- **React Hook Form 7.66.0** - Form state management with minimal re-renders
-- **Yup 1.7.1** - Schema validation
-- **@hookform/resolvers 5.2.2** - Yup integration for React Hook Form
-
-### Data & Visualization
-- **Axios 1.13.2** - HTTP client with interceptors
-- **Recharts 3.4.1** - Chart library for statistics visualization
-- **date-fns 4.1.0** - Date formatting and manipulation
-
-### Drag & Drop
-- **@dnd-kit/core 6.3.1** - Modern drag-and-drop toolkit
-- **@dnd-kit/sortable 10.0.0** - Sortable list implementation
-- **@dnd-kit/utilities 3.2.2** - Utility functions
-
-### Development Tools
-- **ESLint 9.39.1** - Code linting with TypeScript support
-- **TypeScript ESLint 8.46.3** - TypeScript-specific linting rules
-- **eslint-plugin-react-hooks 5.2.0** - React Hooks linting
-- **autoprefixer 10.4.22** - CSS vendor prefixing
+| Category | Technology | Version | Purpose |
+|----------|-----------|---------|---------|
+| **Core** | React | 19.2.0 | UI framework |
+| | TypeScript | 5.9.3 | Type safety |
+| | Vite | 7.2.2 | Build tool & dev server |
+| | React Router DOM | 7.9.5 | Client-side routing |
+| **UI** | Material-UI | 6.5.0 | Component library |
+| | Emotion | 11.14.0 | CSS-in-JS |
+| | Tailwind CSS | 4.1.17 | Utility classes |
+| **Forms** | React Hook Form | 7.66.0 | Form state management |
+| | Yup | 1.7.1 | Validation schemas |
+| **Data** | Axios | 1.13.2 | HTTP client |
+| | Recharts | 3.4.1 | Charts & visualization |
+| | date-fns | 4.1.0 | Date utilities |
+| **DnD** | @dnd-kit | 6.3.1 | Drag & drop |
 
 ---
 
@@ -87,89 +43,82 @@
 
 ```
 frontend/
-├── public/                          # Static assets
-│   └── vite.svg                     # Favicon
 ├── src/
-│   ├── assets/                      # Images, fonts, etc.
-│   ├── components/                  # Reusable UI components
-│   │   ├── Statistics/              # Statistics-related components
-│   │   ├── SurveyBuilder/           # Survey creation wizard
+│   ├── components/              # Reusable UI components
+│   │   ├── Statistics/          # Statistics visualizations
+│   │   │   ├── ChoiceChart.tsx
+│   │   │   ├── OverviewMetrics.tsx
+│   │   │   ├── QuestionStatistics.tsx
+│   │   │   └── ResponsesTable.tsx
+│   │   ├── SurveyBuilder/       # Survey creation wizard
+│   │   │   ├── BasicInfoStep.tsx
+│   │   │   ├── QuestionsStep.tsx
+│   │   │   ├── ReviewStep.tsx
+│   │   │   ├── QuestionEditor.tsx
+│   │   │   └── QuestionCard.tsx
 │   │   ├── Breadcrumb.tsx
 │   │   ├── ConfirmDialog.tsx
+│   │   ├── LoadingSpinner.tsx
 │   │   ├── Navigation.tsx
-│   │   ├── Sidebar.tsx
-│   │   └── index.ts
-│   ├── context/                     # React Context providers
-│   │   └── AuthContext.tsx
-│   ├── hooks/                       # Custom React hooks
+│   │   ├── ProtectedRoute.tsx
+│   │   └── Sidebar.tsx
+│   ├── context/                 # React Context providers
+│   │   └── AuthContext.tsx      # Authentication state
+│   ├── hooks/                   # Custom React hooks
 │   │   └── useAuth.ts
-│   ├── layouts/                     # Layout components
-│   │   ├── AppShell.tsx
-│   │   ├── AuthLayout.tsx
+│   ├── layouts/                 # Layout components
+│   │   ├── AppShell.tsx         # Main app wrapper
+│   │   ├── AuthLayout.tsx       # Auth pages wrapper
 │   │   └── DashboardLayout.tsx
-│   ├── pages/                       # Page components (routes)
+│   ├── pages/                   # Route components
 │   │   ├── Dashboard.tsx
 │   │   ├── Login.tsx
 │   │   ├── SurveyList.tsx
 │   │   ├── SurveyBuilder.tsx
+│   │   ├── SurveyEdit.tsx
 │   │   ├── SurveyStatistics.tsx
 │   │   └── NotFound.tsx
-│   ├── routes/                      # Router configuration
+│   ├── routes/                  # Router configuration
 │   │   └── index.tsx
-│   ├── schemas/                     # Yup validation schemas
+│   ├── schemas/                 # Yup validation schemas
 │   │   ├── authSchemas.ts
 │   │   ├── surveySchemas.ts
 │   │   └── questionSchemas.ts
-│   ├── services/                    # API service layer
-│   │   ├── api.ts
+│   ├── services/                # API service layer
+│   │   ├── api.ts               # Axios instance
 │   │   ├── authService.ts
 │   │   ├── surveyService.ts
 │   │   └── questionService.ts
-│   ├── theme/                       # MUI theme configuration
+│   ├── theme/                   # MUI theme
 │   │   ├── theme.ts
-│   │   ├── ThemeProvider.tsx
-│   │   └── globalStyles.tsx
-│   ├── types/                       # TypeScript type definitions
+│   │   └── ThemeProvider.tsx
+│   ├── types/                   # TypeScript types
 │   │   └── index.ts
-│   ├── App.tsx
-│   ├── main.tsx
-│   └── index.css
-├── docs/                            # Documentation files
-├── .env.development                 # Development environment variables
-├── .env.example                     # Environment template
-├── .gitignore
-├── eslint.config.js
-├── index.html
+│   └── App.tsx
+├── .env.development             # Dev environment config
+├── .env.example                 # Environment template
 ├── package.json
 ├── tsconfig.json
-├── vite.config.ts
-└── README.md
+└── vite.config.ts
 ```
 
 ---
 
-## Setup & Installation
+## Quick Start
 
 ### Prerequisites
+- Node.js 18+ and npm 9+
+- Backend API running (default: http://localhost:5000)
 
-- **Node.js**: 18.x or higher (LTS recommended)
-- **npm**: 9.x or higher (comes with Node.js)
-- **Backend API**: Running at `http://localhost:5000` (or configured URL)
+### Setup Steps
 
-### Installation Steps
-
-1. **Navigate to frontend directory**:
+1. **Install dependencies**:
    ```bash
    cd frontend
-   ```
-
-2. **Install dependencies**:
-   ```bash
    npm install
    ```
 
-3. **Configure environment variables**:
-   Copy `.env.example` to `.env.development`:
+2. **Configure environment**:
    ```bash
    cp .env.example .env.development
    ```
@@ -178,409 +127,681 @@ frontend/
    ```env
    VITE_API_BASE_URL=http://localhost:5000/api
    VITE_APP_NAME=SurveyBot Admin Panel
-   VITE_APP_VERSION=1.0.0
    ```
 
-4. **Verify backend is running**:
-   Ensure the SurveyBot.API backend is running at the configured URL.
-
-5. **Start development server**:
+3. **Start dev server**:
    ```bash
    npm run dev
    ```
 
-6. **Access the application**:
-   Open browser to `http://localhost:3000`
+4. **Access app**: http://localhost:3000
 
----
+### Available Scripts
 
-## Development Workflow
-
-### Starting Development Server
-
-```bash
-npm run dev
-```
-
-Features: Hot Module Replacement (HMR), auto-reload, port 3000
-
-### Building for Production
-
-```bash
-npm run build
-```
-
-Process:
-1. TypeScript compilation check
-2. Vite optimized build
-3. Output to `dist/` directory
-4. Source maps generated
-
-### Linting
-
-```bash
-npm run lint
-```
-
-Runs ESLint with TypeScript and React Hooks rules.
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev server with HMR |
+| `npm run build` | Build for production → `dist/` |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Run ESLint |
 
 ---
 
 ## API Integration
 
-### API Client Configuration
+### Centralized Configuration (`src/config/ngrok.config.ts`)
 
-**Location**: `src/services/api.ts`
+**Primary configuration file for all API URLs:**
 
-Centralized Axios instance with:
-- Base URL configuration
-- Request/response interceptors
+The `ngrok.config.ts` file centralizes all ngrok and API base URL configuration. Update this **single file** when your ngrok URL changes:
+
+```typescript
+// Update this constant with your ngrok URL
+export const BACKEND_NGROK_URL = 'https://abc123.ngrok-free.app';
+
+// If running frontend on ngrok (optional)
+export const FRONTEND_NGROK_URL = '';
+
+// Get API base URL - automatically checks ngrok config first
+export const getApiBaseUrl = (): string => { ... }
+
+// Get allowed hosts for Vite dev server
+export const getAllowedHosts = (): string[] => { ... }
+```
+
+**All references use this file**:
+- ✅ `src/services/api.ts` - Uses `getApiBaseUrl()`
+- ✅ `vite.config.ts` - Uses `getAllowedHosts()`
+- ✅ Environment detection - Automatically fallback to localhost
+
+**Setup Guide**: See [docs/NGROK_SETUP.md](./docs/NGROK_SETUP.md) for detailed instructions on configuring ngrok.
+
+### Axios Client (`src/services/api.ts`)
+
+Centralized HTTP client with interceptors:
+
+**Features**:
+- Base URL from `getApiBaseUrl()` (uses ngrok.config.ts)
 - Automatic JWT token attachment
 - Token refresh on 401 errors
+- Request queueing during refresh
+- ngrok bypass header for remote access
+- Error handling and logging
 
-### Service Layer
+**Key Configuration**:
+```typescript
+import { getApiBaseUrl } from '@/config/ngrok.config';
 
-All API calls are abstracted into service classes:
+const api = axios.create({
+  baseURL: getApiBaseUrl(), // Uses ngrok.config.ts
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true', // For ngrok access
+  },
+});
+```
 
-#### AuthService
-- `login(dto)` - Login with Telegram credentials
-- `logout()` - Clear tokens
-- `getCurrentUser()` - Get user from localStorage
-- `isAuthenticated()` - Check if user is logged in
+**Request Interceptor**: Adds `Authorization: Bearer <token>` header from localStorage
 
-#### SurveyService
-- `getAllSurveys(params)` - List surveys with pagination
-- `getSurveyById(id)` - Get survey details
-- `createSurvey(dto)` - Create new survey
-- `updateSurvey(id, dto)` - Update survey
-- `deleteSurvey(id)` - Delete survey
-- `activateSurvey(id)` - Activate survey
-- `getSurveyStatistics(id)` - Get statistics
-- `exportSurveyResponses(id)` - Export CSV
+**Response Interceptor**:
+- Handles 401 by refreshing token
+- Queues failed requests during refresh
+- Redirects to login if refresh fails
 
-#### QuestionService
-- `createQuestion(surveyId, dto)` - Add question
-- `updateQuestion(id, dto)` - Update question
-- `deleteQuestion(id)` - Delete question
-- `reorderQuestions(surveyId, questionIds)` - Reorder questions
+### Service Layer Pattern
 
-### CORS Configuration
+All API calls abstracted into service classes:
 
-Vite dev server includes proxy for `/api` requests (no CORS issues during development).
+**Example - SurveyService** (`src/services/surveyService.ts`):
+```typescript
+class SurveyService {
+  async getAllSurveys(params?: SurveyFilterParams): Promise<PagedResult<SurveyListItem>> {
+    const response = await api.get<ApiResponse<PagedResult<SurveyListItem>>>(
+      '/surveys',
+      { params }
+    );
+    return response.data.data!;
+  }
 
----
+  async createSurvey(dto: CreateSurveyDto): Promise<Survey> {
+    const response = await api.post<ApiResponse<Survey>>('/surveys', dto);
+    return response.data.data!;
+  }
 
-## Core Features
+  async getSurveyStatistics(id: number): Promise<SurveyStatistics> {
+    const response = await api.get<ApiResponse<SurveyStatistics>>(
+      `/surveys/${id}/statistics`
+    );
+    return response.data.data!;
+  }
+}
 
-### Dashboard
-Main landing page with:
-- Stats cards (total surveys, responses, active surveys, completion rate)
-- Quick action buttons
-- Recent surveys table
+export default new SurveyService();
+```
 
-### Survey List
-- Search by title
-- Filter by status (active/inactive)
-- Pagination with configurable page size
-- Bulk actions
-
-### Survey Builder (Wizard)
-Multi-step wizard with:
-1. **Basic Info Step** - Title, description, settings
-2. **Questions Step** - Add and reorder questions
-3. **Review Step** - Preview and publish
-
-Features:
-- Drag-and-drop question reordering
-- Auto-save draft to localStorage
-- Real-time preview
-- Multiple question types support
-
-### Survey Statistics
-Comprehensive analytics with:
-- Overview metrics (total, completed, completion rate)
-- Question-level statistics with charts
-- Choice distribution for choice questions
-- Rating distribution for rating questions
-- Text response list
-- Export to CSV
-
-### Authentication
-Telegram-based login with:
-- Form validation
-- Token storage in localStorage
-- Automatic token refresh
-- Protected routes
+**Available Services**:
+- **authService**: Login, logout, token refresh, user info
+- **surveyService**: CRUD operations, statistics, export CSV
+- **questionService**: CRUD, reordering
 
 ---
 
-## Components Architecture
+## Component Architecture
 
-### Component Patterns
+### Component Hierarchy
 
-**Page Components** (`src/pages/`):
-- Top-level route components
-- Handle data fetching
+**Page Components** → **Layout Components** → **Presentational Components**
+
+### Pattern: Page Components
+
+Pages are route-level components that:
+- Fetch data from services
 - Manage page-level state
-- Use service layer for API calls
+- Handle side effects
+- Coordinate child components
 
-**Layout Components** (`src/layouts/`):
-- DashboardLayout - Main app shell
-- AuthLayout - Auth pages wrapper
-- AppShell - Sidebar, header, footer
+**Example** (`pages/SurveyList.tsx`):
+```typescript
+export default function SurveyList() {
+  const [surveys, setSurveys] = useState<SurveyListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 10 });
 
-**Presentational Components** (`src/components/`):
-- Pure display components
+  useEffect(() => {
+    loadSurveys();
+  }, [pagination]);
+
+  const loadSurveys = async () => {
+    try {
+      setLoading(true);
+      const data = await surveyService.getAllSurveys(pagination);
+      setSurveys(data.items);
+    } catch (error) {
+      // Handle error
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <PageContainer title="Surveys">
+      {loading ? <LoadingSpinner /> : <SurveyTable surveys={surveys} />}
+    </PageContainer>
+  );
+}
+```
+
+### Pattern: Presentational Components
+
+Pure components that:
 - Receive data via props
-- No API calls
+- Emit events via callbacks
+- No API calls or side effects
 - Reusable across pages
+
+**Example** (`components/SurveyCard.tsx`):
+```typescript
+interface SurveyCardProps {
+  survey: SurveyListItem;
+  onEdit: (id: number) => void;
+  onDelete: (id: number) => void;
+  onToggleStatus: (id: number) => void;
+}
+
+export default function SurveyCard({
+  survey,
+  onEdit,
+  onDelete,
+  onToggleStatus
+}: SurveyCardProps) {
+  return (
+    <Card>
+      <CardContent>
+        <Typography variant="h6">{survey.title}</Typography>
+        <Chip label={survey.isActive ? 'Active' : 'Inactive'} />
+      </CardContent>
+      <CardActions>
+        <Button onClick={() => onEdit(survey.id)}>Edit</Button>
+        <Button onClick={() => onToggleStatus(survey.id)}>
+          {survey.isActive ? 'Deactivate' : 'Activate'}
+        </Button>
+        <Button onClick={() => onDelete(survey.id)} color="error">Delete</Button>
+      </CardActions>
+    </Card>
+  );
+}
+```
 
 ### Reusable Components Library
 
-| Component | Purpose |
-|-----------|---------|
-| `Breadcrumb` | Navigation breadcrumbs |
-| `ConfirmDialog` | Generic confirmation dialog |
-| `DeleteConfirmDialog` | Delete confirmation |
-| `EmptyState` | Empty state placeholder |
-| `ErrorAlert` | Error display |
-| `LoadingSpinner` | Loading indicator |
-| `PageContainer` | Page wrapper with title |
-| `Sidebar` | Dashboard sidebar |
-| `Navigation` | Navigation menu |
-| `UserMenu` | User dropdown menu |
-| `ProtectedRoute` | Auth route guard |
+| Component | Purpose | Props |
+|-----------|---------|-------|
+| `Breadcrumb` | Navigation breadcrumbs | `items: {label, path}[]` |
+| `ConfirmDialog` | Generic confirmation | `open, title, message, onConfirm, onCancel` |
+| `DeleteConfirmDialog` | Delete confirmation | `open, entityName, onConfirm, onCancel` |
+| `EmptyState` | Empty state placeholder | `title, message, icon, action?` |
+| `ErrorAlert` | Error display | `error: string \| Error, onClose?` |
+| `LoadingSpinner` | Loading indicator | `size?: 'small' \| 'medium' \| 'large'` |
+| `PageContainer` | Page wrapper | `title, children, actions?` |
+| `ProtectedRoute` | Auth guard | `children` |
 
 ---
 
 ## State Management
 
-### Global State (Context API)
+### 1. Global State: AuthContext
 
-#### AuthContext
-Manages user authentication state:
-- `user` - Current user
-- `isAuthenticated` - Auth status
-- `isLoading` - Auth loading state
-- `login(dto)` - Login function
-- `logout()` - Logout function
+**Location**: `src/context/AuthContext.tsx`
 
-#### ThemeContext
-Manages light/dark theme:
-- `mode` - Current theme ('light' | 'dark')
-- `toggleTheme()` - Toggle function
+Manages authentication state across the app using React Context API.
 
-### Local State (useState)
-Component-specific state for form data, loading, errors.
+**Provided Values**:
+```typescript
+interface AuthContextType {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: (dto: LoginDto) => Promise<void>;
+  logout: () => void;
+  refreshAuth: () => Promise<void>;
+}
+```
 
-### Form State (React Hook Form)
-All forms use React Hook Form with Yup validation.
+**Usage**:
+```typescript
+import { useAuth } from '@/hooks/useAuth';
 
-### Server State
-Data fetching with `useEffect` + `useState` pattern.
+function MyComponent() {
+  const { user, isAuthenticated, logout } = useAuth();
+
+  return (
+    <div>
+      {isAuthenticated && <p>Welcome, {user?.firstName}!</p>}
+      <Button onClick={logout}>Logout</Button>
+    </div>
+  );
+}
+```
+
+**Implementation Pattern**:
+- Initializes from localStorage on mount
+- Persists token and user to localStorage
+- Provides login/logout/refresh methods
+- Used by ProtectedRoute for auth checks
+
+### 2. Local Component State
+
+Use `useState` for component-specific state:
+```typescript
+const [surveys, setSurveys] = useState<Survey[]>([]);
+const [loading, setLoading] = useState(false);
+const [error, setError] = useState<string | null>(null);
+```
+
+### 3. Form State: React Hook Form
+
+All forms use React Hook Form with Yup validation:
+```typescript
+const { control, handleSubmit, formState: { errors } } = useForm({
+  resolver: yupResolver(loginSchema),
+  defaultValues: { telegramId: '', password: '' }
+});
+```
 
 ---
 
-## Authentication
+## Authentication Flow
 
-### Authentication Flow
+### Login Process
 
-1. User enters Telegram credentials on login page
-2. Frontend sends `POST /api/auth/login` request
-3. Backend validates and returns JWT token
-4. Frontend stores token in localStorage
-5. AuthContext updates state
-6. User is redirected to dashboard
+1. **User submits login form** (`pages/Login.tsx`)
+2. **Form validation** (Yup schema)
+3. **API call** via `authService.login(dto)`
+4. **Backend validates** credentials, returns JWT token + user
+5. **Store in localStorage**: `authToken`, `user` (JSON)
+6. **Update AuthContext**: `setUser(authData.user)`
+7. **Redirect** to dashboard
 
 ### Token Management
 
 **Storage**: localStorage
-- `authToken` - JWT token
-- `user` - User object JSON
+- `authToken`: JWT token string
+- `user`: User object serialized as JSON
 
-**Refresh**: Automatic on 401 response via response interceptor
+**Automatic Attachment**: Request interceptor adds `Authorization: Bearer <token>` header
 
-**Logout**: Clears localStorage and redirects to login
+**Automatic Refresh**: Response interceptor catches 401 errors:
+```typescript
+// On 401 response
+1. Check if already refreshing → queue request
+2. Call POST /api/auth/refresh with current token
+3. Get new token from response
+4. Update localStorage
+5. Retry original request with new token
+6. If refresh fails → clear auth, redirect to /login
+```
+
+**Request Queueing**: Multiple simultaneous 401s are queued and retried after refresh completes
 
 ### Protected Routes
 
-Routes check authentication via `ProtectedRoute` component. Unauthenticated users are redirected to login.
+**ProtectedRoute Component** (`components/ProtectedRoute.tsx`):
+```typescript
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) return <LoadingSpinner />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+
+  return <>{children}</>;
+}
+```
+
+**Usage in Routes**:
+```typescript
+<Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+  <Route path="/dashboard" element={<Dashboard />} />
+  <Route path="/surveys" element={<SurveyList />} />
+</Route>
+```
 
 ---
 
 ## Forms & Validation
 
-### Validation Library: Yup
+### Validation Library: Yup + React Hook Form
 
-All forms use Yup schema-based validation with React Hook Form integration.
-
-### Validation Schemas
-
-**Location**: `src/schemas/`
-
-Examples:
-- `loginSchema` - Login form validation
-- `basicInfoSchema` - Survey basic info validation
-- `questionSchema` - Question validation
-
-### Form Usage Pattern
-
+**Schema Definition** (`schemas/surveySchemas.ts`):
 ```typescript
-const {
-  control,
-  handleSubmit,
-  formState: { errors, isValid },
-} = useForm({
-  resolver: yupResolver(schema),
-  mode: 'onChange', // Validate on change
+import * as yup from 'yup';
+
+export const basicInfoSchema = yup.object({
+  title: yup.string()
+    .required('Title is required')
+    .min(3, 'Title must be at least 3 characters')
+    .max(500, 'Title cannot exceed 500 characters'),
+  description: yup.string()
+    .max(2000, 'Description cannot exceed 2000 characters'),
+  allowMultipleResponses: yup.boolean(),
+  showResults: yup.boolean(),
 });
+
+export type BasicInfoFormData = yup.InferType<typeof basicInfoSchema>;
 ```
 
-### Error Display
+**Form Usage**:
+```typescript
+import { useForm, Controller } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
 
-Material-UI TextField integration with:
-- Red border on error
-- Error message below field
-- Accessible ARIA attributes
+function SurveyForm() {
+  const { control, handleSubmit, formState: { errors } } = useForm({
+    resolver: yupResolver(basicInfoSchema),
+    mode: 'onChange', // Validate on change
+  });
+
+  const onSubmit = async (data: BasicInfoFormData) => {
+    await surveyService.createSurvey(data);
+  };
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <Controller
+        name="title"
+        control={control}
+        render={({ field }) => (
+          <TextField
+            {...field}
+            label="Survey Title"
+            error={!!errors.title}
+            helperText={errors.title?.message}
+            fullWidth
+          />
+        )}
+      />
+      <Button type="submit">Create Survey</Button>
+    </form>
+  );
+}
+```
+
+**Validation Schemas**:
+- `authSchemas.ts`: Login form
+- `surveySchemas.ts`: Survey basic info, update
+- `questionSchemas.ts`: Question creation/edit
 
 ---
 
-## Styling
+## Styling Approach
 
-### Styling Approach
+### Hybrid Styling Strategy
 
-Hybrid styling approach:
-1. **Material-UI (MUI) Theming** - Primary component styling with `sx` prop
-2. **Tailwind CSS Utilities** - Spacing, layout (preflight disabled)
-3. **Emotion CSS-in-JS** - Component-scoped styles when needed
-4. **Global CSS** - Minimal global styles
+1. **Primary: MUI `sx` Prop** - Component styling with theme access
+2. **Secondary: Tailwind Utilities** - Spacing, layout (preflight disabled)
+3. **Minimal: Global CSS** - CSS resets and base styles
 
 ### MUI Theme Configuration
 
 **Location**: `src/theme/theme.ts`
 
-Includes:
-- Light and dark theme definitions
-- Color palettes
-- Typography settings
+**Features**:
+- Light and dark mode definitions
+- Custom color palette
+- Typography scale
 - Component style overrides
+- Responsive breakpoints
 
-### MUI `sx` Prop Pattern
-
-Primary styling method with theme access:
-
+**Usage**:
 ```typescript
-<Box
-  sx={{
-    display: 'flex',
-    gap: 2,
-    p: 3,
-    backgroundColor: 'background.paper',
-    '&:hover': { boxShadow: 6 },
-  }}
->
-  {/* Content */}
-</Box>
+import { useTheme } from '@mui/material/styles';
+
+function MyComponent() {
+  const theme = useTheme();
+
+  return (
+    <Box
+      sx={{
+        p: 3, // padding: theme.spacing(3)
+        backgroundColor: 'background.paper', // from palette
+        borderRadius: 1, // theme.shape.borderRadius
+        boxShadow: theme.shadows[2],
+        [theme.breakpoints.down('md')]: {
+          p: 2, // responsive padding
+        },
+      }}
+    >
+      Content
+    </Box>
+  );
+}
 ```
 
-### Responsive Design
+### Common Patterns
 
-Mobile-first approach with breakpoints: xs, sm, md, lg, xl
+**Responsive Layout**:
+```typescript
+<Grid container spacing={3}>
+  <Grid item xs={12} md={6} lg={4}>
+    <SurveyCard />
+  </Grid>
+</Grid>
+```
+
+**Conditional Styling**:
+```typescript
+<Chip
+  label={survey.isActive ? 'Active' : 'Inactive'}
+  color={survey.isActive ? 'success' : 'default'}
+/>
+```
+
+**Hover Effects**:
+```typescript
+<Card
+  sx={{
+    '&:hover': {
+      boxShadow: 6,
+      transform: 'translateY(-2px)',
+      transition: 'all 0.2s',
+    },
+  }}
+>
+```
 
 ---
 
-## TypeScript Configuration
+## Key Features
 
-### TypeScript Version: 5.9.3
+### Survey Builder (Multi-Step Wizard)
 
-### Key Compiler Options
+**Location**: `pages/SurveyBuilder.tsx`
 
-- `strict: true` - Full type checking
-- `jsx: "react-jsx"` - React 17+ JSX transform
-- `baseUrl: "."` with path alias `@/*` for imports
+**Steps**:
+1. **Basic Info** (`BasicInfoStep.tsx`): Title, description, settings
+2. **Questions** (`QuestionsStep.tsx`): Add/edit/reorder questions with drag-and-drop
+3. **Review** (`ReviewStep.tsx`): Preview and publish
 
-### Type Definitions
+**Features**:
+- Draft auto-save to localStorage
+- Real-time validation
+- Question drag-and-drop reordering (@dnd-kit)
+- Multi-question type support (Text, SingleChoice, MultipleChoice, Rating)
 
-**Location**: `src/types/index.ts`
+**Question Editor** (`QuestionEditor.tsx`):
+- Dynamic option management for choice questions
+- Required field toggle
+- Question type selector
+- Validation with Yup
 
-Centralized type definitions for:
-- API responses
-- User, Survey, Question, Response types
-- DTOs and enums
-- Auth, pagination, and form types
+### Statistics Dashboard
 
-### Type Inference from Schemas
+**Location**: `pages/SurveyStatistics.tsx`
 
-Types are inferred from Yup validation schemas using `yup.InferType<>`.
+**Components**:
+- **OverviewMetrics**: Total/completed responses, completion rate, avg time
+- **QuestionStatistics**: Per-question breakdown with charts
+- **ChoiceChart**: Bar/pie charts for choice questions
+- **RatingChart**: Distribution chart for rating questions
+- **ResponsesTable**: Individual response details
+- **ExportDialog**: CSV export with filters
+
+**Visualization**: Recharts library with custom styling
+
+### Dashboard
+
+**Location**: `pages/Dashboard.tsx`
+
+**Sections**:
+- Stats cards: Total surveys, responses, active surveys, completion rate
+- Quick actions: Create survey, view all surveys
+- Recent surveys table
+
+---
+
+## Environment Configuration
+
+### Environment Files
+
+**`.env.development`** (Development):
+```env
+VITE_API_BASE_URL=http://localhost:5000/api
+VITE_APP_NAME=SurveyBot Admin Panel
+VITE_APP_VERSION=1.0.0
+```
+
+**`.env.production`** (Production):
+```env
+VITE_API_BASE_URL=https://api.yourdomain.com/api
+VITE_APP_NAME=SurveyBot Admin Panel
+VITE_APP_VERSION=1.0.0
+```
+
+### Accessing Environment Variables
+
+```typescript
+const apiUrl = import.meta.env.VITE_API_BASE_URL;
+const appName = import.meta.env.VITE_APP_NAME;
+```
+
+**IMPORTANT**: All env vars must be prefixed with `VITE_` to be exposed to client
+
+### Remote Access (ngrok)
+
+For accessing from any machine:
+```env
+VITE_API_BASE_URL=https://abc123.ngrok-free.app/api
+```
+
+Axios client automatically includes `ngrok-skip-browser-warning` header.
 
 ---
 
 ## Build & Deployment
 
-### Build Process
+### Production Build
 
 ```bash
 npm run build
 ```
 
-Steps:
-1. TypeScript compilation check
-2. Vite optimized build
-3. Outputs to `dist/` directory
-4. Source maps generated
+**Output**: `dist/` directory with optimized assets
 
-### Output Directory
+**Process**:
+1. TypeScript type checking
+2. Vite build optimization
+3. Code splitting
+4. Asset hashing
+5. Source map generation
 
-```
-dist/
-├── assets/
-│   ├── index-[hash].js
-│   ├── index-[hash].css
-│   └── ...
-├── index.html
-└── vite.svg
+### Preview Build
+
+```bash
+npm run preview
 ```
 
-### Deploy Targets
+Serves production build locally for testing.
 
-**Static Hosting** (Netlify, Vercel):
-1. Build app: `npm run build`
+### Deployment Targets
+
+**Static Hosting (Netlify, Vercel, Cloudflare Pages)**:
+1. Build: `npm run build`
 2. Deploy `dist/` folder
-3. Configure SPA routing to redirect all routes to `/index.html`
+3. Configure SPA routing: Redirect all routes to `/index.html`
+4. Set environment variables in platform settings
 
-**Environment Variables**:
-Set in hosting platform build settings.
+**Example netlify.toml**:
+```toml
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
 
 ---
 
-## Development Tools
+## Common Patterns
 
-### ESLint
+### API Call Pattern
 
-Configuration: `eslint.config.js`
+```typescript
+const [data, setData] = useState<Survey[]>([]);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState<string | null>(null);
 
-Plugins:
-- TypeScript ESLint
-- React Hooks
-- React Refresh
+useEffect(() => {
+  loadData();
+}, []);
 
-**Run linting**:
-```bash
-npm run lint
-npm run lint -- --fix
+const loadData = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    const result = await surveyService.getAllSurveys();
+    setData(result.items);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'An error occurred');
+  } finally {
+    setLoading(false);
+  }
+};
 ```
 
-### Debugging
+### Error Handling Pattern
 
-**React DevTools**:
-- Inspect component tree
-- View props and state
-- Track re-renders
+```typescript
+try {
+  await surveyService.deleteSurvey(id);
+  // Success feedback
+  enqueueSnackbar('Survey deleted successfully', { variant: 'success' });
+  loadSurveys(); // Refresh data
+} catch (error) {
+  // Error feedback
+  const message = error instanceof Error ? error.message : 'Delete failed';
+  enqueueSnackbar(message, { variant: 'error' });
+}
+```
 
-**Network Tab**:
-- Monitor API requests
-- Inspect request/response payloads
-- Check authentication headers
+### Conditional Rendering Pattern
+
+```typescript
+return (
+  <>
+    {loading && <LoadingSpinner />}
+    {error && <ErrorAlert error={error} onClose={() => setError(null)} />}
+    {!loading && !error && data.length === 0 && (
+      <EmptyState title="No surveys found" message="Create your first survey" />
+    )}
+    {!loading && !error && data.length > 0 && (
+      <SurveyTable surveys={data} />
+    )}
+  </>
+);
+```
 
 ---
 
@@ -588,36 +809,101 @@ npm run lint -- --fix
 
 ### CORS Issues
 
-**Error**: CORS policy blocked
+**Problem**: CORS policy blocked request
 
 **Solutions**:
-- Ensure Vite proxy is configured for `/api`
-- Check backend CORS headers for production
-- Use relative paths (`/api/surveys` not `http://localhost:5000/api/surveys`)
+1. Ensure backend CORS is configured for frontend origin
+2. Check `VITE_API_BASE_URL` is correct
+3. For development, use Vite proxy in `vite.config.ts`:
+   ```typescript
+   server: {
+     proxy: {
+       '/api': 'http://localhost:5000'
+     }
+   }
+   ```
 
-### Authentication Issues
+### Authentication Errors
 
 **401 Unauthorized**:
-1. Check token in localStorage: `localStorage.getItem('authToken')`
-2. Token may be expired - refresh should handle automatically
-3. Try logout and login again
+- Check token in localStorage: `localStorage.getItem('authToken')`
+- Token may be expired (auto-refresh should handle)
+- Try logout → login
+
+**Token Refresh Loop**:
+- Check refresh endpoint is working: `POST /api/auth/refresh`
+- Verify refresh response format matches expected structure
+- Clear localStorage and login again
 
 ### Build Errors
 
-**TypeScript errors**: Run `npm run build` to see all type errors
+**TypeScript errors**: `npm run build` shows all type errors
+- Check imports and type definitions
+- Verify types match API response structure
 
-**Module not found**: Check path aliases in `tsconfig.app.json`
-
-### Runtime Errors
-
-**Cannot read property of undefined**: Use optional chaining (`user?.profile?.name`)
-
-**Infinite re-renders**: Check useEffect dependencies array
+**Module not found**: Check path aliases in `tsconfig.json`
+- Ensure `@/*` alias resolves to `src/*`
 
 ### Performance Issues
 
-Use code splitting with `lazy()` and `Suspense` for heavy components.
+**Slow rendering**:
+- Use React DevTools Profiler
+- Check for unnecessary re-renders
+- Memoize expensive computations with `useMemo`
+- Memoize callbacks with `useCallback`
+
+**Large bundle size**:
+- Code split with `React.lazy()` and `Suspense`
+- Analyze bundle: `npm run build -- --analyze`
+
+### Runtime Errors
+
+**Cannot read property of undefined**:
+- Use optional chaining: `user?.profile?.name`
+- Add null checks before accessing nested properties
+
+**Infinite loop**:
+- Check `useEffect` dependency arrays
+- Ensure state updates don't trigger unnecessary re-renders
+
+---
+
+## Development Tips
+
+### TypeScript Best Practices
+
+1. **Define types for all props**:
+   ```typescript
+   interface MyComponentProps {
+     title: string;
+     onSave: (data: FormData) => void;
+   }
+   ```
+
+2. **Use type inference from schemas**:
+   ```typescript
+   type FormData = yup.InferType<typeof mySchema>;
+   ```
+
+3. **Avoid `any`** - Use `unknown` and type guards instead
+
+### React Best Practices
+
+1. **Extract custom hooks** for reusable logic
+2. **Keep components small** - Split large components
+3. **Use composition** over prop drilling
+4. **Memoize expensive calculations** with `useMemo`
+5. **Avoid inline object/array creation** in JSX (causes re-renders)
+
+### Debugging Tools
+
+- **React DevTools**: Inspect component tree, props, state
+- **Network Tab**: Monitor API requests, check payloads
+- **Console**: `console.log()` for quick debugging
+- **Breakpoints**: Use browser debugger with source maps
 
 ---
 
 **End of Frontend Documentation**
+
+[← Back to Main Documentation](../CLAUDE.md)

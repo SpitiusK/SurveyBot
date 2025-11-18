@@ -1,8 +1,13 @@
 import axios, { type AxiosInstance, AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { getApiBaseUrl } from '@/config/ngrok.config';
 
 // Create axios instance with default config
+// API URL is determined by getApiBaseUrl() which checks:
+// 1. Environment variable VITE_API_BASE_URL
+// 2. ngrok.config.ts BACKEND_NGROK_URL
+// 3. Defaults to localhost:5000/api
 const api: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+  baseURL: getApiBaseUrl(),
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
