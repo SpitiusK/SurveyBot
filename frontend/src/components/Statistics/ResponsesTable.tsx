@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import {
   Paper,
   Table,
@@ -170,8 +170,8 @@ const ResponsesTable = ({ responses, survey }: ResponsesTableProps) => {
           </TableHead>
           <TableBody>
             {paginatedResponses.map((response) => (
-              <>
-                <TableRow key={response.id} hover>
+              <Fragment key={response.id}>
+                <TableRow hover>
                   <TableCell padding="checkbox">
                     <IconButton
                       size="small"
@@ -237,7 +237,7 @@ const ResponsesTable = ({ responses, survey }: ResponsesTableProps) => {
                     </Collapse>
                   </TableCell>
                 </TableRow>
-              </>
+              </Fragment>
             ))}
           </TableBody>
         </Table>

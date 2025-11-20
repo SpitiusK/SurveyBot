@@ -21,6 +21,7 @@ public class SingleChoiceQuestionHandler : IQuestionHandler
     private readonly IBotService _botService;
     private readonly IAnswerValidator _validator;
     private readonly QuestionErrorHandler _errorHandler;
+    private readonly QuestionMediaHelper _mediaHelper;
     private readonly ILogger<SingleChoiceQuestionHandler> _logger;
 
     public QuestionType QuestionType => QuestionType.SingleChoice;
@@ -29,16 +30,19 @@ public class SingleChoiceQuestionHandler : IQuestionHandler
         IBotService botService,
         IAnswerValidator validator,
         QuestionErrorHandler errorHandler,
+        QuestionMediaHelper mediaHelper,
         ILogger<SingleChoiceQuestionHandler> logger)
     {
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
+        _mediaHelper = mediaHelper ?? throw new ArgumentNullException(nameof(mediaHelper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
     /// Displays single choice question with inline keyboard.
+    /// Sends any attached media first, then the question text with options.
     /// </summary>
     public async Task<int> DisplayQuestionAsync(
         long chatId,
@@ -60,6 +64,9 @@ public class SingleChoiceQuestionHandler : IQuestionHandler
 
             throw new InvalidOperationException($"Single choice question {question.Id} has no options");
         }
+
+        // Send media first if present
+        await _mediaHelper.SendQuestionMediaAsync(chatId, question, cancellationToken);
 
         var progressText = $"Question {currentIndex + 1} of {totalQuestions}";
         var requiredText = question.IsRequired ? "(Required)" : "(Optional)";

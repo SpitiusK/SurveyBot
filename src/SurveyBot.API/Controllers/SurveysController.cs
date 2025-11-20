@@ -317,7 +317,7 @@ public class SurveysController : ControllerBase
     [HttpDelete("{id}")]
     [SwaggerOperation(
         Summary = "Delete survey",
-        Description = "Deletes a survey. Soft delete (deactivate) if it has responses, hard delete otherwise.",
+        Description = "Permanently deletes a survey and all associated questions, responses, and answers. This action cannot be undone.",
         Tags = new[] { "Surveys" }
     )]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

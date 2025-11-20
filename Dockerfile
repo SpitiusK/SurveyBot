@@ -36,8 +36,9 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # Copy published files
 COPY --from=publish /app/publish .
 
-# Create logs directory
-RUN mkdir -p /app/logs
+# Create logs and wwwroot directories for static files
+RUN mkdir -p /app/logs && \
+    mkdir -p /app/wwwroot/uploads/media
 
 # Expose port
 EXPOSE 8080

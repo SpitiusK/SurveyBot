@@ -44,6 +44,13 @@ public class Question : BaseEntity
     /// </summary>
     public string? OptionsJson { get; set; }
 
+    /// <summary>
+    /// Gets or sets the multimedia content metadata for this question.
+    /// Stored as JSONB in PostgreSQL containing file information (type, path, size, etc.).
+    /// Null for questions without multimedia content.
+    /// </summary>
+    public string? MediaContent { get; set; }
+
     // Navigation properties
 
     /// <summary>

@@ -129,6 +129,9 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
             question.questionType === 1 || question.questionType === 2
               ? question.options
               : undefined,
+          mediaContent: question.mediaContent
+            ? JSON.stringify(question.mediaContent)
+            : null,
         };
 
         const createdQuestion = await questionService.createQuestion(

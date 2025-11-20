@@ -1,6 +1,8 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using SurveyBot.API.Extensions;
@@ -168,6 +170,94 @@ try
     builder.Services.AddScoped<IQuestionService, QuestionService>();
     builder.Services.AddScoped<IResponseService, ResponseService>();
     builder.Services.AddScoped<IUserService, UserService>();
+
+    // Register Media Services
+    builder.Services.AddScoped<IMediaValidationService, MediaValidationService>();
+    builder.Services.AddScoped<IMediaStorageService>(sp =>
+    {
+        var env = sp.GetRequiredService<IWebHostEnvironment>();
+        var logger = sp.GetRequiredService<ILogger<FileSystemMediaStorageService>>();
+        var validationService = sp.GetRequiredService<IMediaValidationService>();
+        var configuration = sp.GetRequiredService<IConfiguration>();
+
+        // Get webRootPath with multi-level fallback logic
+        string webRootPath;
+
+        // Priority 1: Check for explicit configuration in appsettings.json
+        var configuredPath = configuration.GetValue<string>("MediaStorage:StoragePath");
+        if (!string.IsNullOrEmpty(configuredPath))
+        {
+            // Use explicitly configured path (useful for Docker volumes)
+            webRootPath = configuredPath;
+            logger.LogInformation(
+                "Using configured MediaStorage:StoragePath: {WebRootPath}",
+                webRootPath);
+        }
+        // Priority 2: Use IWebHostEnvironment.WebRootPath if available
+        else if (!string.IsNullOrEmpty(env.WebRootPath))
+        {
+            webRootPath = env.WebRootPath;
+            logger.LogInformation(
+                "Using WebRootPath from IWebHostEnvironment: {WebRootPath}",
+                webRootPath);
+        }
+        // Priority 3: Fallback to ContentRootPath/wwwroot
+        else
+        {
+            webRootPath = Path.Combine(env.ContentRootPath, "wwwroot");
+            logger.LogWarning(
+                "WebRootPath was null. Using fallback: {WebRootPath}",
+                webRootPath);
+        }
+
+        // Ensure directory exists with proper error handling
+        try
+        {
+            if (!Directory.Exists(webRootPath))
+            {
+                Directory.CreateDirectory(webRootPath);
+                logger.LogInformation("Created media storage directory: {WebRootPath}", webRootPath);
+            }
+
+            // Test write permissions by creating uploads/media subdirectory
+            var uploadsPath = Path.Combine(webRootPath, "uploads", "media");
+            if (!Directory.Exists(uploadsPath))
+            {
+                Directory.CreateDirectory(uploadsPath);
+                logger.LogInformation("Created media uploads directory: {UploadsPath}", uploadsPath);
+            }
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            logger.LogError(ex,
+                "Access denied creating media storage directory: {WebRootPath}",
+                webRootPath);
+            throw new InvalidOperationException(
+                $"Cannot create media storage directory (access denied): {webRootPath}", ex);
+        }
+        catch (IOException ex)
+        {
+            logger.LogError(ex,
+                "I/O error creating media storage directory: {WebRootPath}",
+                webRootPath);
+            throw new InvalidOperationException(
+                $"Cannot create media storage directory (I/O error): {webRootPath}", ex);
+        }
+
+        // Final validation
+        if (!Directory.Exists(webRootPath))
+        {
+            logger.LogError("Media storage directory does not exist: {WebRootPath}", webRootPath);
+            throw new InvalidOperationException(
+                $"Media storage directory does not exist and could not be created: {webRootPath}");
+        }
+
+        logger.LogInformation(
+            "Media storage initialized successfully at: {WebRootPath}",
+            webRootPath);
+
+        return new FileSystemMediaStorageService(webRootPath, logger, validationService);
+    });
 
     // Register Telegram Bot Services
     builder.Services.AddTelegramBot(builder.Configuration);
@@ -347,6 +437,21 @@ try
 
     // Enable CORS (must be before UseAuthentication)
     app.UseCors();
+
+    // Enable static file serving for media uploads
+    var webRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+    if (!Directory.Exists(webRootPath))
+    {
+        Directory.CreateDirectory(webRootPath);
+    }
+
+    var staticFileOptions = new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(webRootPath),
+        RequestPath = "",
+        ContentTypeProvider = new FileExtensionContentTypeProvider()
+    };
+    app.UseStaticFiles(staticFileOptions);
 
     app.UseHttpsRedirection();
 

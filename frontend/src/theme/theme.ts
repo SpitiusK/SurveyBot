@@ -186,6 +186,13 @@ const getThemeOptions = (mode: 'light' | 'dark'): ThemeOptions => ({
         },
       },
     },
+    MuiDialog: {
+      defaultProps: {
+        // Use disableScrollLock to prevent body scroll manipulation
+        // This also prevents aria-hidden from being added to the root
+        disableScrollLock: true,
+      },
+    },
   },
 });
 

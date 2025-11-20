@@ -40,6 +40,11 @@ public static class DependencyInjection
         services.AddScoped<IQuestionService, QuestionService>();
         services.AddScoped<IAuthService, AuthService>();
 
+        // Media Services
+        services.AddScoped<IMediaValidationService, MediaValidationService>();
+        // Note: IMediaStorageService must be registered in API layer Program.cs
+        // because it requires IWebHostEnvironment which is only available in ASP.NET Core
+
         return services;
     }
 }

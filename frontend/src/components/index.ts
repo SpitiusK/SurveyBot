@@ -31,3 +31,13 @@ export { AppShell } from '../layouts/AppShell';
 
 // Survey Builder Components
 export * from './SurveyBuilder';
+
+// Media Components
+export { MediaPicker } from './MediaPicker';
+export { MediaPreview } from './MediaPreview';
+export { MediaGallery } from './MediaGallery';
+export { MediaGalleryItem } from './MediaGalleryItem';
+
+// Rich Content Components
+export { RichTextEditor } from './RichTextEditor';
+export { RichContentRenderer } from './RichContentRenderer';

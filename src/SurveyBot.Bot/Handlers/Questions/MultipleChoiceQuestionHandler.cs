@@ -22,6 +22,7 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
     private readonly IConversationStateManager _stateManager;
     private readonly IAnswerValidator _validator;
     private readonly QuestionErrorHandler _errorHandler;
+    private readonly QuestionMediaHelper _mediaHelper;
     private readonly ILogger<MultipleChoiceQuestionHandler> _logger;
 
     public QuestionType QuestionType => QuestionType.MultipleChoice;
@@ -31,17 +32,20 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
         IConversationStateManager stateManager,
         IAnswerValidator validator,
         QuestionErrorHandler errorHandler,
+        QuestionMediaHelper mediaHelper,
         ILogger<MultipleChoiceQuestionHandler> logger)
     {
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
         _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
+        _mediaHelper = mediaHelper ?? throw new ArgumentNullException(nameof(mediaHelper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
     /// Displays multiple choice question with checkable inline keyboard.
+    /// Sends any attached media first, then the question text with options.
     /// </summary>
     public async Task<int> DisplayQuestionAsync(
         long chatId,
@@ -63,6 +67,9 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
 
             throw new InvalidOperationException($"Multiple choice question {question.Id} has no options");
         }
+
+        // Send media first if present
+        await _mediaHelper.SendQuestionMediaAsync(chatId, question, cancellationToken);
 
         var progressText = $"Question {currentIndex + 1} of {totalQuestions}";
         var requiredText = question.IsRequired ? "(Required - select at least one)" : "(Optional)";

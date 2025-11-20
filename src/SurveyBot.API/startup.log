@@ -1,0 +1,15 @@
+Используются параметры запуска из C:\Users\User\Desktop\SurveyBot\src\SurveyBot.API\Properties\launchSettings.json...
+Сборка…
+C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\SurveyBot.Infrastructure.csproj : warning NU1903: Package 'SixLabors.ImageSharp' 3.1.6 has a known high severity vulnerability, https://github.com/advisories/GHSA-2cmq-823j-5qj8 [C:\Users\User\Desktop\SurveyBot\src\SurveyBot.API\SurveyBot.API.csproj]
+C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\SurveyBot.Infrastructure.csproj : warning NU1902: Package 'SixLabors.ImageSharp' 3.1.6 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-rxmq-m78w-7wmc [C:\Users\User\Desktop\SurveyBot\src\SurveyBot.API\SurveyBot.API.csproj]
+C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\SurveyBot.Infrastructure.csproj : warning NU1903: Package 'SixLabors.ImageSharp' 3.1.6 has a known high severity vulnerability, https://github.com/advisories/GHSA-2cmq-823j-5qj8
+C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\SurveyBot.Infrastructure.csproj : warning NU1902: Package 'SixLabors.ImageSharp' 3.1.6 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-rxmq-m78w-7wmc
+[14:53:23 INF] Starting SurveyBot API application {"Application": "SurveyBot.API"}
+[14:53:23 INF] Applying database migrations... {"Application": "SurveyBot.API"}
+[DEBUG] Using connection string: Host=localhost;Port=5432;Database=surveybot_db;Username=surveybot_user;Password=***;Pooling=true;MinPoolSize=0;MaxPoolSize=100;Connection Lifetime=0;Timeout=30;CommandTimeout=30;No Reset On Close=true;
+[14:53:23 INF] Database connection string configured: Host=localhost;Port=5432;Database=surveybot_db;Username=surveybot_user;Password=***;Pooling=true;MinPoolSize=0;MaxPoolSize=100;Connection Lifetime=0;Timeout=30;CommandTimeout=30;No Reset On Close=true; {"Application": "SurveyBot.API"}
+[14:53:23 WRN] Sensitive data logging is enabled. Log entries and exception messages may include sensitive application data; this mode should only be enabled during development. {"EventId": {"Id": 10400, "Name": "Microsoft.EntityFrameworkCore.Infrastructure.SensitiveDataLoggingEnabledWarning"}, "SourceContext": "Microsoft.EntityFrameworkCore.Model.Validation", "Application": "SurveyBot.API"}
+[14:53:24 WRN] Cannot connect to database. Waiting for database to be ready... {"Application": "SurveyBot.API"}
+[14:53:27 WRN] Retry 1/10 - Database not ready yet {"Application": "SurveyBot.API"}
+[14:53:30 WRN] Retry 2/10 - Database not ready yet {"Application": "SurveyBot.API"}
+[14:53:33 WRN] Retry 3/10 - Database not ready yet {"Application": "SurveyBot.API"}

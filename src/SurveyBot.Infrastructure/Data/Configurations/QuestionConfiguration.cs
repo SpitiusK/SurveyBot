@@ -83,6 +83,16 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
             .HasDatabaseName("idx_questions_options_json")
             .HasMethod("gin");
 
+        // MediaContent - stored as JSONB in PostgreSQL
+        builder.Property(q => q.MediaContent)
+            .HasColumnName("media_content")
+            .HasColumnType("jsonb");
+
+        // GIN index for JSONB media content searching
+        builder.HasIndex(q => q.MediaContent)
+            .HasDatabaseName("idx_questions_media_content")
+            .HasMethod("gin");
+
         // CreatedAt
         builder.Property(q => q.CreatedAt)
             .HasColumnName("created_at")

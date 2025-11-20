@@ -21,6 +21,7 @@ public class RatingQuestionHandler : IQuestionHandler
     private readonly IBotService _botService;
     private readonly IAnswerValidator _validator;
     private readonly QuestionErrorHandler _errorHandler;
+    private readonly QuestionMediaHelper _mediaHelper;
     private readonly ILogger<RatingQuestionHandler> _logger;
 
     private const int DEFAULT_MIN_RATING = 1;
@@ -33,16 +34,19 @@ public class RatingQuestionHandler : IQuestionHandler
         IBotService botService,
         IAnswerValidator validator,
         QuestionErrorHandler errorHandler,
+        QuestionMediaHelper mediaHelper,
         ILogger<RatingQuestionHandler> logger)
     {
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
+        _mediaHelper = mediaHelper ?? throw new ArgumentNullException(nameof(mediaHelper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
     /// Displays rating question with inline keyboard.
+    /// Sends any attached media first, then the question text with rating buttons.
     /// </summary>
     public async Task<int> DisplayQuestionAsync(
         long chatId,
@@ -51,6 +55,9 @@ public class RatingQuestionHandler : IQuestionHandler
         int totalQuestions,
         CancellationToken cancellationToken = default)
     {
+        // Send media first if present
+        await _mediaHelper.SendQuestionMediaAsync(chatId, question, cancellationToken);
+
         var (minRating, maxRating) = ParseRatingRange(question);
 
         var progressText = $"Question {currentIndex + 1} of {totalQuestions}";

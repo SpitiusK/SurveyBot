@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.Extensions.Logging;
+using SurveyBot.Core.DTOs.Media;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 using SurveyBot.Core.Exceptions;
@@ -97,6 +98,12 @@ public class QuestionService : IQuestionService
             question.OptionsJson = JsonSerializer.Serialize(dto.Options);
         }
 
+        // Handle media content if provided
+        if (!string.IsNullOrWhiteSpace(dto.MediaContent))
+        {
+            question.MediaContent = dto.MediaContent;
+        }
+
         // Save to database
         var createdQuestion = await _questionRepository.CreateAsync(question);
 
@@ -171,6 +178,9 @@ public class QuestionService : IQuestionService
         {
             question.OptionsJson = null;
         }
+
+        // Update media content (null to clear, string to set)
+        question.MediaContent = dto.MediaContent;
 
         // Save changes
         await _questionRepository.UpdateAsync(question);
@@ -451,6 +461,20 @@ public class QuestionService : IQuestionService
             {
                 _logger.LogWarning(ex, "Failed to deserialize options for question {QuestionId}", question.Id);
                 dto.Options = null;
+            }
+        }
+
+        // Deserialize media content
+        if (!string.IsNullOrWhiteSpace(question.MediaContent))
+        {
+            try
+            {
+                dto.MediaContent = JsonSerializer.Deserialize<MediaContentDto>(question.MediaContent);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Failed to deserialize media content for question {QuestionId}", question.Id);
+                dto.MediaContent = null;
             }
         }
 

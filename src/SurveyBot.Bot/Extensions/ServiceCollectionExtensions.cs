@@ -30,6 +30,14 @@ public static class ServiceCollectionExtensions
         // Singleton because we want only one bot client instance throughout the application
         services.AddSingleton<IBotService, BotService>();
 
+        // Register ITelegramBotClient as Singleton via factory method from BotService
+        // This allows other services to depend on ITelegramBotClient directly
+        services.AddSingleton(sp =>
+        {
+            var botService = sp.GetRequiredService<IBotService>();
+            return botService.Client;
+        });
+
         return services;
     }
 

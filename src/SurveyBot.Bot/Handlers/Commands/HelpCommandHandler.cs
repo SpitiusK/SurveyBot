@@ -85,6 +85,7 @@ public class HelpCommandHandler : ICommandHandler
         // Hardcoded list of commands to avoid circular dependency
         helpText += "/start - Start the bot and get welcome message\n";
         helpText += "/mysurveys - View and manage your surveys\n";
+        helpText += "/preview - Preview a survey with media info\n";
         helpText += "/surveys - Browse available surveys\n";
         helpText += "/survey - Take a specific survey\n";
         helpText += "/create - Create a new survey\n";

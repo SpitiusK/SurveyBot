@@ -47,6 +47,7 @@ export interface Question {
   orderIndex: number;
   isRequired: boolean;
   options: string[] | null;
+  mediaContent?: string | null; // JSON string of MediaContentDto
   createdAt: string;
   updatedAt: string;
 }
@@ -99,12 +100,14 @@ export interface CreateQuestionDto {
   questionType: QuestionType;
   isRequired: boolean;
   options?: string[];
+  mediaContent?: string | null; // JSON string of MediaContentDto
 }
 
 export interface UpdateQuestionDto {
   questionText?: string;
   isRequired?: boolean;
   options?: string[];
+  mediaContent?: string | null; // JSON string of MediaContentDto
 }
 
 // Response Types
@@ -204,6 +207,7 @@ export interface QuestionDraft {
   isRequired: boolean;
   options: string[];
   orderIndex: number;
+  mediaContent?: import('./media').MediaContentDto | null; // Deserialized MediaContentDto object
 }
 
 // Wizard Step Types
@@ -215,3 +219,6 @@ export interface StepConfig {
   description: string;
   isValid: boolean;
 }
+
+// Re-export media types
+export * from './media';

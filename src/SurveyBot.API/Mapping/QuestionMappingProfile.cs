@@ -15,7 +15,9 @@ public class QuestionMappingProfile : Profile
         // Question -> QuestionDto (Entity to DTO for reading)
         CreateMap<Question, QuestionDto>()
             .ForMember(dest => dest.Options,
-                opt => opt.MapFrom<QuestionOptionsResolver>());
+                opt => opt.MapFrom<QuestionOptionsResolver>())
+            .ForMember(dest => dest.MediaContent,
+                opt => opt.MapFrom<QuestionMediaContentResolver>());
 
         // CreateQuestionDto -> Question (DTO to Entity for creation)
         CreateMap<CreateQuestionDto, Question>()
@@ -24,6 +26,8 @@ public class QuestionMappingProfile : Profile
             .ForMember(dest => dest.OrderIndex, opt => opt.Ignore()) // Will be calculated by service
             .ForMember(dest => dest.OptionsJson,
                 opt => opt.MapFrom<QuestionOptionsJsonResolver>())
+            .ForMember(dest => dest.MediaContent,
+                opt => opt.MapFrom<QuestionMediaContentJsonResolver>())
             .ForMember(dest => dest.Survey, opt => opt.Ignore())
             .ForMember(dest => dest.Answers, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
@@ -36,6 +40,8 @@ public class QuestionMappingProfile : Profile
             .ForMember(dest => dest.OrderIndex, opt => opt.Ignore()) // Use ReorderQuestionsDto instead
             .ForMember(dest => dest.OptionsJson,
                 opt => opt.MapFrom<UpdateQuestionOptionsJsonResolver>())
+            .ForMember(dest => dest.MediaContent,
+                opt => opt.MapFrom<UpdateQuestionMediaContentJsonResolver>())
             .ForMember(dest => dest.Survey, opt => opt.Ignore())
             .ForMember(dest => dest.Answers, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())

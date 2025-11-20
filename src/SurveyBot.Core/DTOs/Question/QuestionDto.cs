@@ -1,3 +1,4 @@
+using SurveyBot.Core.DTOs.Media;
 using SurveyBot.Core.Entities;
 
 namespace SurveyBot.Core.DTOs.Question;
@@ -42,6 +43,13 @@ public class QuestionDto
     /// Null for text and rating questions.
     /// </summary>
     public List<string>? Options { get; set; }
+
+    /// <summary>
+    /// Gets or sets the media content associated with this question.
+    /// Deserialized from the Question.MediaContent JSONB field.
+    /// Null if no media is attached or if the question was created before multimedia support.
+    /// </summary>
+    public MediaContentDto? MediaContent { get; set; }
 
     /// <summary>
     /// Gets or sets the timestamp when the question was created.

@@ -1,0 +1,279 @@
+.rich-content-renderer {
+  line-height: 1.6;
+  font-size: 16px;
+}
+
+.content-text {
+  margin-bottom: 20px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.content-text p {
+  margin: 12px 0;
+}
+
+.content-text h1,
+.content-text h2,
+.content-text h3,
+.content-text h4,
+.content-text h5,
+.content-text h6 {
+  margin: 20px 0 10px;
+  font-weight: 600;
+}
+
+.content-text h1 { font-size: 2em; }
+.content-text h2 { font-size: 1.8em; }
+.content-text h3 { font-size: 1.5em; }
+.content-text h4 { font-size: 1.3em; }
+.content-text h5 { font-size: 1.1em; }
+.content-text h6 { font-size: 1em; }
+
+.content-text ul,
+.content-text ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.content-text li {
+  margin: 6px 0;
+}
+
+.content-text blockquote {
+  border-left: 4px solid #ccc;
+  margin: 12px 0;
+  padding-left: 16px;
+  color: #666;
+}
+
+.content-text code {
+  background-color: #f4f4f4;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.content-text pre {
+  background-color: #f4f4f4;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.content-text pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.content-text a {
+  color: #1976d2;
+  text-decoration: none;
+}
+
+.content-text a:hover {
+  text-decoration: underline;
+}
+
+/* Media Display */
+.media-display {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #eee;
+}
+
+.media-item {
+  margin-bottom: 20px;
+}
+
+/* Images */
+.media-figure {
+  margin: 16px 0;
+  text-align: center;
+}
+
+.media-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.media-caption {
+  font-size: 0.9em;
+  color: #666;
+  margin-top: 8px;
+  font-style: italic;
+  text-align: center;
+}
+
+/* Video */
+.media-video {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Audio */
+.media-audio {
+  width: 100%;
+  max-width: 400px;
+  margin: 8px 0;
+}
+
+.media-figure.audio {
+  text-align: left;
+}
+
+/* Documents */
+.media-document {
+  padding: 16px;
+  background-color: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.document-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: #1976d2;
+  flex-wrap: wrap;
+}
+
+.document-link:hover {
+  text-decoration: underline;
+}
+
+.document-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.document-name {
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.document-size {
+  font-size: 0.9em;
+  color: #666;
+  white-space: nowrap;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .rich-content-renderer {
+    font-size: 14px;
+  }
+
+  .content-text h1 { font-size: 1.75em; }
+  .content-text h2 { font-size: 1.5em; }
+  .content-text h3 { font-size: 1.25em; }
+
+  .media-image {
+    max-width: 100%;
+  }
+
+  .media-audio {
+    max-width: 100%;
+  }
+
+  .media-figure {
+    margin: 12px 0;
+  }
+
+  .media-display {
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+
+  .document-link {
+    font-size: 0.9em;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .rich-content-renderer {
+    color: #e0e0e0;
+  }
+
+  .content-text blockquote {
+    border-left-color: #555;
+    color: #aaa;
+  }
+
+  .content-text code {
+    background-color: #333;
+    color: #e0e0e0;
+  }
+
+  .content-text pre {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+  }
+
+  .content-text a {
+    color: #64b5f6;
+  }
+
+  .media-caption {
+    color: #aaa;
+  }
+
+  .media-document {
+    background-color: #2a2a2a;
+    border-color: #444;
+  }
+
+  .document-link {
+    color: #64b5f6;
+  }
+
+  .document-size {
+    color: #aaa;
+  }
+
+  .media-display {
+    border-top-color: #444;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .rich-content-renderer {
+    color: #000;
+  }
+
+  .content-text a {
+    color: #000;
+    text-decoration: underline;
+  }
+
+  .media-image,
+  .media-video {
+    max-width: 100%;
+    page-break-inside: avoid;
+  }
+
+  .media-figure {
+    page-break-inside: avoid;
+  }
+
+  .document-link {
+    color: #000;
+  }
+
+  /* Hide audio and video controls in print */
+  .media-audio,
+  .media-video {
+    display: none;
+  }
+}

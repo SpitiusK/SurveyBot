@@ -24,6 +24,9 @@ public static class BotServiceExtensions
         // Register HttpClient for handlers that need it
         services.AddScoped<HttpClient>();
 
+        // Register QuestionMediaHelper (needed by all question handlers)
+        services.AddScoped<QuestionMediaHelper>();
+
         // Register command handlers - User commands (Scoped to work with Singleton CommandRouter)
         services.AddScoped<ICommandHandler, StartCommandHandler>();
         services.AddScoped<ICommandHandler, HelpCommandHandler>();
@@ -31,6 +34,7 @@ public static class BotServiceExtensions
         services.AddScoped<ICommandHandler, SurveysCommandHandler>();
         services.AddScoped<ICommandHandler, SurveyCommandHandler>();
         services.AddScoped<ICommandHandler, CancelCommandHandler>();
+        services.AddScoped<ICommandHandler, PreviewCommand>();
 
         // Register admin command handlers
         services.AddScoped<ICommandHandler, CreateSurveyCommandHandler>();
@@ -78,6 +82,9 @@ public static class BotServiceExtensions
 
         // Register admin authorization service (singleton - no state)
         services.AddSingleton<IAdminAuthService, AdminAuthService>();
+
+        // Register media services
+        services.AddScoped<SurveyBot.Core.Interfaces.ITelegramMediaService, TelegramMediaService>();
 
         return services;
     }

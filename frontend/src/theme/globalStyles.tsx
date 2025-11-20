@@ -48,6 +48,19 @@ export const GlobalStyles: React.FC = () => {
             backgroundColor: theme.palette.mode === 'light' ? '#555' : '#777',
           },
         },
+        // Accessibility: Support for inert attribute
+        '[inert]': {
+          pointerEvents: 'none',
+          cursor: 'default',
+        },
+        '[inert] *': {
+          pointerEvents: 'none',
+          cursor: 'default',
+        },
+        // Prevent focus on inert elements
+        '[inert]:focus, [inert] *:focus': {
+          outline: 'none',
+        },
       })}
     />
   );

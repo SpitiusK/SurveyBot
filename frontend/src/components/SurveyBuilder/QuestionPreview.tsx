@@ -8,15 +8,18 @@ import {
   List,
   ListItem,
   ListItemText,
+  Grid,
 } from '@mui/material';
 import {
   TextFields as TextIcon,
   RadioButtonChecked as SingleChoiceIcon,
   CheckBox as MultipleChoiceIcon,
   Star as RatingIcon,
+  Image as ImageIcon,
 } from '@mui/icons-material';
 import { QuestionType } from '@/types';
 import type { QuestionDraft } from '@/schemas/questionSchemas';
+import type { MediaItemDto } from '@/types/media';
 
 interface QuestionPreviewProps {
   question: QuestionDraft;
@@ -128,6 +131,74 @@ const QuestionPreview: React.FC<QuestionPreviewProps> = ({ question, index }) =>
             <Typography variant="body1" fontWeight={500} sx={{ mb: 1.5 }}>
               {question.questionText}
             </Typography>
+
+            {/* Media Preview */}
+            {question.mediaContent && question.mediaContent.items && question.mediaContent.items.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                  <ImageIcon fontSize="small" color="action" />
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    Attached Media ({question.mediaContent.items.length})
+                  </Typography>
+                </Stack>
+                <Grid container spacing={1}>
+                  {question.mediaContent.items.slice(0, 3).map((media: MediaItemDto) => (
+                    <Grid item xs={4} key={media.id}>
+                      <Box
+                        sx={{
+                          position: 'relative',
+                          width: '100%',
+                          paddingTop: '75%',
+                          borderRadius: 1,
+                          overflow: 'hidden',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          backgroundColor: 'grey.100',
+                        }}
+                      >
+                        {media.type === 'image' && media.thumbnailPath ? (
+                          <Box
+                            component="img"
+                            src={media.thumbnailPath}
+                            alt={media.altText || media.displayName}
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                            }}
+                          />
+                        ) : (
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <ImageIcon sx={{ fontSize: 32, color: 'text.disabled' }} />
+                          </Box>
+                        )}
+                      </Box>
+                    </Grid>
+                  ))}
+                  {question.mediaContent.items.length > 3 && (
+                    <Grid item xs={12}>
+                      <Typography variant="caption" color="text.secondary">
+                        +{question.mediaContent.items.length - 3} more
+                      </Typography>
+                    </Grid>
+                  )}
+                </Grid>
+              </Box>
+            )}
 
             {/* Options Preview */}
             {hasOptions && question.options && question.options.length > 0 && (

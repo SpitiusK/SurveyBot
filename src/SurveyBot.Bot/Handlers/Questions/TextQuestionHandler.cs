@@ -21,6 +21,7 @@ public class TextQuestionHandler : IQuestionHandler
     private readonly IBotService _botService;
     private readonly IAnswerValidator _validator;
     private readonly QuestionErrorHandler _errorHandler;
+    private readonly QuestionMediaHelper _mediaHelper;
     private readonly ILogger<TextQuestionHandler> _logger;
 
     public QuestionType QuestionType => QuestionType.Text;
@@ -29,16 +30,19 @@ public class TextQuestionHandler : IQuestionHandler
         IBotService botService,
         IAnswerValidator validator,
         QuestionErrorHandler errorHandler,
+        QuestionMediaHelper mediaHelper,
         ILogger<TextQuestionHandler> logger)
     {
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
         _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
+        _mediaHelper = mediaHelper ?? throw new ArgumentNullException(nameof(mediaHelper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
     /// Displays the text question to the user.
+    /// Sends any attached media first, then the question text.
     /// </summary>
     public async Task<int> DisplayQuestionAsync(
         long chatId,
@@ -47,6 +51,9 @@ public class TextQuestionHandler : IQuestionHandler
         int totalQuestions,
         CancellationToken cancellationToken = default)
     {
+        // Send media first if present
+        await _mediaHelper.SendQuestionMediaAsync(chatId, question, cancellationToken);
+
         var progressText = $"Question {currentIndex + 1} of {totalQuestions}";
         var requiredText = question.IsRequired ? "(Required)" : "(Optional - reply /skip to skip)";
 

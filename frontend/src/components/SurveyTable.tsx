@@ -218,27 +218,26 @@ export const SurveyTable: React.FC<SurveyTableProps> = ({
 
       {/* Actions Menu */}
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-        {selectedSurvey && (
-          <>
-            <MenuItem onClick={() => handleMenuAction(() => onToggleStatus(selectedSurvey))}>
-              <ListItemIcon>
-                {selectedSurvey.isActive ? <ToggleOff /> : <ToggleOn />}
-              </ListItemIcon>
-              <ListItemText>
-                {selectedSurvey.isActive ? 'Deactivate' : 'Activate'} Survey
-              </ListItemText>
-            </MenuItem>
-            <MenuItem
-              onClick={() => handleMenuAction(() => onDelete(selectedSurvey))}
-              sx={{ color: 'error.main' }}
-            >
-              <ListItemIcon>
-                <Delete color="error" />
-              </ListItemIcon>
-              <ListItemText>Delete Survey</ListItemText>
-            </MenuItem>
-          </>
-        )}
+        {selectedSurvey && [
+          <MenuItem key="toggle" onClick={() => handleMenuAction(() => onToggleStatus(selectedSurvey))}>
+            <ListItemIcon>
+              {selectedSurvey.isActive ? <ToggleOff /> : <ToggleOn />}
+            </ListItemIcon>
+            <ListItemText>
+              {selectedSurvey.isActive ? 'Deactivate' : 'Activate'} Survey
+            </ListItemText>
+          </MenuItem>,
+          <MenuItem
+            key="delete"
+            onClick={() => handleMenuAction(() => onDelete(selectedSurvey))}
+            sx={{ color: 'error.main' }}
+          >
+            <ListItemIcon>
+              <Delete color="error" />
+            </ListItemIcon>
+            <ListItemText>Delete Survey</ListItemText>
+          </MenuItem>
+        ]}
       </Menu>
     </>
   );

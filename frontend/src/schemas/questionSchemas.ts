@@ -86,6 +86,7 @@ export const questionDraftSchema = z.object({
   isRequired: z.boolean(),
   options: z.array(optionSchema).optional(),
   orderIndex: z.number().int().min(0),
+  mediaContent: z.any().optional().nullable(), // MediaContentDto object
 });
 
 // Questions array validation

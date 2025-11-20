@@ -338,6 +338,19 @@ public class SurveyCommandHandler : ICommandHandler
             }
         }
 
+        Core.DTOs.Media.MediaContentDto? mediaContent = null;
+        if (!string.IsNullOrWhiteSpace(question.MediaContent))
+        {
+            try
+            {
+                mediaContent = System.Text.Json.JsonSerializer.Deserialize<Core.DTOs.Media.MediaContentDto>(question.MediaContent);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deserialize media content JSON for question {QuestionId}", question.Id);
+            }
+        }
+
         return new Core.DTOs.Question.QuestionDto
         {
             Id = question.Id,
@@ -347,6 +360,7 @@ public class SurveyCommandHandler : ICommandHandler
             OrderIndex = question.OrderIndex,
             IsRequired = question.IsRequired,
             Options = options,
+            MediaContent = mediaContent,
             CreatedAt = question.CreatedAt,
             UpdatedAt = question.UpdatedAt
         };

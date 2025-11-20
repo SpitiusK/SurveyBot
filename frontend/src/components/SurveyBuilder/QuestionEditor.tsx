@@ -5,7 +5,6 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  TextField,
   FormControl,
   FormControlLabel,
   FormLabel,
@@ -32,6 +31,9 @@ import {
   type QuestionDraft,
 } from '../../schemas/questionSchemas';
 import OptionManager from './OptionManager';
+import { RichTextEditor } from '../RichTextEditor';
+import { MediaGallery } from '../MediaGallery';
+import type { MediaContentDto, MediaItemDto } from '../../types/media';
 
 interface QuestionEditorProps {
   open: boolean;
@@ -50,6 +52,9 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 }) => {
   const isEditMode = !!question;
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [mediaContent, setMediaContent] = useState<MediaContentDto | undefined>(
+    question?.mediaContent || undefined
+  );
 
   const {
     control,
@@ -84,6 +89,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         isRequired: question.isRequired,
         options: question.options,
       });
+      setMediaContent(question.mediaContent || undefined);
     } else if (open && !question) {
       reset({
         questionText: '',
@@ -91,6 +97,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         isRequired: true,
         options: [],
       });
+      setMediaContent(undefined);
     }
   }, [open, question, reset]);
 
@@ -109,6 +116,35 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
     }
   };
 
+  const handleAddMedia = (media: MediaItemDto) => {
+    const updatedMedia: MediaContentDto = {
+      version: '1.0',
+      items: [...(mediaContent?.items || []), media],
+    };
+    setMediaContent(updatedMedia);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleRemoveMedia = (mediaId: string) => {
+    if (!mediaContent?.items) return;
+
+    const updatedMedia: MediaContentDto = {
+      version: '1.0',
+      items: mediaContent.items.filter((m) => m.id !== mediaId),
+    };
+    setMediaContent(updatedMedia);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleReorderMedia = (items: MediaItemDto[]) => {
+    const updatedMedia: MediaContentDto = {
+      version: '1.0',
+      items: items,
+    };
+    setMediaContent(updatedMedia);
+    setHasUnsavedChanges(true);
+  };
+
   const onSubmit = (data: any) => {
     const questionDraft: QuestionDraft = {
       id: question?.id || crypto.randomUUID(),
@@ -121,6 +157,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
           ? data.options || []
           : [],
       orderIndex: question?.orderIndex ?? orderIndex,
+      mediaContent: mediaContent || null,
     };
 
     onSave(questionDraft);
@@ -258,28 +295,68 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 
             <Divider />
 
-            {/* Question Text */}
-            <Controller
-              name="questionText"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Question Text"
-                  placeholder="Enter your question here..."
-                  multiline
-                  rows={3}
-                  fullWidth
-                  required
-                  error={!!errors.questionText}
-                  helperText={
-                    errors.questionText?.message ||
-                    `${questionText.length}/500 characters`
-                  }
-                  inputProps={{ maxLength: 500 }}
-                />
-              )}
-            />
+            {/* Question Text with Rich Editor */}
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 500 }}>
+                Question Text *
+              </Typography>
+              <Controller
+                name="questionText"
+                control={control}
+                render={({ field }) => (
+                  <Box>
+                    <RichTextEditor
+                      value={field.value}
+                      onChange={(content, media) => {
+                        field.onChange(content);
+                        setMediaContent(media);
+                        setHasUnsavedChanges(true);
+                      }}
+                      placeholder="Enter your question with optional media..."
+                      mediaType="image"
+                      acceptedTypes={['image', 'video', 'audio', 'document', 'archive']}
+                      initialMedia={mediaContent?.items || []}
+                      readOnly={false}
+                    />
+                    {errors.questionText && (
+                      <Typography
+                        variant="caption"
+                        color="error"
+                        sx={{ mt: 1, display: 'block' }}
+                      >
+                        {errors.questionText.message}
+                      </Typography>
+                    )}
+                    {!errors.questionText && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ mt: 1, display: 'block' }}
+                      >
+                        {questionText.length}/500 characters
+                      </Typography>
+                    )}
+                  </Box>
+                )}
+              />
+            </Box>
+
+            {/* Media Gallery Section */}
+            <Divider />
+            <Box>
+              <MediaGallery
+                mediaItems={mediaContent?.items || []}
+                onAddMedia={handleAddMedia}
+                onRemoveMedia={handleRemoveMedia}
+                onReorderMedia={handleReorderMedia}
+                mediaType="image"
+                acceptedTypes={['image', 'video', 'audio', 'document', 'archive']}
+                readOnly={false}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                Attach media (images, videos, audio, documents, or archives) to provide context for your question. Maximum file sizes: Images 10MB, Videos 50MB, Audio 20MB, Documents 25MB, Archives 100MB.
+              </Typography>
+            </Box>
 
             {/* Required Toggle */}
             <Controller

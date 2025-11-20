@@ -37,6 +37,13 @@ public class CreateQuestionDto
     public List<string>? Options { get; set; }
 
     /// <summary>
+    /// Gets or sets the media content to attach to this question.
+    /// Optional - can be null if no media is provided during creation.
+    /// Expected format: JSON string representation of MediaContentDto (e.g., {"version":"1.0","items":[]})
+    /// </summary>
+    public string? MediaContent { get; set; }
+
+    /// <summary>
     /// Validates that options are provided for choice-based questions.
     /// </summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

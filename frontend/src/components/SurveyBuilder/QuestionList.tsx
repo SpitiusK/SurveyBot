@@ -148,20 +148,22 @@ const QuestionList: React.FC<QuestionListProps> = ({
         <DialogContent>
           <DialogContentText>
             Are you sure you want to delete this question?
-            {questionToDeleteObj && (
-              <Box
-                sx={{
-                  mt: 2,
-                  p: 2,
-                  bgcolor: 'action.hover',
-                  borderRadius: 1,
-                }}
-              >
-                <Typography variant="body2" fontWeight="medium">
-                  {questionToDeleteObj.questionText}
-                </Typography>
-              </Box>
-            )}
+          </DialogContentText>
+          {questionToDeleteObj && (
+            <Box
+              sx={{
+                mt: 2,
+                p: 2,
+                bgcolor: 'action.hover',
+                borderRadius: 1,
+              }}
+            >
+              <Typography variant="body2" fontWeight="medium">
+                {questionToDeleteObj.questionText}
+              </Typography>
+            </Box>
+          )}
+          <DialogContentText sx={{ mt: 2 }}>
             This action cannot be undone.
           </DialogContentText>
         </DialogContent>

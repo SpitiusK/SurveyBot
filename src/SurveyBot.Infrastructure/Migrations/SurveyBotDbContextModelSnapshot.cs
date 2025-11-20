@@ -97,6 +97,10 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_required");
 
+                    b.Property<string>("MediaContent")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("media_content");
+
                     b.Property<string>("OptionsJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("options_json");
@@ -124,6 +128,11 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("MediaContent")
+                        .HasDatabaseName("idx_questions_media_content");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("MediaContent"), "gin");
 
                     b.HasIndex("OptionsJson")
                         .HasDatabaseName("idx_questions_options_json");
@@ -300,14 +309,14 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("first_name");
 
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_login_at");
+
                     b.Property<string>("LastName")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("last_name");
-
-                    b.Property<DateTime?>("LastLoginAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_login_at");
 
                     b.Property<long>("TelegramId")
                         .HasColumnType("bigint")

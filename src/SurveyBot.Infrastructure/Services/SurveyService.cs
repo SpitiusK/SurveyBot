@@ -147,25 +147,11 @@ public class SurveyService : ISurveyService
             throw new Core.Exceptions.UnauthorizedAccessException(userId, "Survey", surveyId);
         }
 
-        // Check if survey has responses
-        var hasResponses = await _surveyRepository.HasResponsesAsync(surveyId);
+        // Hard delete - remove survey and all related data (questions, responses, answers)
+        // Note: Database cascade delete handles removal of related entities
+        await _surveyRepository.DeleteAsync(surveyId);
 
-        if (hasResponses)
-        {
-            // Soft delete - just deactivate
-            survey.IsActive = false;
-            survey.UpdatedAt = DateTime.UtcNow;
-            await _surveyRepository.UpdateAsync(survey);
-
-            _logger.LogInformation("Survey {SurveyId} soft deleted (deactivated)", surveyId);
-        }
-        else
-        {
-            // Hard delete - survey has no responses
-            await _surveyRepository.DeleteAsync(surveyId);
-
-            _logger.LogInformation("Survey {SurveyId} hard deleted", surveyId);
-        }
+        _logger.LogInformation("Survey {SurveyId} permanently deleted by user {UserId}", surveyId, userId);
 
         return true;
     }
