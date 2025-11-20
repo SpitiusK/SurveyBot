@@ -24,6 +24,7 @@ public class SurveyResponseHandler
     private readonly IConversationStateManager _stateManager;
     private readonly IEnumerable<IQuestionHandler> _questionHandlers;
     private readonly ISurveyRepository _surveyRepository;
+    private readonly IQuestionService _questionService;
     private readonly IMapper _mapper;
     private readonly HttpClient _httpClient;
     private readonly BotConfiguration _configuration;
@@ -36,6 +37,7 @@ public class SurveyResponseHandler
         IConversationStateManager stateManager,
         IEnumerable<IQuestionHandler> questionHandlers,
         ISurveyRepository surveyRepository,
+        IQuestionService questionService,
         IMapper mapper,
         HttpClient httpClient,
         Microsoft.Extensions.Options.IOptions<BotConfiguration> configuration,
@@ -47,6 +49,7 @@ public class SurveyResponseHandler
         _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
         _questionHandlers = questionHandlers ?? throw new ArgumentNullException(nameof(questionHandlers));
         _surveyRepository = surveyRepository ?? throw new ArgumentNullException(nameof(surveyRepository));
+        _questionService = questionService ?? throw new ArgumentNullException(nameof(questionService));
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _configuration = configuration?.Value ?? throw new ArgumentNullException(nameof(configuration));
@@ -76,34 +79,45 @@ public class SurveyResponseHandler
 
         // Get current state
         var state = await _stateManager.GetStateAsync(userId);
-        if (state == null || !state.CurrentQuestionIndex.HasValue || !state.CurrentSurveyId.HasValue)
+        if (state == null || !state.CurrentSurveyId.HasValue)
         {
             _logger.LogDebug("No active survey for user {UserId}", userId);
             return false;
         }
 
-        _logger.LogInformation(
-            "Processing message response for user {UserId} in survey {SurveyId}, question index {QuestionIndex}",
-            userId,
-            state.CurrentSurveyId,
-            state.CurrentQuestionIndex);
-
-        // Fetch survey with questions
-        var survey = await FetchSurveyWithQuestionsAsync(state.CurrentSurveyId.Value, cancellationToken);
-        if (survey == null || survey.Questions == null || survey.Questions.Count == 0)
+        // Determine current question ID (prefer new property, fallback to index-based)
+        int? currentQuestionId = state.CurrentQuestionId;
+        if (!currentQuestionId.HasValue && state.CurrentQuestionIndex.HasValue)
         {
-            _logger.LogError("Failed to fetch survey {SurveyId} for user {UserId}", state.CurrentSurveyId, userId);
+            // Fallback: get question by index
+            var survey = await FetchSurveyWithQuestionsAsync(state.CurrentSurveyId.Value, cancellationToken);
+            if (survey?.Questions != null && state.CurrentQuestionIndex.Value < survey.Questions.Count)
+            {
+                currentQuestionId = survey.Questions[state.CurrentQuestionIndex.Value].Id;
+            }
+        }
+
+        if (!currentQuestionId.HasValue)
+        {
+            _logger.LogWarning("No current question ID for user {UserId}", userId);
             return false;
         }
 
-        // Get current question
-        var questionDto = survey.Questions.ElementAtOrDefault(state.CurrentQuestionIndex.Value);
-        if (questionDto == null)
+        _logger.LogInformation(
+            "Processing message response for user {UserId} in survey {SurveyId}, question {QuestionId}",
+            userId,
+            state.CurrentSurveyId,
+            currentQuestionId);
+
+        // Get current question by ID
+        QuestionDto questionDto;
+        try
         {
-            _logger.LogError(
-                "Question at index {Index} not found in survey {SurveyId}",
-                state.CurrentQuestionIndex,
-                state.CurrentSurveyId);
+            questionDto = await _questionService.GetQuestionAsync(currentQuestionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch question {QuestionId}", currentQuestionId);
             return false;
         }
 
@@ -144,35 +158,46 @@ public class SurveyResponseHandler
             }
         }
 
-        // Record answer in state
-        await _stateManager.AnswerQuestionAsync(userId, state.CurrentQuestionIndex.Value, answerJson);
+        // Extract raw answer value for branching condition evaluation
+        var rawAnswerValue = ExtractRawAnswerValue(answerJson, questionDto.QuestionType);
 
-        // Check if this was the last question
-        var isLastQuestion = state.IsLastQuestion;
-        if (!isLastQuestion)
+        _logger.LogDebug(
+            "Extracted raw answer value for branching: {RawValue} from JSON: {AnswerJson}",
+            rawAnswerValue ?? "null",
+            answerJson);
+
+        // Get next question using branching logic
+        var nextQuestionId = await GetNextQuestionAsync(
+            currentQuestionId.Value,
+            rawAnswerValue ?? string.Empty,
+            state.CurrentSurveyId.Value,
+            cancellationToken);
+
+        if (nextQuestionId.HasValue)
         {
-            // Move to next question
-            await _stateManager.NextQuestionAsync(userId);
+            // Update state with next question ID
+            await _stateManager.NextQuestionByIdAsync(userId, nextQuestionId.Value, answerJson);
+
+            // Calculate position for display
+            var answeredCount = await _stateManager.GetAnsweredCountAsync(userId);
+            var totalQuestions = state.TotalQuestions ?? 0;
 
             // Display next question
-            state = await _stateManager.GetStateAsync(userId);
-            if (state != null && state.CurrentQuestionIndex.HasValue)
-            {
-                var nextQuestion = survey.Questions.ElementAtOrDefault(state.CurrentQuestionIndex.Value);
-                if (nextQuestion != null)
-                {
-                    await DisplayQuestionAsync(
-                        chatId,
-                        nextQuestion,
-                        state.CurrentQuestionIndex.Value,
-                        state.TotalQuestions ?? survey.Questions.Count,
-                        cancellationToken);
-                }
-            }
+            await DisplayQuestionByIdAsync(
+                chatId,
+                nextQuestionId.Value,
+                state.CurrentSurveyId.Value,
+                answeredCount + 1,
+                totalQuestions,
+                cancellationToken);
         }
         else
         {
-            // Last question - complete survey
+            // No next question - complete survey
+            _logger.LogInformation(
+                "Survey {SurveyId} complete for user {UserId}",
+                state.CurrentSurveyId,
+                userId);
             await CompleteSurveyAsync(userId, state.CurrentResponseId!.Value, chatId, cancellationToken);
         }
 
@@ -191,34 +216,45 @@ public class SurveyResponseHandler
 
         // Get current state
         var state = await _stateManager.GetStateAsync(userId);
-        if (state == null || !state.CurrentQuestionIndex.HasValue || !state.CurrentSurveyId.HasValue)
+        if (state == null || !state.CurrentSurveyId.HasValue)
         {
             _logger.LogDebug("No active survey for user {UserId}", userId);
             return false;
         }
 
-        _logger.LogInformation(
-            "Processing callback response for user {UserId} in survey {SurveyId}, question index {QuestionIndex}",
-            userId,
-            state.CurrentSurveyId,
-            state.CurrentQuestionIndex);
-
-        // Fetch survey with questions
-        var survey = await FetchSurveyWithQuestionsAsync(state.CurrentSurveyId.Value, cancellationToken);
-        if (survey == null || survey.Questions == null || survey.Questions.Count == 0)
+        // Determine current question ID (prefer new property, fallback to index-based)
+        int? currentQuestionId = state.CurrentQuestionId;
+        if (!currentQuestionId.HasValue && state.CurrentQuestionIndex.HasValue)
         {
-            _logger.LogError("Failed to fetch survey {SurveyId} for user {UserId}", state.CurrentSurveyId, userId);
+            // Fallback: get question by index
+            var survey = await FetchSurveyWithQuestionsAsync(state.CurrentSurveyId.Value, cancellationToken);
+            if (survey?.Questions != null && state.CurrentQuestionIndex.Value < survey.Questions.Count)
+            {
+                currentQuestionId = survey.Questions[state.CurrentQuestionIndex.Value].Id;
+            }
+        }
+
+        if (!currentQuestionId.HasValue)
+        {
+            _logger.LogWarning("No current question ID for user {UserId}", userId);
             return false;
         }
 
-        // Get current question
-        var questionDto = survey.Questions.ElementAtOrDefault(state.CurrentQuestionIndex.Value);
-        if (questionDto == null)
+        _logger.LogInformation(
+            "Processing callback response for user {UserId} in survey {SurveyId}, question {QuestionId}",
+            userId,
+            state.CurrentSurveyId,
+            currentQuestionId);
+
+        // Get current question by ID
+        QuestionDto questionDto;
+        try
         {
-            _logger.LogError(
-                "Question at index {Index} not found in survey {SurveyId}",
-                state.CurrentQuestionIndex,
-                state.CurrentSurveyId);
+            questionDto = await _questionService.GetQuestionAsync(currentQuestionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch question {QuestionId}", currentQuestionId);
             return false;
         }
 
@@ -265,35 +301,46 @@ public class SurveyResponseHandler
             }
         }
 
-        // Record answer in state
-        await _stateManager.AnswerQuestionAsync(userId, state.CurrentQuestionIndex.Value, answerJson);
+        // Extract raw answer value for branching condition evaluation
+        var rawAnswerValue = ExtractRawAnswerValue(answerJson, questionDto.QuestionType);
 
-        // Check if this was the last question
-        var isLastQuestion = state.IsLastQuestion;
-        if (!isLastQuestion)
+        _logger.LogDebug(
+            "Extracted raw answer value for branching: {RawValue} from JSON: {AnswerJson}",
+            rawAnswerValue ?? "null",
+            answerJson);
+
+        // Get next question using branching logic
+        var nextQuestionId = await GetNextQuestionAsync(
+            currentQuestionId.Value,
+            rawAnswerValue ?? string.Empty,
+            state.CurrentSurveyId.Value,
+            cancellationToken);
+
+        if (nextQuestionId.HasValue)
         {
-            // Move to next question
-            await _stateManager.NextQuestionAsync(userId);
+            // Update state with next question ID
+            await _stateManager.NextQuestionByIdAsync(userId, nextQuestionId.Value, answerJson);
+
+            // Calculate position for display
+            var answeredCount = await _stateManager.GetAnsweredCountAsync(userId);
+            var totalQuestions = state.TotalQuestions ?? 0;
 
             // Display next question
-            state = await _stateManager.GetStateAsync(userId);
-            if (state != null && state.CurrentQuestionIndex.HasValue)
-            {
-                var nextQuestion = survey.Questions.ElementAtOrDefault(state.CurrentQuestionIndex.Value);
-                if (nextQuestion != null)
-                {
-                    await DisplayQuestionAsync(
-                        chatId,
-                        nextQuestion,
-                        state.CurrentQuestionIndex.Value,
-                        state.TotalQuestions ?? survey.Questions.Count,
-                        cancellationToken);
-                }
-            }
+            await DisplayQuestionByIdAsync(
+                chatId,
+                nextQuestionId.Value,
+                state.CurrentSurveyId.Value,
+                answeredCount + 1,
+                totalQuestions,
+                cancellationToken);
         }
         else
         {
-            // Last question - complete survey
+            // No next question - complete survey
+            _logger.LogInformation(
+                "Survey {SurveyId} complete for user {UserId}",
+                state.CurrentSurveyId,
+                userId);
             await CompleteSurveyAsync(userId, state.CurrentResponseId!.Value, chatId, cancellationToken);
         }
 
@@ -301,6 +348,108 @@ public class SurveyResponseHandler
     }
 
     #region Private Helper Methods
+
+    /// <summary>
+    /// Extracts the raw answer value from answer JSON for branching condition evaluation.
+    /// Converts structured JSON answer to the raw value that branching conditions expect.
+    /// </summary>
+    /// <param name="answerJson">The JSON answer string from question handler</param>
+    /// <param name="questionType">The type of question</param>
+    /// <returns>Raw answer value (e.g., "Option 1", "5", "Yes") or null if extraction fails</returns>
+    private string? ExtractRawAnswerValue(string answerJson, SurveyBot.Core.Entities.QuestionType questionType)
+    {
+        if (string.IsNullOrWhiteSpace(answerJson))
+        {
+            _logger.LogWarning("Answer JSON is null or empty");
+            return null;
+        }
+
+        try
+        {
+            var answerElement = JsonSerializer.Deserialize<JsonElement>(answerJson);
+
+            switch (questionType)
+            {
+                case SurveyBot.Core.Entities.QuestionType.Text:
+                    // Extract from: {"text": "User's answer"}
+                    if (answerElement.TryGetProperty("text", out var textValue))
+                    {
+                        return textValue.GetString();
+                    }
+                    break;
+
+                case SurveyBot.Core.Entities.QuestionType.SingleChoice:
+                    // Extract from: {"selectedOption": "Option 1"}
+                    if (answerElement.TryGetProperty("selectedOption", out var selectedOption))
+                    {
+                        return selectedOption.GetString();
+                    }
+                    break;
+
+                case SurveyBot.Core.Entities.QuestionType.MultipleChoice:
+                    // Extract from: {"selectedOptions": ["Option A", "Option B"]}
+                    // For branching, we'll check if any of the selected options match
+                    // Return first selected option for simple matching, or comma-separated for "In" operator
+                    if (answerElement.TryGetProperty("selectedOptions", out var selectedOptions) &&
+                        selectedOptions.ValueKind == JsonValueKind.Array)
+                    {
+                        var options = selectedOptions.EnumerateArray()
+                            .Select(e => e.GetString())
+                            .Where(s => !string.IsNullOrEmpty(s))
+                            .ToList();
+
+                        if (options.Any())
+                        {
+                            // Return first option for simple equals comparison
+                            // Branching logic can handle checking if value is in the array
+                            return options.First();
+                        }
+                    }
+                    break;
+
+                case SurveyBot.Core.Entities.QuestionType.Rating:
+                    // Extract from: {"rating": 4}
+                    if (answerElement.TryGetProperty("rating", out var rating))
+                    {
+                        if (rating.ValueKind == JsonValueKind.Number)
+                        {
+                            return rating.GetInt32().ToString();
+                        }
+                        else if (rating.ValueKind == JsonValueKind.String)
+                        {
+                            return rating.GetString();
+                        }
+                    }
+                    break;
+
+                default:
+                    _logger.LogWarning("Unknown question type: {QuestionType}", questionType);
+                    break;
+            }
+
+            _logger.LogWarning(
+                "Could not extract raw answer value from JSON: {AnswerJson} for question type: {QuestionType}",
+                answerJson,
+                questionType);
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(
+                ex,
+                "JSON deserialization error extracting raw answer from: {AnswerJson}",
+                answerJson);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Unexpected error extracting raw answer from: {AnswerJson}",
+                answerJson);
+            return null;
+        }
+    }
 
     /// <summary>
     /// Fetches survey with questions from API with caching for performance.
@@ -411,6 +560,138 @@ public class SurveyResponseHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error submitting answer for question {QuestionId}", questionId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Determines the next question ID to display based on branching rules or sequential order.
+    /// </summary>
+    /// <param name="currentQuestionId">Current question ID</param>
+    /// <param name="answer">Answer provided for current question</param>
+    /// <param name="surveyId">Survey ID</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Next question ID, or null if survey is complete</returns>
+    private async Task<int?> GetNextQuestionAsync(
+        int currentQuestionId,
+        string answer,
+        int surveyId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // First, try to get next question using branching rules
+            var nextQuestionId = await _questionService.GetNextQuestionAsync(
+                currentQuestionId,
+                answer,
+                surveyId);
+
+            if (nextQuestionId.HasValue)
+            {
+                _logger.LogDebug(
+                    "Branching rule matched: question {CurrentQuestionId} -> {NextQuestionId}",
+                    currentQuestionId,
+                    nextQuestionId.Value);
+                return nextQuestionId.Value;
+            }
+
+            // No branching rule matched, fallback to sequential navigation
+            _logger.LogDebug(
+                "No branching rule matched for question {CurrentQuestionId}, using sequential navigation",
+                currentQuestionId);
+
+            // Fetch survey with questions to find next sequential question
+            var survey = await FetchSurveyWithQuestionsAsync(surveyId, cancellationToken);
+            if (survey?.Questions == null || survey.Questions.Count == 0)
+            {
+                _logger.LogWarning("Survey {SurveyId} has no questions", surveyId);
+                return null;
+            }
+
+            // Find current question in the list
+            var currentIndex = survey.Questions.FindIndex(q => q.Id == currentQuestionId);
+            if (currentIndex == -1)
+            {
+                _logger.LogWarning(
+                    "Current question {QuestionId} not found in survey {SurveyId}",
+                    currentQuestionId,
+                    surveyId);
+                return null;
+            }
+
+            // Check if there's a next question
+            if (currentIndex < survey.Questions.Count - 1)
+            {
+                var nextQuestion = survey.Questions[currentIndex + 1];
+                _logger.LogDebug(
+                    "Sequential navigation: question {CurrentQuestionId} -> {NextQuestionId}",
+                    currentQuestionId,
+                    nextQuestion.Id);
+                return nextQuestion.Id;
+            }
+
+            // No next question - survey complete
+            _logger.LogDebug(
+                "No next question after {CurrentQuestionId}, survey {SurveyId} is complete",
+                currentQuestionId,
+                surveyId);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error determining next question after {CurrentQuestionId} in survey {SurveyId}",
+                currentQuestionId,
+                surveyId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Displays a question by ID using the appropriate handler.
+    /// </summary>
+    /// <param name="chatId">Chat ID to send message to</param>
+    /// <param name="questionId">Question ID to display</param>
+    /// <param name="surveyId">Survey ID</param>
+    /// <param name="currentPosition">Current position in survey (for display)</param>
+    /// <param name="totalQuestions">Total questions in survey</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    private async Task<bool> DisplayQuestionByIdAsync(
+        long chatId,
+        int questionId,
+        int surveyId,
+        int currentPosition,
+        int totalQuestions,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Fetch the question
+            var questionDto = await _questionService.GetQuestionAsync(questionId);
+            if (questionDto == null)
+            {
+                _logger.LogError("Question {QuestionId} not found", questionId);
+                await _botService.Client.SendMessage(
+                    chatId: chatId,
+                    text: "Error: Question not found. Please contact support.",
+                    cancellationToken: cancellationToken);
+                return false;
+            }
+
+            // Display using appropriate handler
+            await DisplayQuestionAsync(
+                chatId,
+                questionDto,
+                currentPosition,
+                totalQuestions,
+                cancellationToken);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error displaying question {QuestionId}", questionId);
             return false;
         }
     }

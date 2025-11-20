@@ -88,6 +88,52 @@ public interface IQuestionService
     /// <param name="options">The options to validate.</param>
     /// <returns>Validation result with any error messages.</returns>
     QuestionValidationResult ValidateQuestionOptionsAsync(QuestionType type, List<string>? options);
+
+    /// <summary>
+    /// Evaluates branching rules for a question based on the answer value.
+    /// </summary>
+    /// <param name="sourceQuestionId">The source question ID.</param>
+    /// <param name="answerValue">The answer value to evaluate.</param>
+    /// <returns>The target question ID if a rule matches, otherwise null.</returns>
+    Task<int?> EvaluateBranchingRuleAsync(int sourceQuestionId, string answerValue);
+
+    /// <summary>
+    /// Determines the next question ID to display after answering the current question.
+    /// </summary>
+    /// <param name="currentQuestionId">The current question ID.</param>
+    /// <param name="answerValue">The answer value for the current question.</param>
+    /// <param name="surveyId">The survey ID.</param>
+    /// <returns>The next question ID, or null if survey is complete.</returns>
+    Task<int?> GetNextQuestionAsync(int currentQuestionId, string answerValue, int surveyId);
+
+    /// <summary>
+    /// Checks if a question type supports branching conditions.
+    /// </summary>
+    /// <param name="questionId">The question ID.</param>
+    /// <returns>True if the question supports branching, otherwise false.</returns>
+    Task<bool> SupportsConditionAsync(int questionId);
+
+    /// <summary>
+    /// Checks if adding a branching rule would create a circular dependency.
+    /// </summary>
+    /// <param name="sourceQuestionId">The source question ID.</param>
+    /// <param name="targetQuestionId">The target question ID.</param>
+    /// <returns>True if a cycle would be created, otherwise false.</returns>
+    Task<bool> HasCyclicDependencyAsync(int sourceQuestionId, int targetQuestionId);
+
+    /// <summary>
+    /// Detects all cycles in a survey's branching rules.
+    /// </summary>
+    /// <param name="surveyId">The survey ID.</param>
+    /// <returns>A collection of cycle descriptions.</returns>
+    Task<IEnumerable<string>> DetectAllCyclesAsync(int surveyId);
+
+    /// <summary>
+    /// Validates a branching rule before creation.
+    /// </summary>
+    /// <param name="rule">The branching rule to validate.</param>
+    /// <exception cref="Exceptions.QuestionValidationException">Thrown when validation fails.</exception>
+    Task ValidateBranchingRuleAsync(QuestionBranchingRule rule);
 }
 
 /// <summary>

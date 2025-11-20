@@ -33,6 +33,7 @@ public class SurveyRepository : GenericRepository<Survey>, ISurveyRepository
     {
         return await _dbSet
             .Include(s => s.Questions.OrderBy(q => q.OrderIndex))
+                .ThenInclude(q => q.OutgoingRules)  // Include branching rules
             .Include(s => s.Creator)
             .Include(s => s.Responses)
                 .ThenInclude(r => r.Answers)

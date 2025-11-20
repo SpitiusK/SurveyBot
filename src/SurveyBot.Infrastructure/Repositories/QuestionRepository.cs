@@ -144,4 +144,42 @@ public class QuestionRepository : GenericRepository<Question>, IQuestionReposito
             .ThenBy(q => q.OrderIndex)
             .ToListAsync();
     }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Question>> GetWithBranchingRulesAsync(int surveyId, bool includeBranching = true)
+    {
+        var query = _dbSet
+            .Where(q => q.SurveyId == surveyId);
+
+        if (includeBranching)
+        {
+            query = query
+                .Include(q => q.OutgoingRules)
+                    .ThenInclude(r => r.TargetQuestion)
+                .Include(q => q.IncomingRules)
+                    .ThenInclude(r => r.SourceQuestion);
+        }
+
+        return await query
+            .OrderBy(q => q.OrderIndex)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Question>> GetChildQuestionsAsync(int parentQuestionId)
+    {
+        return await _dbSet
+            .Where(q => q.IncomingRules.Any(r => r.SourceQuestionId == parentQuestionId))
+            .OrderBy(q => q.OrderIndex)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Question>> GetParentQuestionsAsync(int childQuestionId)
+    {
+        return await _dbSet
+            .Where(q => q.OutgoingRules.Any(r => r.TargetQuestionId == childQuestionId))
+            .OrderBy(q => q.OrderIndex)
+            .ToListAsync();
+    }
 }

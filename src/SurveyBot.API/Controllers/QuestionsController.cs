@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SurveyBot.API.Models;
 using SurveyBot.Core.DTOs.Question;
+using SurveyBot.Core.DTOs.Branching;
 using SurveyBot.Core.Exceptions;
 using SurveyBot.Core.Interfaces;
 using Swashbuckle.AspNetCore.Annotations;
@@ -496,6 +497,90 @@ public class QuestionsController : ControllerBase
             {
                 Success = false,
                 Message = "An error occurred while reordering questions"
+            });
+        }
+    }
+
+    /// <summary>
+    /// Gets the next question based on the current questions answer (evaluates branching rules).
+    /// </summary>
+    /// <param name="surveyId">Survey ID.</param>
+    /// <param name="questionId">Current question ID.</param>
+    /// <param name="request">Request containing the answer value.</param>
+    /// <returns>Response indicating the next question ID or survey completion.</returns>
+    /// <response code="200">Successfully evaluated next question.</response>
+    /// <response code="400">Invalid request data.</response>
+    /// <response code="404">Survey or question not found.</response>
+    [HttpPost("surveys/{surveyId}/questions/{questionId}/next")]
+    [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Get next question based on answer",
+        Description = "Evaluates branching rules to determine the next question to display based on the current questions answer. Public endpoint for survey taking.",
+        Tags = new[] { "Questions" }
+    )]
+    [ProducesResponseType(typeof(ApiResponse<GetNextQuestionResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<GetNextQuestionResponseDto>>> GetNextQuestion(
+        int surveyId,
+        int questionId,
+        [FromBody] GetNextQuestionRequestDto request)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+            {
+                _logger.LogWarning("Invalid model state for get next question");
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Invalid request data",
+                    Data = ModelState
+                });
+            }
+
+            _logger.LogInformation(
+                "Evaluating next question for survey {SurveyId}, question {QuestionId}",
+                surveyId, questionId);
+
+            var nextQuestionId = await _questionService.GetNextQuestionAsync(
+                questionId,
+                request.Answer,
+                surveyId);
+
+            var response = new GetNextQuestionResponseDto
+            {
+                NextQuestionId = nextQuestionId,
+                IsComplete = nextQuestionId == null
+            };
+
+            return Ok(ApiResponse<GetNextQuestionResponseDto>.Ok(response));
+        }
+        catch (QuestionNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Question {QuestionId} not found", questionId);
+            return NotFound(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (SurveyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Survey {SurveyId} not found", surveyId);
+            return NotFound(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting next question");
+            return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "An error occurred while evaluating the next question"
             });
         }
     }

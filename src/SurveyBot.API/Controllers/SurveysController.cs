@@ -22,16 +22,19 @@ namespace SurveyBot.API.Controllers;
 public class SurveysController : ControllerBase
 {
     private readonly ISurveyService _surveyService;
+    private readonly IUserRepository _userRepository;
     private readonly ILogger<SurveysController> _logger;
 
     /// <summary>
     /// Initializes a new instance of the SurveysController.
     /// </summary>
     /// <param name="surveyService">Survey service for business logic.</param>
+    /// <param name="userRepository">User repository for user validation.</param>
     /// <param name="logger">Logger instance for logging operations.</param>
-    public SurveysController(ISurveyService surveyService, ILogger<SurveysController> logger)
+    public SurveysController(ISurveyService surveyService, IUserRepository userRepository, ILogger<SurveysController> logger)
     {
         _surveyService = surveyService;
+        _userRepository = userRepository;
         _logger = logger;
     }
 
@@ -69,6 +72,18 @@ public class SurveysController : ControllerBase
 
             var userId = GetUserIdFromClaims();
             _logger.LogInformation("Creating survey for user {UserId}", userId);
+
+            // Ensure user exists in database (foreign key requirement)
+            var user = await _userRepository.GetByIdAsync(userId);
+            if (user == null)
+            {
+                _logger.LogError("User {UserId} not found in database but has valid JWT token", userId);
+                return Unauthorized(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User account not found. Please log in again."
+                });
+            }
 
             var survey = await _surveyService.CreateSurveyAsync(userId, dto);
 

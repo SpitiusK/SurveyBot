@@ -146,14 +146,70 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasDatabaseName("idx_questions_survey_id");
 
                     b.HasIndex("SurveyId", "OrderIndex")
-                        .IsUnique()
-                        .HasDatabaseName("idx_questions_survey_order_unique");
+                        .HasDatabaseName("idx_questions_survey_order");
 
                     b.ToTable("questions", null, t =>
                         {
                             t.HasCheckConstraint("chk_order_index", "order_index >= 0");
 
                             t.HasCheckConstraint("chk_question_type", "question_type IN (0, 1, 2, 3)");
+                        });
+                });
+
+            modelBuilder.Entity("SurveyBot.Core.Entities.QuestionBranchingRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ConditionJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("condition_json");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("SourceQuestionId")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_question_id");
+
+                    b.Property<int>("TargetQuestionId")
+                        .HasColumnType("integer")
+                        .HasColumnName("target_question_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConditionJson")
+                        .HasDatabaseName("idx_branching_rules_condition_json");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("ConditionJson"), "gin");
+
+                    b.HasIndex("SourceQuestionId")
+                        .HasDatabaseName("idx_branching_rules_source_question");
+
+                    b.HasIndex("TargetQuestionId")
+                        .HasDatabaseName("idx_branching_rules_target_question");
+
+                    b.HasIndex("SourceQuestionId", "TargetQuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("idx_branching_rules_source_target_unique");
+
+                    b.ToTable("question_branching_rules", null, t =>
+                        {
+                            t.HasCheckConstraint("chk_condition_json_not_null", "condition_json IS NOT NULL");
+
+                            t.HasCheckConstraint("chk_source_target_different", "source_question_id != target_question_id");
                         });
                 });
 
@@ -379,6 +435,27 @@ namespace SurveyBot.Infrastructure.Migrations
                     b.Navigation("Survey");
                 });
 
+            modelBuilder.Entity("SurveyBot.Core.Entities.QuestionBranchingRule", b =>
+                {
+                    b.HasOne("SurveyBot.Core.Entities.Question", "SourceQuestion")
+                        .WithMany("OutgoingRules")
+                        .HasForeignKey("SourceQuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_branching_rules_source_question");
+
+                    b.HasOne("SurveyBot.Core.Entities.Question", "TargetQuestion")
+                        .WithMany("IncomingRules")
+                        .HasForeignKey("TargetQuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_branching_rules_target_question");
+
+                    b.Navigation("SourceQuestion");
+
+                    b.Navigation("TargetQuestion");
+                });
+
             modelBuilder.Entity("SurveyBot.Core.Entities.Response", b =>
                 {
                     b.HasOne("SurveyBot.Core.Entities.Survey", "Survey")
@@ -406,6 +483,10 @@ namespace SurveyBot.Infrastructure.Migrations
             modelBuilder.Entity("SurveyBot.Core.Entities.Question", b =>
                 {
                     b.Navigation("Answers");
+
+                    b.Navigation("IncomingRules");
+
+                    b.Navigation("OutgoingRules");
                 });
 
             modelBuilder.Entity("SurveyBot.Core.Entities.Response", b =>

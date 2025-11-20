@@ -62,6 +62,7 @@ const SurveyBuilder: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [questions, setQuestions] = useState<QuestionDraft[]>([]);
+  const [branchingRules, setBranchingRules] = useState<any[]>([]);
 
   // Form setup
   const {
@@ -270,6 +271,11 @@ const SurveyBuilder: React.FC = () => {
     setQuestions(updatedQuestions);
   };
 
+  // Handle branching rules update
+  const handleUpdateBranchingRules = (rules: any[]) => {
+    setBranchingRules(rules);
+  };
+
   // Handle publish success
   const handlePublishSuccess = (survey: any) => {
     console.log('Survey published successfully:', survey);
@@ -287,6 +293,7 @@ const SurveyBuilder: React.FC = () => {
           <QuestionsStep
             questions={questions}
             onUpdateQuestions={handleUpdateQuestions}
+            onUpdateBranchingRules={handleUpdateBranchingRules}
             onNext={handleNext}
             onBack={handleBack}
           />
@@ -296,6 +303,7 @@ const SurveyBuilder: React.FC = () => {
           <ReviewStep
             surveyData={formValues}
             questions={questions}
+            branchingRules={branchingRules}
             onBack={handleBack}
             onPublishSuccess={handlePublishSuccess}
             isEditMode={isEditMode}

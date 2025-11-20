@@ -17,6 +17,7 @@ public class QuestionService : IQuestionService
 {
     private readonly IQuestionRepository _questionRepository;
     private readonly ISurveyRepository _surveyRepository;
+    private readonly IQuestionBranchingRuleRepository _branchingRuleRepository;
     private readonly IMapper _mapper;
     private readonly ILogger<QuestionService> _logger;
 
@@ -33,11 +34,13 @@ public class QuestionService : IQuestionService
     public QuestionService(
         IQuestionRepository questionRepository,
         ISurveyRepository surveyRepository,
+        IQuestionBranchingRuleRepository branchingRuleRepository,
         IMapper mapper,
         ILogger<QuestionService> logger)
     {
         _questionRepository = questionRepository;
         _surveyRepository = surveyRepository;
+        _branchingRuleRepository = branchingRuleRepository;
         _mapper = mapper;
         _logger = logger;
     }
@@ -431,7 +434,346 @@ public class QuestionService : IQuestionService
         }
     }
 
+    /// <inheritdoc/>
+    public async Task<int?> EvaluateBranchingRuleAsync(int sourceQuestionId, string answerValue)
+    {
+        _logger.LogInformation("Evaluating branching rules for question {QuestionId} with answer: {AnswerValue}",
+            sourceQuestionId, answerValue);
+
+        // Get the source question to validate
+        var sourceQuestion = await _questionRepository.GetByIdAsync(sourceQuestionId);
+        if (sourceQuestion == null)
+        {
+            _logger.LogWarning("Source question {QuestionId} not found", sourceQuestionId);
+            return null;
+        }
+
+        // Get all branching rules for this source question
+        var rules = await _branchingRuleRepository.GetBySourceQuestionAsync(sourceQuestionId);
+
+        foreach (var rule in rules)
+        {
+            try
+            {
+                // Deserialize the condition
+                var condition = JsonSerializer.Deserialize<BranchingCondition>(rule.ConditionJson);
+                if (condition == null) continue;
+
+                // Evaluate the condition
+                if (await EvaluateConditionAsync(condition, answerValue))
+                {
+                    _logger.LogInformation("Branching rule matched for question {SourceId} -> {TargetId}",
+                        sourceQuestionId, rule.TargetQuestionId);
+                    return rule.TargetQuestionId;
+                }
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Failed to deserialize branching condition for rule {RuleId}", rule.Id);
+            }
+        }
+
+        _logger.LogInformation("No branching rule matched for question {QuestionId}", sourceQuestionId);
+        return null;
+    }
+
+    /// <inheritdoc/>
+    public async Task<int?> GetNextQuestionAsync(int currentQuestionId, string answerValue, int surveyId)
+    {
+        _logger.LogInformation("Getting next question after {QuestionId} in survey {SurveyId}",
+            currentQuestionId, surveyId);
+
+        // Try to find a matching branching rule
+        var branchTarget = await EvaluateBranchingRuleAsync(currentQuestionId, answerValue);
+        if (branchTarget.HasValue)
+        {
+            _logger.LogInformation("Branching to question {TargetId}", branchTarget.Value);
+            return branchTarget.Value;
+        }
+
+        // No branching rule matched, get next sequential question
+        var currentQuestion = await _questionRepository.GetByIdAsync(currentQuestionId);
+        if (currentQuestion == null)
+        {
+            _logger.LogWarning("Current question {QuestionId} not found", currentQuestionId);
+            return null;
+        }
+
+        // Get all questions in the survey
+        var questions = await _questionRepository.GetBySurveyIdAsync(surveyId);
+        var questionList = questions.OrderBy(q => q.OrderIndex).ToList();
+
+        // Find the current question's index
+        var currentIndex = questionList.FindIndex(q => q.Id == currentQuestionId);
+        if (currentIndex == -1 || currentIndex == questionList.Count - 1)
+        {
+            _logger.LogInformation("Survey complete - no more questions");
+            return null; // Survey complete
+        }
+
+        var nextQuestion = questionList[currentIndex + 1];
+        _logger.LogInformation("Next sequential question is {QuestionId}", nextQuestion.Id);
+        return nextQuestion.Id;
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> SupportsConditionAsync(int questionId)
+    {
+        var question = await _questionRepository.GetByIdAsync(questionId);
+        if (question == null)
+        {
+            return false;
+        }
+
+        // Initially, only SingleChoice questions support branching
+        // This can be expanded in the future to support other types
+        return question.QuestionType == QuestionType.SingleChoice;
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> HasCyclicDependencyAsync(int sourceQuestionId, int targetQuestionId)
+    {
+        _logger.LogInformation("Checking for cyclic dependency: {SourceId} -> {TargetId}",
+            sourceQuestionId, targetQuestionId);
+
+        // If source and target are the same, it's a cycle
+        if (sourceQuestionId == targetQuestionId)
+        {
+            _logger.LogWarning("Self-reference detected: {QuestionId}", sourceQuestionId);
+            return true;
+        }
+
+        var visited = new HashSet<int>();
+        var hasCycle = await DetectCycleAsync(targetQuestionId, sourceQuestionId, visited);
+
+        if (hasCycle)
+        {
+            _logger.LogWarning("Cycle detected: adding rule {SourceId} -> {TargetId} would create a cycle",
+                sourceQuestionId, targetQuestionId);
+        }
+
+        return hasCycle;
+    }
+
+    /// <inheritdoc/>
+    public async Task<IEnumerable<string>> DetectAllCyclesAsync(int surveyId)
+    {
+        _logger.LogInformation("Detecting all cycles in survey {SurveyId}", surveyId);
+
+        var cycles = new List<string>();
+        var rules = await _branchingRuleRepository.GetBySurveyIdAsync(surveyId);
+        var questions = await _questionRepository.GetBySurveyIdAsync(surveyId);
+        var questionDict = questions.ToDictionary(q => q.Id);
+
+        foreach (var question in questions)
+        {
+            var visited = new HashSet<int>();
+            var path = new List<int> { question.Id };
+
+            await DetectCyclesRecursive(question.Id, visited, path, cycles, questionDict);
+        }
+
+        return cycles.Distinct();
+    }
+
+    /// <inheritdoc/>
+    public async Task ValidateBranchingRuleAsync(QuestionBranchingRule rule)
+    {
+        _logger.LogInformation("Validating branching rule: {SourceId} -> {TargetId}",
+            rule.SourceQuestionId, rule.TargetQuestionId);
+
+        // 1. Check for self-reference
+        if (rule.SourceQuestionId == rule.TargetQuestionId)
+        {
+            throw new QuestionValidationException(
+                "A question cannot branch to itself.");
+        }
+
+        // 2. Check that both questions exist
+        var sourceQuestion = await _questionRepository.GetByIdAsync(rule.SourceQuestionId);
+        if (sourceQuestion == null)
+        {
+            throw new QuestionNotFoundException(rule.SourceQuestionId);
+        }
+
+        var targetQuestion = await _questionRepository.GetByIdAsync(rule.TargetQuestionId);
+        if (targetQuestion == null)
+        {
+            throw new QuestionNotFoundException(rule.TargetQuestionId);
+        }
+
+        // 3. Check that both questions are in the same survey
+        if (sourceQuestion.SurveyId != targetQuestion.SurveyId)
+        {
+            throw new QuestionValidationException(
+                "Source and target questions must be in the same survey.");
+        }
+
+        // 4. Check that source question type supports branching
+        if (!await SupportsConditionAsync(rule.SourceQuestionId))
+        {
+            throw new QuestionValidationException(
+                $"Question type '{sourceQuestion.QuestionType}' does not support branching conditions.");
+        }
+
+        // 5. Check for existing rule
+        var existingRule = await _branchingRuleRepository.GetBySourceAndTargetAsync(
+            rule.SourceQuestionId, rule.TargetQuestionId);
+        if (existingRule != null && existingRule.Id != rule.Id)
+        {
+            throw new QuestionValidationException(
+                "A branching rule already exists between these questions.");
+        }
+
+        // 6. Check for circular dependency
+        if (await HasCyclicDependencyAsync(rule.SourceQuestionId, rule.TargetQuestionId))
+        {
+            throw new QuestionValidationException(
+                "Adding this branching rule would create a circular dependency.");
+        }
+
+        _logger.LogInformation("Branching rule validation passed");
+    }
+
     #region Private Helper Methods
+
+    /// <summary>
+    /// Evaluates a single branching condition against an answer value.
+    /// </summary>
+    private Task<bool> EvaluateConditionAsync(BranchingCondition condition, string answerValue)
+    {
+        if (string.IsNullOrWhiteSpace(answerValue))
+        {
+            _logger.LogDebug("Condition evaluation: answer value is null or empty");
+            return Task.FromResult(false);
+        }
+
+        try
+        {
+            _logger.LogDebug(
+                "Evaluating condition: operator={Operator}, answerValue='{AnswerValue}', conditionValues=[{ConditionValues}]",
+                condition.Operator,
+                answerValue,
+                string.Join(", ", condition.Values.Select(v => $"'{v}'")));
+
+            bool result = condition.Operator switch
+            {
+                BranchingOperator.Equals => condition.Values.Length > 0 &&
+                    string.Equals(answerValue, condition.Values[0], StringComparison.OrdinalIgnoreCase),
+
+                BranchingOperator.Contains => condition.Values.Length > 0 &&
+                    answerValue.Contains(condition.Values[0], StringComparison.OrdinalIgnoreCase),
+
+                BranchingOperator.In => condition.Values.Any(v =>
+                    string.Equals(answerValue, v, StringComparison.OrdinalIgnoreCase)),
+
+                BranchingOperator.GreaterThan => condition.Values.Length > 0 &&
+                    int.TryParse(answerValue, out int gtValue) &&
+                    int.TryParse(condition.Values[0], out int gtThreshold) &&
+                    gtValue > gtThreshold,
+
+                BranchingOperator.LessThan => condition.Values.Length > 0 &&
+                    int.TryParse(answerValue, out int ltValue) &&
+                    int.TryParse(condition.Values[0], out int ltThreshold) &&
+                    ltValue < ltThreshold,
+
+                BranchingOperator.GreaterThanOrEqual => condition.Values.Length > 0 &&
+                    int.TryParse(answerValue, out int gteValue) &&
+                    int.TryParse(condition.Values[0], out int gteThreshold) &&
+                    gteValue >= gteThreshold,
+
+                BranchingOperator.LessThanOrEqual => condition.Values.Length > 0 &&
+                    int.TryParse(answerValue, out int lteValue) &&
+                    int.TryParse(condition.Values[0], out int lteThreshold) &&
+                    lteValue <= lteThreshold,
+
+                _ => false
+            };
+
+            _logger.LogDebug("Condition evaluation result: {Result}", result);
+
+            if (!result && condition.Operator > BranchingOperator.In)
+            {
+                // Log warning for unknown operators only
+                _logger.LogWarning("Unknown or unhandled branching operator: {Operator}", condition.Operator);
+            }
+
+            return Task.FromResult(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error evaluating condition with operator {Operator}", condition.Operator);
+            return Task.FromResult(false);
+        }
+    }
+
+    /// <summary>
+    /// Recursive cycle detection helper using depth-first search.
+    /// </summary>
+    private async Task<bool> DetectCycleAsync(int currentId, int targetId, HashSet<int> visited)
+    {
+        // Already checked this path
+        if (visited.Contains(currentId))
+        {
+            return false;
+        }
+
+        visited.Add(currentId);
+
+        // Found the target - cycle exists
+        if (currentId == targetId)
+        {
+            return true;
+        }
+
+        // Get all questions that branch FROM currentId
+        var outgoingRules = await _branchingRuleRepository.GetBySourceQuestionAsync(currentId);
+
+        foreach (var rule in outgoingRules)
+        {
+            if (await DetectCycleAsync(rule.TargetQuestionId, targetId, visited))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Recursive helper to detect all cycles in a survey.
+    /// </summary>
+    private async Task DetectCyclesRecursive(
+        int currentId,
+        HashSet<int> visited,
+        List<int> path,
+        List<string> cycles,
+        Dictionary<int, Question> questionDict)
+    {
+        if (visited.Contains(currentId))
+        {
+            // Check if this completes a cycle
+            var cycleStartIndex = path.IndexOf(currentId);
+            if (cycleStartIndex >= 0)
+            {
+                var cyclePath = path.Skip(cycleStartIndex).Append(currentId);
+                var cycleDescription = string.Join(" -> ", cyclePath.Select(id =>
+                    questionDict.ContainsKey(id) ? $"Q{questionDict[id].OrderIndex + 1}" : $"Q?"));
+                cycles.Add(cycleDescription);
+            }
+            return;
+        }
+
+        visited.Add(currentId);
+
+        var outgoingRules = await _branchingRuleRepository.GetBySourceQuestionAsync(currentId);
+        foreach (var rule in outgoingRules)
+        {
+            path.Add(rule.TargetQuestionId);
+            await DetectCyclesRecursive(rule.TargetQuestionId, new HashSet<int>(visited), path, cycles, questionDict);
+            path.RemoveAt(path.Count - 1);
+        }
+    }
 
     /// <summary>
     /// Maps a Question entity to QuestionDto.

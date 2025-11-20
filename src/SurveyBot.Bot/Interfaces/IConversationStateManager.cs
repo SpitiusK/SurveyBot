@@ -61,8 +61,9 @@ public interface IConversationStateManager
     /// <param name="surveyId">Survey ID</param>
     /// <param name="responseId">Response record ID</param>
     /// <param name="totalQuestions">Total number of questions in survey</param>
+    /// <param name="firstQuestionId">Optional first question ID for branching support</param>
     /// <returns>True if successful</returns>
-    Task<bool> StartSurveyAsync(long userId, int surveyId, int responseId, int totalQuestions);
+    Task<bool> StartSurveyAsync(long userId, int surveyId, int responseId, int totalQuestions, int? firstQuestionId = null);
 
     /// <summary>
     /// Records an answer for current question
@@ -74,11 +75,20 @@ public interface IConversationStateManager
     Task<bool> AnswerQuestionAsync(long userId, int questionIndex, string answerJson);
 
     /// <summary>
-    /// Moves to next question
+    /// Moves to next question (index-based - DEPRECATED)
     /// </summary>
     /// <param name="userId">Telegram user ID</param>
     /// <returns>True if successful (false if already at last question)</returns>
     Task<bool> NextQuestionAsync(long userId);
+
+    /// <summary>
+    /// Moves to next question by ID (for branching support)
+    /// </summary>
+    /// <param name="userId">Telegram user ID</param>
+    /// <param name="nextQuestionId">ID of the next question to display</param>
+    /// <param name="answerJson">Optional answer JSON for the current question</param>
+    /// <returns>True if successful</returns>
+    Task<bool> NextQuestionByIdAsync(long userId, int nextQuestionId, string answerJson = null);
 
     /// <summary>
     /// Moves to previous question
@@ -94,6 +104,14 @@ public interface IConversationStateManager
     /// <param name="isRequired">Whether question is required</param>
     /// <returns>True if successful (false if question is required)</returns>
     Task<bool> SkipQuestionAsync(long userId, bool isRequired);
+
+    /// <summary>
+    /// Skips a question by ID (for branching support)
+    /// </summary>
+    /// <param name="userId">Telegram user ID</param>
+    /// <param name="questionId">Question ID to skip</param>
+    /// <returns>True if successful</returns>
+    Task<bool> SkipQuestionByIdAsync(long userId, int questionId);
 
     /// <summary>
     /// Completes the survey
@@ -169,6 +187,29 @@ public interface IConversationStateManager
     /// <param name="questionIndex">Question index</param>
     /// <returns>Cached answer JSON or null</returns>
     Task<string> GetCachedAnswerAsync(long userId, int questionIndex);
+
+    /// <summary>
+    /// Gets current question ID for user (for branching support)
+    /// </summary>
+    /// <param name="userId">Telegram user ID</param>
+    /// <returns>Current question ID or null</returns>
+    Task<int?> GetCurrentQuestionIdAsync(long userId);
+
+    /// <summary>
+    /// Gets answer for a question by ID
+    /// </summary>
+    /// <param name="userId">Telegram user ID</param>
+    /// <param name="questionId">Question ID</param>
+    /// <returns>Answer JSON or null</returns>
+    Task<string> GetAnswerByIdAsync(long userId, int questionId);
+
+    /// <summary>
+    /// Checks if a question has been answered
+    /// </summary>
+    /// <param name="userId">Telegram user ID</param>
+    /// <param name="questionId">Question ID</param>
+    /// <returns>True if answered</returns>
+    Task<bool> IsQuestionAnsweredAsync(long userId, int questionId);
 
     #endregion
 }

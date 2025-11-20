@@ -19,6 +19,7 @@ import {
   RadioButtonChecked as SingleChoiceIcon,
   CheckBox as MultipleChoiceIcon,
   Star as RatingIcon,
+  AccountTree as BranchIcon,
 } from '@mui/icons-material';
 import { QuestionType } from '../../types';
 import type { QuestionDraft } from '../../schemas/questionSchemas';
@@ -28,6 +29,8 @@ interface QuestionCardProps {
   index: number;
   onEdit: (question: QuestionDraft) => void;
   onDelete: (questionId: string) => void;
+  onConfigureBranching?: (question: QuestionDraft) => void;
+  branchingRulesCount?: number;
   isDragging?: boolean;
 }
 
@@ -36,6 +39,8 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
   index,
   onEdit,
   onDelete,
+  onConfigureBranching,
+  branchingRulesCount = 0,
   isDragging = false,
 }) => {
   const {
@@ -158,6 +163,15 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
                   variant="outlined"
                 />
               )}
+              {branchingRulesCount > 0 && (
+                <Chip
+                  icon={<BranchIcon fontSize="small" />}
+                  label={`${branchingRulesCount} branch${branchingRulesCount > 1 ? 'es' : ''}`}
+                  size="small"
+                  color="secondary"
+                  variant="outlined"
+                />
+              )}
             </Stack>
 
             {/* Question Text */}
@@ -231,6 +245,17 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
                 <EditIcon fontSize="small" />
               </IconButton>
             </Tooltip>
+            {onConfigureBranching && question.questionType === QuestionType.SingleChoice && (
+              <Tooltip title="Configure branching">
+                <IconButton
+                  size="small"
+                  color="secondary"
+                  onClick={() => onConfigureBranching(question)}
+                >
+                  <BranchIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip title="Delete question">
               <IconButton
                 size="small"

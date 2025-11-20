@@ -48,6 +48,7 @@ export interface Question {
   isRequired: boolean;
   options: string[] | null;
   mediaContent?: string | null; // JSON string of MediaContentDto
+  branchingRules?: BranchingRule[];
   createdAt: string;
   updatedAt: string;
 }
@@ -218,6 +219,42 @@ export interface StepConfig {
   label: string;
   description: string;
   isValid: boolean;
+}
+
+// Branching Types
+export type BranchingOperator =
+  | 'Equals'
+  | 'Contains'
+  | 'In'
+  | 'GreaterThan'
+  | 'LessThan'
+  | 'GreaterThanOrEqual'
+  | 'LessThanOrEqual';
+
+export interface BranchingCondition {
+  operator: BranchingOperator;
+  value?: string;
+  values?: string[];
+  questionType: string;
+}
+
+export interface BranchingRule {
+  id: number;
+  sourceQuestionId: number;
+  targetQuestionId: number | string; // Support both numeric and UUID string IDs
+  condition: BranchingCondition;
+  createdAt: string;
+}
+
+export interface CreateBranchingRuleDto {
+  sourceQuestionId: number | string; // Support both numeric and UUID string IDs
+  targetQuestionId: number | string; // Support both numeric and UUID string IDs
+  condition: BranchingCondition;
+}
+
+export interface GetNextQuestionResponse {
+  nextQuestionId?: number;
+  isComplete: boolean;
 }
 
 // Re-export media types

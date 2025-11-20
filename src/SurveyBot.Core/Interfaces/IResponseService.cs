@@ -133,4 +133,16 @@ public interface IResponseService
     /// <param name="surveyId">The ID of the survey.</param>
     /// <returns>The count of completed responses.</returns>
     Task<int> GetCompletedResponseCountAsync(int surveyId);
+
+    /// <summary>
+    /// Saves an answer and evaluates branching logic to determine the next question.
+    /// </summary>
+    /// <param name="responseId">The ID of the response.</param>
+    /// <param name="questionId">The ID of the question being answered.</param>
+    /// <param name="answerValue">The answer value (as string for evaluation).</param>
+    /// <returns>Tuple containing the answer ID and the next question ID (or null if survey complete).</returns>
+    /// <exception cref="Exceptions.ResponseNotFoundException">Thrown when the response is not found.</exception>
+    /// <exception cref="Exceptions.QuestionNotFoundException">Thrown when the question is not found.</exception>
+    Task<(int answerId, int? nextQuestionId)> SaveAnswerWithBranchingAsync(
+        int responseId, int questionId, string answerValue);
 }

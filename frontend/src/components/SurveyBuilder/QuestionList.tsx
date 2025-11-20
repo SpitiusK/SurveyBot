@@ -29,18 +29,33 @@ import {
 import QuestionCard from './QuestionCard';
 import type { QuestionDraft } from '../../schemas/questionSchemas';
 
+interface BranchingRuleDraft {
+  sourceQuestionId: string | number;
+  targetQuestionId: string | number;
+  condition: {
+    operator: string;
+    value?: string;
+    values?: string[];
+    questionType: string;
+  };
+}
+
 interface QuestionListProps {
   questions: QuestionDraft[];
+  branchingRules?: BranchingRuleDraft[];
   onReorder: (questions: QuestionDraft[]) => void;
   onEdit: (question: QuestionDraft) => void;
   onDelete: (questionId: string) => void;
+  onConfigureBranching?: (question: QuestionDraft) => void;
 }
 
 const QuestionList: React.FC<QuestionListProps> = ({
   questions,
+  branchingRules = [],
   onReorder,
   onEdit,
   onDelete,
+  onConfigureBranching,
 }) => {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -123,16 +138,27 @@ const QuestionList: React.FC<QuestionListProps> = ({
             items={questions.map((q) => q.id)}
             strategy={verticalListSortingStrategy}
           >
-            {questions.map((question, index) => (
-              <QuestionCard
-                key={question.id}
-                question={question}
-                index={index}
-                onEdit={onEdit}
-                onDelete={handleDeleteClick}
-                isDragging={question.id === activeId}
-              />
-            ))}
+            {questions.map((question, index) => {
+              // Count branching rules where this question is the source
+              const branchingRulesCount = branchingRules.filter(
+                (rule) =>
+                  rule.sourceQuestionId === question.id ||
+                  String(rule.sourceQuestionId) === String(question.id)
+              ).length;
+
+              return (
+                <QuestionCard
+                  key={question.id}
+                  question={question}
+                  index={index}
+                  onEdit={onEdit}
+                  onDelete={handleDeleteClick}
+                  onConfigureBranching={onConfigureBranching}
+                  branchingRulesCount={branchingRulesCount}
+                  isDragging={question.id === activeId}
+                />
+              );
+            })}
           </SortableContext>
         </DndContext>
       </Box>

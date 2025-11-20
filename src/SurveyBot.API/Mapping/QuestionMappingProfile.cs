@@ -1,5 +1,6 @@
 using AutoMapper;
 using SurveyBot.API.Mapping.ValueResolvers;
+using SurveyBot.Core.DTOs.Branching;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 
@@ -17,7 +18,9 @@ public class QuestionMappingProfile : Profile
             .ForMember(dest => dest.Options,
                 opt => opt.MapFrom<QuestionOptionsResolver>())
             .ForMember(dest => dest.MediaContent,
-                opt => opt.MapFrom<QuestionMediaContentResolver>());
+                opt => opt.MapFrom<QuestionMediaContentResolver>())
+            .ForMember(dest => dest.OutgoingRules,
+                opt => opt.MapFrom(src => src.OutgoingRules));
 
         // CreateQuestionDto -> Question (DTO to Entity for creation)
         CreateMap<CreateQuestionDto, Question>()
@@ -30,6 +33,8 @@ public class QuestionMappingProfile : Profile
                 opt => opt.MapFrom<QuestionMediaContentJsonResolver>())
             .ForMember(dest => dest.Survey, opt => opt.Ignore())
             .ForMember(dest => dest.Answers, opt => opt.Ignore())
+            .ForMember(dest => dest.OutgoingRules, opt => opt.Ignore())
+            .ForMember(dest => dest.IncomingRules, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
             .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
 
@@ -44,6 +49,8 @@ public class QuestionMappingProfile : Profile
                 opt => opt.MapFrom<UpdateQuestionMediaContentJsonResolver>())
             .ForMember(dest => dest.Survey, opt => opt.Ignore())
             .ForMember(dest => dest.Answers, opt => opt.Ignore())
+            .ForMember(dest => dest.OutgoingRules, opt => opt.Ignore())
+            .ForMember(dest => dest.IncomingRules, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
             .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
     }

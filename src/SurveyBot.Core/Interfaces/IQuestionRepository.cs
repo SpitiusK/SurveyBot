@@ -64,4 +64,26 @@ public interface IQuestionRepository : IRepository<Question>
     /// <param name="surveyId">The survey ID.</param>
     /// <returns>True if the question belongs to the survey, otherwise false.</returns>
     Task<bool> BelongsToSurveyAsync(int questionId, int surveyId);
+
+    /// <summary>
+    /// Gets all questions for a survey with their branching rules included.
+    /// </summary>
+    /// <param name="surveyId">The survey ID.</param>
+    /// <param name="includeBranching">Whether to include branching rules (default: true).</param>
+    /// <returns>A collection of questions with branching information.</returns>
+    Task<IEnumerable<Question>> GetWithBranchingRulesAsync(int surveyId, bool includeBranching = true);
+
+    /// <summary>
+    /// Gets all questions that can be branched to from a specific question.
+    /// </summary>
+    /// <param name="parentQuestionId">The parent question ID.</param>
+    /// <returns>A collection of child questions (branching targets).</returns>
+    Task<IEnumerable<Question>> GetChildQuestionsAsync(int parentQuestionId);
+
+    /// <summary>
+    /// Gets all questions that can branch to a specific question.
+    /// </summary>
+    /// <param name="childQuestionId">The child question ID.</param>
+    /// <returns>A collection of parent questions (branching sources).</returns>
+    Task<IEnumerable<Question>> GetParentQuestionsAsync(int childQuestionId);
 }

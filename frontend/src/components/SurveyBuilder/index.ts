@@ -6,3 +6,4 @@ export { default as QuestionEditor } from './QuestionEditor';
 export { default as QuestionList } from './QuestionList';
 export { default as QuestionCard } from './QuestionCard';
 export { default as OptionManager } from './OptionManager';
+export { default as BranchingRuleEditor } from './BranchingRuleEditor';

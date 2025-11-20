@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped(typeof(IRepository<>), typeof(GenericRepository<>));
         services.AddScoped<ISurveyRepository, SurveyRepository>();
         services.AddScoped<IQuestionRepository, QuestionRepository>();
+        services.AddScoped<IQuestionBranchingRuleRepository, QuestionBranchingRuleRepository>();
         services.AddScoped<IResponseRepository, ResponseRepository>();
         services.AddScoped<IAnswerRepository, AnswerRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
@@ -38,7 +39,9 @@ public static class DependencyInjection
         // Register Services
         services.AddScoped<ISurveyService, SurveyService>();
         services.AddScoped<IQuestionService, QuestionService>();
+        services.AddScoped<IResponseService, ResponseService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserService, UserService>();
 
         // Media Services
         services.AddScoped<IMediaValidationService, MediaValidationService>();

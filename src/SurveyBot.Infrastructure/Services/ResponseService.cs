@@ -20,6 +20,7 @@ public class ResponseService : IResponseService
     private readonly IAnswerRepository _answerRepository;
     private readonly ISurveyRepository _surveyRepository;
     private readonly IQuestionRepository _questionRepository;
+    private readonly IQuestionService _questionService;
     private readonly IMapper _mapper;
     private readonly ILogger<ResponseService> _logger;
 
@@ -35,6 +36,7 @@ public class ResponseService : IResponseService
         IAnswerRepository answerRepository,
         ISurveyRepository surveyRepository,
         IQuestionRepository questionRepository,
+        IQuestionService questionService,
         IMapper mapper,
         ILogger<ResponseService> logger)
     {
@@ -42,6 +44,7 @@ public class ResponseService : IResponseService
         _answerRepository = answerRepository;
         _surveyRepository = surveyRepository;
         _questionRepository = questionRepository;
+        _questionService = questionService;
         _mapper = mapper;
         _logger = logger;
     }
@@ -618,5 +621,78 @@ public class ResponseService : IResponseService
         }
 
         return ValidationResult.Success();
+    }
+
+    /// <inheritdoc/>
+    public async Task<(int answerId, int? nextQuestionId)> SaveAnswerWithBranchingAsync(
+        int responseId, int questionId, string answerValue)
+    {
+        _logger.LogInformation("Saving answer with branching for response {ResponseId}, question {QuestionId}",
+            responseId, questionId);
+
+        // 1. Validate response exists
+        var response = await _responseRepository.GetByIdAsync(responseId);
+        if (response == null)
+        {
+            _logger.LogWarning("Response {ResponseId} not found", responseId);
+            throw new ResponseNotFoundException(responseId);
+        }
+
+        // 2. Validate question exists and belongs to the survey
+        var question = await _questionRepository.GetByIdAsync(questionId);
+        if (question == null)
+        {
+            _logger.LogWarning("Question {QuestionId} not found", questionId);
+            throw new QuestionNotFoundException(questionId);
+        }
+
+        if (question.SurveyId != response.SurveyId)
+        {
+            _logger.LogWarning("Question {QuestionId} does not belong to survey {SurveyId}",
+                questionId, response.SurveyId);
+            throw new QuestionValidationException(
+                "Question does not belong to the response's survey.");
+        }
+
+        // 3. Save the answer (create or update existing)
+        var existingAnswer = await _answerRepository.GetByResponseAndQuestionAsync(responseId, questionId);
+
+        Answer answer;
+        if (existingAnswer != null)
+        {
+            // Update existing answer
+            existingAnswer.AnswerText = answerValue;
+            existingAnswer.AnswerJson = null; // Simple text-based for branching evaluation
+            answer = await _answerRepository.UpdateAsync(existingAnswer);
+            _logger.LogInformation("Updated existing answer {AnswerId}", answer.Id);
+        }
+        else
+        {
+            // Create new answer
+            answer = new Answer
+            {
+                ResponseId = responseId,
+                QuestionId = questionId,
+                AnswerText = answerValue,
+                CreatedAt = DateTime.UtcNow
+            };
+            answer = await _answerRepository.CreateAsync(answer);
+            _logger.LogInformation("Created new answer {AnswerId}", answer.Id);
+        }
+
+        // 4. Evaluate branching rules to get next question
+        var nextQuestionId = await _questionService.GetNextQuestionAsync(
+            questionId, answerValue, response.SurveyId);
+
+        if (nextQuestionId.HasValue)
+        {
+            _logger.LogInformation("Next question determined: {NextQuestionId}", nextQuestionId.Value);
+        }
+        else
+        {
+            _logger.LogInformation("No next question - survey complete");
+        }
+
+        return (answer.Id, nextQuestionId);
     }
 }

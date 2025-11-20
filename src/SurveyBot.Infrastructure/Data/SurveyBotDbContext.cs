@@ -40,6 +40,11 @@ public class SurveyBotDbContext : DbContext
     /// </summary>
     public DbSet<Answer> Answers { get; set; } = null!;
 
+    /// <summary>
+    /// Gets or sets the QuestionBranchingRules DbSet.
+    /// </summary>
+    public DbSet<QuestionBranchingRule> QuestionBranchingRules { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -50,6 +55,7 @@ public class SurveyBotDbContext : DbContext
         modelBuilder.ApplyConfiguration(new QuestionConfiguration());
         modelBuilder.ApplyConfiguration(new ResponseConfiguration());
         modelBuilder.ApplyConfiguration(new AnswerConfiguration());
+        modelBuilder.ApplyConfiguration(new QuestionBranchingRuleConfiguration());
 
         // Configure automatic timestamp updates for entities with UpdatedAt
         // This will be handled by SaveChangesAsync override

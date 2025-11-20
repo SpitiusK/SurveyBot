@@ -54,13 +54,9 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
             .IsRequired();
 
         // Composite index for ordered question retrieval
+        // Note: This is NOT unique to allow branching questions with flexible ordering
         builder.HasIndex(q => new { q.SurveyId, q.OrderIndex })
             .HasDatabaseName("idx_questions_survey_order");
-
-        // Unique constraint for survey_id + order_index
-        builder.HasIndex(q => new { q.SurveyId, q.OrderIndex })
-            .IsUnique()
-            .HasDatabaseName("idx_questions_survey_order_unique");
 
         // Check constraint for order index
         builder.ToTable(t => t.HasCheckConstraint(
@@ -118,5 +114,19 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
             .HasForeignKey(a => a.QuestionId)
             .OnDelete(DeleteBehavior.Cascade)
             .HasConstraintName("fk_answers_question");
+
+        // Branching rules - outgoing (this question branches to other questions)
+        builder.HasMany(q => q.OutgoingRules)
+            .WithOne(r => r.SourceQuestion)
+            .HasForeignKey(r => r.SourceQuestionId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("fk_branching_rules_source_question");
+
+        // Branching rules - incoming (other questions branch to this question)
+        builder.HasMany(q => q.IncomingRules)
+            .WithOne(r => r.TargetQuestion)
+            .HasForeignKey(r => r.TargetQuestionId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("fk_branching_rules_target_question");
     }
 }

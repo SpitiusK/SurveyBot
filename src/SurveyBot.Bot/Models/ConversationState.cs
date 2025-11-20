@@ -47,7 +47,9 @@ public class ConversationState
 
     /// <summary>
     /// Current question index being displayed (0-based)
+    /// DEPRECATED: Use CurrentQuestionId for branching support
     /// </summary>
+    [Obsolete("Use CurrentQuestionId instead for branching support")]
     public int? CurrentQuestionIndex { get; set; }
 
     /// <summary>
@@ -56,15 +58,42 @@ public class ConversationState
     public int? TotalQuestions { get; set; }
 
     /// <summary>
-    /// Indices of questions already answered
+    /// Current question ID being displayed (for branching support)
     /// </summary>
+    public int? CurrentQuestionId { get; set; }
+
+    /// <summary>
+    /// List of question IDs that have been visited during this survey
+    /// Tracks the path taken through branching questions
+    /// </summary>
+    public List<int> VisitedQuestionIds { get; set; } = new();
+
+    /// <summary>
+    /// List of question IDs that were skipped due to branching rules
+    /// Questions not shown because branching conditions were not met
+    /// </summary>
+    public List<int> SkippedQuestionIds { get; set; } = new();
+
+    /// <summary>
+    /// Indices of questions already answered
+    /// DEPRECATED: Use AnsweredQuestions for branching support
+    /// </summary>
+    [Obsolete("Use AnsweredQuestions instead for branching support")]
     public List<int> AnsweredQuestionIndices { get; set; } = new();
 
     /// <summary>
     /// Cached answers before saving to database
     /// Key: question index, Value: JSON answer string
+    /// DEPRECATED: Use AnsweredQuestions for branching support
     /// </summary>
+    [Obsolete("Use AnsweredQuestions instead for branching support")]
     public Dictionary<int, string> CachedAnswers { get; set; } = new();
+
+    /// <summary>
+    /// All answered questions during this survey
+    /// Key: question ID, Value: JSON answer string
+    /// </summary>
+    public Dictionary<int, string> AnsweredQuestions { get; set; } = new();
 
     /// <summary>
     /// Navigation history (stack of previous states)
@@ -91,14 +120,21 @@ public class ConversationState
             if (!TotalQuestions.HasValue || TotalQuestions == 0)
                 return 0f;
 
-            return (AnsweredQuestionIndices.Count / (float)TotalQuestions.Value) * 100f;
+            // Use new AnsweredQuestions if available, fallback to old AnsweredQuestionIndices
+            var answeredCount = AnsweredQuestions.Count > 0
+                ? AnsweredQuestions.Count
+                : AnsweredQuestionIndices.Count;
+
+            return (answeredCount / (float)TotalQuestions.Value) * 100f;
         }
     }
 
     /// <summary>
     /// Gets number of questions answered
     /// </summary>
-    public int AnsweredCount => AnsweredQuestionIndices.Count;
+    public int AnsweredCount => AnsweredQuestions.Count > 0
+        ? AnsweredQuestions.Count
+        : AnsweredQuestionIndices.Count;
 
     /// <summary>
     /// Checks if all questions have been answered
@@ -120,8 +156,9 @@ public class ConversationState
                                   CurrentQuestionIndex == (TotalQuestions - 1);
 
     /// <summary>
-    /// Records that a question was answered
+    /// Records that a question was answered (by index - DEPRECATED)
     /// </summary>
+    [Obsolete("Use MarkQuestionAnsweredById instead")]
     public void MarkQuestionAnswered(int questionIndex)
     {
         if (!AnsweredQuestionIndices.Contains(questionIndex))
@@ -132,19 +169,61 @@ public class ConversationState
     }
 
     /// <summary>
-    /// Caches an answer before saving to database
+    /// Records that a question was answered (by ID - for branching support)
     /// </summary>
+    public void MarkQuestionAnsweredById(int questionId, string answerJson)
+    {
+        AnsweredQuestions[questionId] = answerJson;
+
+        if (!VisitedQuestionIds.Contains(questionId))
+        {
+            VisitedQuestionIds.Add(questionId);
+        }
+    }
+
+    /// <summary>
+    /// Marks a question as skipped due to branching
+    /// </summary>
+    public void MarkQuestionSkipped(int questionId)
+    {
+        if (!SkippedQuestionIds.Contains(questionId))
+        {
+            SkippedQuestionIds.Add(questionId);
+        }
+    }
+
+    /// <summary>
+    /// Caches an answer before saving to database (by index - DEPRECATED)
+    /// </summary>
+    [Obsolete("Use MarkQuestionAnsweredById instead")]
     public void CacheAnswer(int questionIndex, string answerJson)
     {
         CachedAnswers[questionIndex] = answerJson;
     }
 
     /// <summary>
-    /// Gets cached answer for a question
+    /// Gets cached answer for a question (by index - DEPRECATED)
     /// </summary>
+    [Obsolete("Use GetAnswerById instead")]
     public string GetCachedAnswer(int questionIndex)
     {
         return CachedAnswers.TryGetValue(questionIndex, out var answer) ? answer : null;
+    }
+
+    /// <summary>
+    /// Gets answer for a question by ID
+    /// </summary>
+    public string GetAnswerById(int questionId)
+    {
+        return AnsweredQuestions.TryGetValue(questionId, out var answer) ? answer : null;
+    }
+
+    /// <summary>
+    /// Checks if a question has been answered
+    /// </summary>
+    public bool IsQuestionAnswered(int questionId)
+    {
+        return AnsweredQuestions.ContainsKey(questionId);
     }
 
     /// <summary>
@@ -173,9 +252,13 @@ public class ConversationState
         CurrentSurveyId = null;
         CurrentResponseId = null;
         CurrentQuestionIndex = null;
+        CurrentQuestionId = null;
         TotalQuestions = null;
         AnsweredQuestionIndices.Clear();
         CachedAnswers.Clear();
+        AnsweredQuestions.Clear();
+        VisitedQuestionIds.Clear();
+        SkippedQuestionIds.Clear();
         Metadata.Clear();
     }
 

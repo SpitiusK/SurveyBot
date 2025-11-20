@@ -160,6 +160,7 @@ try
     // Register Repository Implementations (Scoped)
     builder.Services.AddScoped<ISurveyRepository, SurveyRepository>();
     builder.Services.AddScoped<IQuestionRepository, QuestionRepository>();
+    builder.Services.AddScoped<IQuestionBranchingRuleRepository, QuestionBranchingRuleRepository>();
     builder.Services.AddScoped<IResponseRepository, ResponseRepository>();
     builder.Services.AddScoped<IUserRepository, UserRepository>();
     builder.Services.AddScoped<IAnswerRepository, AnswerRepository>();

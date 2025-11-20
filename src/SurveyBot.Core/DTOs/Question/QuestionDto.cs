@@ -1,4 +1,5 @@
 using SurveyBot.Core.DTOs.Media;
+using SurveyBot.Core.DTOs.Branching;
 using SurveyBot.Core.Entities;
 
 namespace SurveyBot.Core.DTOs.Question;
@@ -50,6 +51,12 @@ public class QuestionDto
     /// Null if no media is attached or if the question was created before multimedia support.
     /// </summary>
     public MediaContentDto? MediaContent { get; set; }
+
+    /// <summary>
+    /// Gets or sets the branching rules that originate from this question.
+    /// These rules determine which question to show next based on the user's answer.
+    /// </summary>
+    public List<BranchingRuleDto>? OutgoingRules { get; set; }
 
     /// <summary>
     /// Gets or sets the timestamp when the question was created.

@@ -136,7 +136,7 @@ public class ConversationStateManager : IConversationStateManager
     /// <summary>
     /// Initializes survey state when user starts a survey
     /// </summary>
-    public async Task<bool> StartSurveyAsync(long userId, int surveyId, int responseId, int totalQuestions)
+    public async Task<bool> StartSurveyAsync(long userId, int surveyId, int responseId, int totalQuestions, int? firstQuestionId = null)
     {
         await _transitionLock.WaitAsync();
         try
@@ -152,6 +152,7 @@ public class ConversationStateManager : IConversationStateManager
                     CurrentSurveyId = surveyId,
                     CurrentResponseId = responseId,
                     CurrentQuestionIndex = 0,
+                    CurrentQuestionId = firstQuestionId,
                     TotalQuestions = totalQuestions
                 };
             }
@@ -162,6 +163,7 @@ public class ConversationStateManager : IConversationStateManager
                 state.CurrentSurveyId = surveyId;
                 state.CurrentResponseId = responseId;
                 state.CurrentQuestionIndex = 0;
+                state.CurrentQuestionId = firstQuestionId;
                 state.TotalQuestions = totalQuestions;
                 state.TransitionTo(ConversationStateType.InSurvey);
             }
@@ -169,7 +171,7 @@ public class ConversationStateManager : IConversationStateManager
             await SetStateAsync(userId, state);
 
             _logger.LogInformation(
-                $"Survey started for user {userId}: survey={surveyId}, response={responseId}, questions={totalQuestions}");
+                $"Survey started for user {userId}: survey={surveyId}, response={responseId}, questions={totalQuestions}, firstQuestionId={firstQuestionId}");
 
             return true;
         }
@@ -302,6 +304,63 @@ public class ConversationStateManager : IConversationStateManager
 
         // Skip is same as answer with null
         return await NextQuestionAsync(userId);
+    }
+
+    /// <summary>
+    /// Moves to next question by ID (for branching support)
+    /// </summary>
+    public async Task<bool> NextQuestionByIdAsync(long userId, int nextQuestionId, string answerJson = null)
+    {
+        var state = await GetStateAsync(userId);
+        if (state == null)
+            return false;
+
+        await _transitionLock.WaitAsync();
+        try
+        {
+            // If answer provided, record it for current question
+            if (!string.IsNullOrEmpty(answerJson) && state.CurrentQuestionId.HasValue)
+            {
+                state.MarkQuestionAnsweredById(state.CurrentQuestionId.Value, answerJson);
+            }
+
+            // Update to next question
+            state.CurrentQuestionId = nextQuestionId;
+            state.UpdateActivity();
+
+            _logger.LogDebug($"Moved to question {nextQuestionId} for user {userId} (branching)");
+
+            return true;
+        }
+        finally
+        {
+            _transitionLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Skips a question by ID (for branching support)
+    /// </summary>
+    public async Task<bool> SkipQuestionByIdAsync(long userId, int questionId)
+    {
+        var state = await GetStateAsync(userId);
+        if (state == null)
+            return false;
+
+        await _transitionLock.WaitAsync();
+        try
+        {
+            state.MarkQuestionSkipped(questionId);
+            state.UpdateActivity();
+
+            _logger.LogDebug($"Skipped question {questionId} for user {userId} (branching)");
+
+            return true;
+        }
+        finally
+        {
+            _transitionLock.Release();
+        }
     }
 
     /// <summary>
@@ -473,6 +532,33 @@ public class ConversationStateManager : IConversationStateManager
     {
         var state = await GetStateAsync(userId);
         return state?.GetCachedAnswer(questionIndex);
+    }
+
+    /// <summary>
+    /// Gets current question ID for user (for branching support)
+    /// </summary>
+    public async Task<int?> GetCurrentQuestionIdAsync(long userId)
+    {
+        var state = await GetStateAsync(userId);
+        return state?.CurrentQuestionId;
+    }
+
+    /// <summary>
+    /// Gets answer for a question by ID
+    /// </summary>
+    public async Task<string> GetAnswerByIdAsync(long userId, int questionId)
+    {
+        var state = await GetStateAsync(userId);
+        return state?.GetAnswerById(questionId);
+    }
+
+    /// <summary>
+    /// Checks if a question has been answered
+    /// </summary>
+    public async Task<bool> IsQuestionAnsweredAsync(long userId, int questionId)
+    {
+        var state = await GetStateAsync(userId);
+        return state?.IsQuestionAnswered(questionId) ?? false;
     }
 
     #endregion

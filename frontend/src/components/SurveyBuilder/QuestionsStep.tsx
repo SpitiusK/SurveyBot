@@ -22,17 +22,31 @@ import { QuestionType } from '../../types';
 import type { QuestionDraft } from '../../schemas/questionSchemas';
 import QuestionEditor from './QuestionEditor';
 import QuestionList from './QuestionList';
+import BranchingRuleEditor from './BranchingRuleEditor';
 
 interface QuestionsStepProps {
   questions: QuestionDraft[];
   onUpdateQuestions: (questions: QuestionDraft[]) => void;
+  onUpdateBranchingRules?: (rules: BranchingRuleDraft[]) => void;
   onNext: () => void;
   onBack: () => void;
+}
+
+interface BranchingRuleDraft {
+  sourceQuestionId: string | number;
+  targetQuestionId: string | number;
+  condition: {
+    operator: string;
+    value?: string;
+    values?: string[];
+    questionType: string;
+  };
 }
 
 const QuestionsStep: React.FC<QuestionsStepProps> = ({
   questions,
   onUpdateQuestions,
+  onUpdateBranchingRules,
   onNext,
   onBack,
 }) => {
@@ -41,6 +55,10 @@ const QuestionsStep: React.FC<QuestionsStepProps> = ({
     null
   );
   const [validationError, setValidationError] = useState<string>('');
+  const [branchingDialogOpen, setBranchingDialogOpen] = useState(false);
+  const [selectedQuestionForBranching, setSelectedQuestionForBranching] =
+    useState<QuestionDraft | null>(null);
+  const [branchingRules, setBranchingRules] = useState<BranchingRuleDraft[]>([]);
 
   useEffect(() => {
     // Clear validation error when questions change
@@ -86,10 +104,67 @@ const QuestionsStep: React.FC<QuestionsStepProps> = ({
         orderIndex: index,
       }));
     onUpdateQuestions(updatedQuestions);
+
+    // Remove any branching rules associated with this question
+    setBranchingRules((prevRules) =>
+      prevRules.filter(
+        (rule) =>
+          rule.sourceQuestionId !== questionId &&
+          rule.targetQuestionId !== questionId
+      )
+    );
   };
 
   const handleReorderQuestions = (reorderedQuestions: QuestionDraft[]) => {
     onUpdateQuestions(reorderedQuestions);
+  };
+
+  const handleConfigureBranching = (question: QuestionDraft) => {
+    setSelectedQuestionForBranching(question);
+    setBranchingDialogOpen(true);
+  };
+
+  const handleCloseBranchingDialog = () => {
+    setBranchingDialogOpen(false);
+    setSelectedQuestionForBranching(null);
+  };
+
+  const handleSaveBranchingRule = async (rule: Partial<any>) => {
+    try {
+      // Save the branching rule to local state
+      const newRule: BranchingRuleDraft = {
+        sourceQuestionId: rule.sourceQuestionId,
+        targetQuestionId: rule.targetQuestionId,
+        condition: rule.condition,
+      };
+
+      // Add to rules list, avoiding duplicates
+      const ruleExists = branchingRules.some(
+        (r) =>
+          r.sourceQuestionId === newRule.sourceQuestionId &&
+          r.targetQuestionId === newRule.targetQuestionId
+      );
+
+      if (!ruleExists) {
+        const updatedRules = [...branchingRules, newRule];
+        setBranchingRules(updatedRules);
+
+        // Notify parent component
+        if (onUpdateBranchingRules) {
+          onUpdateBranchingRules(updatedRules);
+        }
+
+        console.log('Branching rule created successfully:', newRule);
+      } else {
+        console.log('Branching rule already exists');
+      }
+
+      // Close the dialog
+      handleCloseBranchingDialog();
+    } catch (error) {
+      console.error('Error saving branching rule:', error);
+      setValidationError('Failed to save branching rule');
+    }
   };
 
   const handleNext = () => {
@@ -214,9 +289,11 @@ const QuestionsStep: React.FC<QuestionsStepProps> = ({
       <Box sx={{ mb: 3 }}>
         <QuestionList
           questions={questions}
+          branchingRules={branchingRules}
           onReorder={handleReorderQuestions}
           onEdit={handleEditQuestion}
           onDelete={handleDeleteQuestion}
+          onConfigureBranching={handleConfigureBranching}
         />
       </Box>
 
@@ -267,6 +344,19 @@ const QuestionsStep: React.FC<QuestionsStepProps> = ({
         question={editingQuestion}
         orderIndex={questions.length}
       />
+
+      {/* Branching Rule Editor Dialog */}
+      {selectedQuestionForBranching && (
+        <BranchingRuleEditor
+          open={branchingDialogOpen}
+          onCancel={handleCloseBranchingDialog}
+          onSave={handleSaveBranchingRule}
+          sourceQuestion={selectedQuestionForBranching as any}
+          targetQuestions={questions.filter(
+            (q) => q.id !== selectedQuestionForBranching.id
+          ) as any}
+        />
+      )}
     </Box>
   );
 };

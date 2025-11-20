@@ -25,10 +25,12 @@ import SurveyPreview from './SurveyPreview';
 import PublishSuccess from './PublishSuccess';
 import surveyService from '@/services/surveyService';
 import questionService from '@/services/questionService';
+import branchingRuleService from '@/services/branchingRuleService';
 
 interface ReviewStepProps {
   surveyData: BasicInfoFormData;
   questions: QuestionDraft[];
+  branchingRules?: any[];
   onBack: () => void;
   onPublishSuccess?: (survey: Survey) => void;
   isEditMode?: boolean;
@@ -38,6 +40,7 @@ interface ReviewStepProps {
 const ReviewStep: React.FC<ReviewStepProps> = ({
   surveyData,
   questions,
+  branchingRules = [],
   onBack,
   onPublishSuccess,
   isEditMode = false,
@@ -96,6 +99,11 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
     setIsPublishing(true);
     setPublishError(null);
 
+    // DEBUG: Log branching rules received
+    console.log('=== ReviewStep handlePublish started ===');
+    console.log('Branching rules received:', branchingRules);
+    console.log('Branching rules count:', branchingRules.length);
+
     try {
       let survey: Survey;
 
@@ -139,6 +147,69 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
           questionDto
         );
         createdQuestions.push(createdQuestion);
+      }
+
+      // Step 2.5: Create branching rules (map draft IDs to created IDs)
+      if (branchingRules.length > 0) {
+        console.log(`Creating ${branchingRules.length} branching rules...`);
+        console.log('Created questions:', createdQuestions.map(q => ({ id: q.id, text: q.questionText })));
+
+        for (const rule of branchingRules) {
+          try {
+            console.log('Processing branching rule:', rule);
+
+            // Find the created questions matching the draft IDs
+            const sourceQuestion = createdQuestions.find(
+              (q) =>
+                q.id === rule.sourceQuestionId ||
+                String(q.id) === String(rule.sourceQuestionId)
+            );
+
+            const targetQuestion = createdQuestions.find(
+              (q) =>
+                q.id === rule.targetQuestionId ||
+                String(q.id) === String(rule.targetQuestionId)
+            );
+
+            console.log(`Found source question: ${sourceQuestion?.id}, target question: ${targetQuestion?.id}`);
+
+            if (sourceQuestion && targetQuestion) {
+              console.log(`Creating API call for rule: survey=${survey.id}, source=${sourceQuestion.id}, target=${targetQuestion.id}`);
+
+              // Add questionType to condition (required by API)
+              const conditionWithType = {
+                ...rule.condition,
+                questionType: sourceQuestion.questionType.toString(),
+              };
+
+              console.log(`Condition with QuestionType: ${JSON.stringify(conditionWithType)}`);
+
+              await branchingRuleService.createBranchingRule(
+                survey.id,
+                sourceQuestion.id,
+                {
+                  sourceQuestionId: sourceQuestion.id,
+                  targetQuestionId: targetQuestion.id,
+                  condition: conditionWithType,
+                }
+              );
+              console.log(
+                `✓ Created branching rule: Q${sourceQuestion.orderIndex + 1} → Q${targetQuestion.orderIndex + 1}`
+              );
+            } else {
+              console.warn(
+                '✗ Could not find matching questions for branching rule:',
+                rule,
+                `(looking for source: ${rule.sourceQuestionId}, target: ${rule.targetQuestionId})`
+              );
+            }
+          } catch (error) {
+            console.error('✗ Failed to create branching rule:', error);
+            // Don't block publish if a single rule fails, but log the error
+          }
+        }
+      } else {
+        console.log('No branching rules to create');
       }
 
       // Step 3: Activate the survey

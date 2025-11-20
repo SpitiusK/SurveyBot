@@ -62,4 +62,16 @@ public class Question : BaseEntity
     /// Gets or sets the collection of answers to this question across all responses.
     /// </summary>
     public ICollection<Answer> Answers { get; set; } = new List<Answer>();
+
+    /// <summary>
+    /// Gets or sets the collection of branching rules where this question is the source.
+    /// These rules define where to branch based on answers to this question.
+    /// </summary>
+    public ICollection<QuestionBranchingRule> OutgoingRules { get; set; } = new List<QuestionBranchingRule>();
+
+    /// <summary>
+    /// Gets or sets the collection of branching rules where this question is the target.
+    /// These rules define which questions can branch to this question.
+    /// </summary>
+    public ICollection<QuestionBranchingRule> IncomingRules { get; set; } = new List<QuestionBranchingRule>();
 }
