@@ -5,7 +5,7 @@
 **Layer**: Presentation Layer (React SPA)
 **Framework**: React 19.2.0 + TypeScript 5.9.3 + Vite 7.2.2
 **UI Library**: Material-UI 6.5.0
-**Last Updated**: 2025-11-18
+**Last Updated**: 2025-11-21
 
 ---
 
@@ -18,6 +18,7 @@ The SurveyBot Frontend is a React-based Single Page Application (SPA) providing 
 - Response analytics and visualization
 - Dashboard with overview metrics
 - Multi-step survey builder with drag-and-drop
+- Multimedia upload and management for questions (NEW in v1.3.0)
 
 ### Technology Stack
 
@@ -244,6 +245,7 @@ export default new SurveyService();
 - **authService**: Login, logout, token refresh, user info
 - **surveyService**: CRUD operations, statistics, export CSV
 - **questionService**: CRUD, reordering
+- **mediaService**: Upload files, delete media, retrieve media metadata (NEW in v1.3.0)
 
 ---
 
@@ -529,7 +531,8 @@ function SurveyForm() {
 **Validation Schemas**:
 - `authSchemas.ts`: Login form
 - `surveySchemas.ts`: Survey basic info, update
-- `questionSchemas.ts`: Question creation/edit
+- `questionSchemas.ts`: Question creation/edit with optional media
+- `mediaSchemas.ts`: Media upload validation (NEW in v1.3.0)
 
 ---
 
@@ -632,7 +635,70 @@ function MyComponent() {
 - Dynamic option management for choice questions
 - Required field toggle
 - Question type selector
+- **Media upload and attachment** (NEW in v1.3.0)
+- **Media preview with delete option** (NEW in v1.3.0)
 - Validation with Yup
+
+### Media Upload (NEW in v1.3.0)
+
+**Location**: `components/SurveyBuilder/MediaUpload.tsx`
+
+**Features**:
+- Drag-and-drop file upload
+- Click to browse file selection
+- Auto-detection of file type
+- Real-time validation feedback
+- File size limits by type
+- Preview for images with thumbnail
+- Upload progress indicator
+- Remove uploaded media
+
+**Supported File Types**:
+- Images: jpg, png, gif, webp, bmp, tiff, svg (max 10 MB)
+- Videos: mp4, webm, mov, avi, mkv, flv, wmv (max 50 MB)
+- Audio: mp3, wav, ogg, m4a, flac, aac (max 20 MB)
+- Documents: pdf, doc, docx, xls, xlsx, ppt, pptx, txt, csv (max 25 MB)
+- Archives: zip, rar, 7z, tar, gz, bz2 (max 100 MB)
+
+**Usage in Question Editor**:
+```typescript
+<MediaUpload
+  onUploadSuccess={(mediaItem) => {
+    // Attach media to question
+    setQuestionMedia(mediaItem);
+  }}
+  onRemove={() => {
+    // Remove media from question
+    setQuestionMedia(null);
+  }}
+  currentMedia={questionMedia}
+/>
+```
+
+**API Integration**:
+```typescript
+// services/mediaService.ts
+class MediaService {
+  async uploadMedia(file: File, mediaType?: string): Promise<MediaItemDto> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (mediaType) formData.append('mediaType', mediaType);
+
+    const response = await api.post<ApiResponse<MediaItemDto>>(
+      '/media/upload',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      }
+    );
+    return response.data.data!;
+  }
+
+  async deleteMedia(mediaId: string): Promise<void> {
+    await api.delete(`/media/${mediaId}`);
+  }
+}
+```
 
 ### Statistics Dashboard
 
@@ -904,6 +970,77 @@ return (
 
 ---
 
+## Related Documentation
+
+### Documentation Hub
+
+For comprehensive project documentation, see the **centralized documentation folder**:
+
+**Main Documentation**:
+- [Project Root CLAUDE.md](../CLAUDE.md) - Overall project overview and quick start
+- [Documentation Index](../documentation/INDEX.md) - Complete documentation catalog
+- [Navigation Guide](../documentation/NAVIGATION.md) - Role-based navigation
+
+**API Documentation** (Backend consumed by Frontend):
+- [API Layer CLAUDE.md](../src/SurveyBot.API/CLAUDE.md) - REST API implementation
+- [API Quick Reference](../documentation/api/QUICK-REFERENCE.md) - Quick endpoint reference
+- [API Reference](../documentation/api/API_REFERENCE.md) - Complete API documentation
+- [Authentication Flow](../documentation/auth/AUTHENTICATION_FLOW.md) - JWT authentication
+
+**Related Layer Documentation**:
+- [Core Layer](../src/SurveyBot.Core/CLAUDE.md) - DTOs and entities used in API responses
+- [Infrastructure Layer](../src/SurveyBot.Infrastructure/CLAUDE.md) - Backend services
+- [Bot Layer](../src/SurveyBot.Bot/CLAUDE.md) - Telegram bot (alternative interface)
+
+**User Flow Documentation**:
+- [Survey Creation Flow](../documentation/flows/SURVEY_CREATION_FLOW.md) - Creating surveys
+- [Survey Taking Flow](../documentation/flows/SURVEY_TAKING_FLOW.md) - Taking surveys
+
+**Development Resources**:
+- [Developer Onboarding](../documentation/DEVELOPER_ONBOARDING.md) - Getting started guide
+- [Troubleshooting](../documentation/TROUBLESHOOTING.md) - Common issues
+
+**Deployment**:
+- [Docker Startup Guide](../documentation/deployment/DOCKER-STARTUP-GUIDE.md) - Docker setup
+- [Docker README](../documentation/deployment/DOCKER-README.md) - Production deployment
+
+**Testing**:
+- [Test Summary](../documentation/testing/TEST_SUMMARY.md) - Test coverage
+- [Manual Testing Checklist](../documentation/testing/MANUAL_TESTING_MEDIA_CHECKLIST.md) - Media testing
+
+### Documentation Maintenance
+
+**When updating Frontend**:
+1. Update this CLAUDE.md file with component/architecture changes
+2. Update [API Reference](../documentation/api/API_REFERENCE.md) if discovering API issues
+3. Update [User Flow Documentation](../documentation/flows/) if user experience changes
+4. Update [Main CLAUDE.md](../CLAUDE.md) if frontend features significantly change
+5. Update [Documentation Index](../documentation/INDEX.md) if adding significant documentation
+
+**Where to save Frontend-related documentation**:
+- Technical implementation details → This file
+- Component architecture → This file
+- API integration patterns → This file
+- User flows → `documentation/flows/`
+- Testing procedures → `documentation/testing/`
+- Deployment guides → `documentation/deployment/`
+
+**API Integration Updates**:
+- When API changes, check [API Layer CLAUDE.md](../src/SurveyBot.API/CLAUDE.md)
+- Update service files (`src/services/`) to match new API contracts
+- Update TypeScript types (`src/types/`) to match DTOs from Core layer
+- Test authentication flow if auth endpoints change
+
+**UI/UX Documentation**:
+- Document new components in this file
+- Document new routes and navigation patterns
+- Keep component prop types documented inline
+- Document Material-UI customizations in theme files
+
+---
+
 **End of Frontend Documentation**
+
+**Last Updated**: 2025-11-21 | **Version**: 1.3.0
 
 [← Back to Main Documentation](../CLAUDE.md)

@@ -28,6 +28,92 @@ color: red
 - Generic type constraint failures
 
 
+## SurveyBot Project Architecture
+
+
+This agent is specialized for the **SurveyBot** project, a .NET 8.0 Telegram-based survey management system following **Clean Architecture** principles.
+
+### Architecture Layers
+
+The project follows Clean Architecture with the following layers:
+
+**[SurveyBot.Core](src/SurveyBot.Core/CLAUDE.md)** - Domain Layer (ZERO dependencies)
+- Entities: User, Survey, Question, Response, Answer
+- Interfaces: Repository and service contracts
+- DTOs: Data transfer objects
+- Exceptions: Domain-specific exceptions
+- Utilities: SurveyCodeGenerator
+
+**[SurveyBot.Infrastructure](src/SurveyBot.Infrastructure/CLAUDE.md)** - Data Access Layer
+- DbContext with PostgreSQL and Entity Framework Core
+- Repository implementations
+- Business logic services
+- Database migrations
+
+**[SurveyBot.Bot](src/SurveyBot.Bot/CLAUDE.md)** - Telegram Integration Layer
+- Bot service and update handler
+- Command handlers (start, help, surveys, stats)
+- Question handlers (text, choice, rating)
+- Conversation state management
+
+**[SurveyBot.API](src/SurveyBot.API/CLAUDE.md)** - REST API Layer
+- Controllers (Auth, Surveys, Questions, Responses)
+- JWT authentication middleware
+- Global exception handling
+- Swagger documentation
+
+### Technology Stack
+
+- **Language**: C# 12.0
+- **Framework**: .NET 8.0 (ASP.NET Core)
+- **Database**: Entity Framework Core 9.0 with PostgreSQL 15
+- **Bot Framework**: Telegram.Bot 22.7.4
+- **Logging**: Serilog
+- **Mapping**: AutoMapper 12.0
+- **Frontend**: React 19.2 + TypeScript
+
+### File Structure
+
+```
+C:\Users\User\Desktop\SurveyBot\
+├── src\
+│   ├── SurveyBot.Core\          # Domain layer (no dependencies)
+│   ├── SurveyBot.Infrastructure\ # Data access and services
+│   ├── SurveyBot.Bot\           # Telegram bot
+│   └── SurveyBot.API\           # REST API
+├── frontend\                     # React admin panel
+└── tests\
+    └── SurveyBot.Tests\
+```
+
+### Key Architectural Constraints
+
+1. **Dependency Rule**: All dependencies point INWARD toward Core
+   - Core has ZERO external dependencies
+   - Infrastructure, Bot, and API depend on Core
+   - Never reference Infrastructure/Bot/API from Core
+
+2. **Layer Responsibilities**:
+   - Core: Business entities, interfaces, DTOs, exceptions
+   - Infrastructure: Database access, service implementations
+   - Bot: Telegram-specific handlers and state management
+   - API: HTTP endpoints, authentication, middleware
+
+For detailed information about each layer, see the layer-specific CLAUDE.md files referenced above.
+
+### Additional Documentation Resources
+
+All agents can reference centralized documentation in:
+- `C:\Users\User\Desktop\SurveyBot\documentation\` - Organized by topic/layer
+  - `api/` - API-specific guides and references
+  - `bot/` - Bot user guides and command references
+  - `database/` - Database schemas and guides
+  - `deployment/` - Deployment and Docker guides
+  - `testing/` - Testing procedures and checklists
+  - `INDEX.md` - Complete documentation index
+  - `NAVIGATION.md` - Role-based navigation guide
+
+
 ## When to Use This Agent
 
 
@@ -150,7 +236,7 @@ After resolving compilation errors, perform additional checks:
 All analysis reports are stored in a dedicated directory structure:
 
 ```
-project/agents/out/codebase-analysis/
+project/.claude/out
 ```
 
 ### Report Naming Convention
@@ -192,15 +278,21 @@ codebase-analysis-YYYY-MM-DD-[analyzed-object].md
 
 ```json
 {
-  "project_path": "C:/Projects/SurveyBot",
+  "project_path": "C:\\Users\\User\\Desktop\\SurveyBot",
   "file_patterns": ["**/*.cs"],
   "analyzed_object": "compilation-errors",
   "compilation_mode": "strict",
-  "exclude_patterns": ["**/bin/**", "**/obj/**", "**/*.Designer.cs"],
+  "exclude_patterns": [
+    "**/bin/**",
+    "**/obj/**",
+    "**/.vs/**",
+    "**/node_modules/**",
+    "**/*.Designer.cs"
+  ],
   "root_cause_analysis": true,
   "fix_suggestions": true,
-  "language_version": "C# 10.0",
-  "framework_version": ".NET 6.0"
+  "language_version": "C# 12.0",
+  "framework_version": ".NET 8.0"
 }
 ```
 

@@ -1,6 +1,6 @@
 # SurveyBot.Infrastructure - Data Access Layer
 
-**Version**: 1.0.0 | **Target Framework**: .NET 8.0 | **EF Core**: 9.0.10 | **Database**: PostgreSQL 15+
+**Version**: 1.3.0 | **Target Framework**: .NET 8.0 | **EF Core**: 9.0.10 | **Database**: PostgreSQL 15+
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [API Layer](../SurveyBot.API/CLAUDE.md)
@@ -79,6 +79,7 @@ public override Task<int> SaveChangesAsync(CancellationToken cancellationToken =
 
 **QuestionConfiguration** - `Data/Configurations/QuestionConfiguration.cs`:
 - OptionsJson: JSONB with GIN index (PostgreSQL-specific)
+- MediaContent: JSONB with GIN index for multimedia metadata (NEW in v1.3.0)
 - Composite unique index: `(SurveyId, OrderIndex)` prevents duplicates
 - Check constraint: `order_index >= 0`
 - Check constraint: `question_type IN ('text', 'multiple_choice', 'single_choice', 'rating', 'yes_no')`
@@ -282,6 +283,22 @@ public string GenerateAccessToken(int userId, long telegramId, string? username)
 - `RegisterAsync`: User registration with JWT (upsert)
 - `GetUserByTelegramIdAsync`: Telegram ID lookup
 
+**MediaStorageService** (`Services/MediaStorageService.cs`) - NEW in v1.3.0:
+- `SaveMediaAsync`: Store uploaded files with type-specific handling
+- `DeleteMediaAsync`: Remove media files from storage
+- `GetMediaAsync`: Retrieve media file information
+- File organization: `/media/{type}/{filename}` structure
+- Thumbnail generation for images (200x200px)
+- Automatic cleanup on deletion
+
+**MediaValidationService** (`Services/MediaValidationService.cs`) - NEW in v1.3.0:
+- `ValidateMediaAsync`: Validate file type, size, format
+- `ValidateMediaWithAutoDetectionAsync`: Auto-detect file type from content
+- Magic byte analysis for file type detection
+- MIME type verification
+- File extension validation as fallback
+- Comprehensive error reporting with validation details
+
 ---
 
 ## Database Migrations
@@ -309,6 +326,7 @@ dotnet ef migrations script --project ../SurveyBot.Infrastructure
 1. **InitialCreate** - Creates all tables, indexes, relationships
 2. **AddLastLoginAtToUser** - Adds LastLoginAt column
 3. **AddSurveyCodeColumn** - Adds Code column with unique index
+4. **AddMediaContentToQuestion** - Adds MediaContent JSONB column (v1.3.0)
 
 **Best Practices**:
 - Always backup before production migrations
@@ -518,6 +536,10 @@ public static IServiceCollection AddInfrastructure(
     services.AddScoped<IResponseService, ResponseService>();
     services.AddScoped<IUserService, UserService>();
 
+    // Media Services (NEW in v1.3.0)
+    services.AddScoped<IMediaStorageService, MediaStorageService>();
+    services.AddScoped<IMediaValidationService, MediaValidationService>();
+
     return services;
 }
 ```
@@ -552,7 +574,62 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 ---
 
-**Related Documentation**:
-- [Core Layer](../SurveyBot.Core/CLAUDE.md) - Entities, interfaces, DTOs
-- [API Layer](../SurveyBot.API/CLAUDE.md) - Controllers, middleware, configuration
-- [Main Documentation](../../CLAUDE.md) - Setup, architecture, troubleshooting
+## Related Documentation
+
+### Documentation Hub
+
+For comprehensive project documentation, see the **centralized documentation folder**:
+
+**Main Documentation**:
+- [Project Root CLAUDE.md](../../CLAUDE.md) - Overall project overview and quick start
+- [Documentation Index](../../documentation/INDEX.md) - Complete documentation catalog
+- [Navigation Guide](../../documentation/NAVIGATION.md) - Role-based navigation
+
+**Database Documentation**:
+- [Quick Start Database](../../documentation/database/QUICK-START-DATABASE.md) - Database setup and migrations
+- [ER Diagram](../../documentation/database/ER_DIAGRAM.md) - Entity relationships
+- [Entity Relationships](../../documentation/database/RELATIONSHIPS.md) - Detailed relationships
+- [Index Optimization](../../documentation/database/INDEX_OPTIMIZATION.md) - Performance indexing
+- [Database README](../../documentation/database/README.md) - Database overview
+
+**Related Layer Documentation**:
+- [Core Layer](../SurveyBot.Core/CLAUDE.md) - Domain entities and interfaces
+- [API Layer](../SurveyBot.API/CLAUDE.md) - Controllers using Infrastructure services
+- [Bot Layer](../SurveyBot.Bot/CLAUDE.md) - Bot using Infrastructure services
+
+**Development Resources**:
+- [DI Structure](../../documentation/development/DI-STRUCTURE.md) - Dependency injection patterns
+- [Developer Onboarding](../../documentation/DEVELOPER_ONBOARDING.md) - Getting started guide
+- [Troubleshooting](../../documentation/TROUBLESHOOTING.md) - Common database issues
+
+**Deployment**:
+- [Docker Startup Guide](../../documentation/deployment/DOCKER-STARTUP-GUIDE.md) - PostgreSQL setup
+- [Docker README](../../documentation/deployment/DOCKER-README.md) - Production deployment
+
+### Documentation Maintenance
+
+**When updating Infrastructure layer**:
+1. Update this CLAUDE.md file with repository/service changes
+2. Update [Database README](../../documentation/database/README.md) if schema changes
+3. Update [ER Diagram](../../documentation/database/ER_DIAGRAM.md) if relationships change
+4. Update [Quick Start Database](../../documentation/database/QUICK-START-DATABASE.md) if migration process changes
+5. Update [Core CLAUDE.md](../SurveyBot.Core/CLAUDE.md) if interface contracts change
+6. Update [Documentation Index](../../documentation/INDEX.md) if adding significant documentation
+
+**Where to save Infrastructure-related documentation**:
+- Repository implementations → This file
+- Service layer logic → This file
+- Entity configurations → This file
+- Migration procedures → `documentation/database/`
+- Database optimization → `documentation/database/INDEX_OPTIMIZATION.md`
+- Database fixes → `documentation/fixes/`
+- Performance tuning → `documentation/database/`
+
+**Migration Documentation**:
+- After creating migrations, document schema changes in [Database README](../../documentation/database/README.md)
+- Update task completion reports in `documentation/database/TASK_*.md` if applicable
+- Document breaking changes in main [CLAUDE.md](../../CLAUDE.md)
+
+---
+
+**Last Updated**: 2025-11-21 | **Version**: 1.3.0

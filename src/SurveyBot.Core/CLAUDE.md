@@ -109,6 +109,7 @@ public class Question : BaseEntity
     public int OrderIndex { get; set; }             // 0-based, sequential
     public bool IsRequired { get; set; }
     public string? OptionsJson { get; set; }        // JSONB: ["Option1", "Option2"]
+    public string? MediaContent { get; set; }       // JSONB: Multimedia metadata (NEW in v1.3.0)
 
     public Survey Survey { get; set; }
     public ICollection<Answer> Answers { get; set; }
@@ -121,6 +122,25 @@ public enum QuestionType { Text = 0, SingleChoice = 1, MultipleChoice = 2, Ratin
 ```json
 ["Option 1", "Option 2", "Option 3"]
 ```
+
+**MediaContent Format** (NEW - multimedia questions):
+```json
+{
+  "id": "unique-media-id",
+  "type": "image",
+  "filePath": "/media/images/abc123.jpg",
+  "fileSize": 1048576,
+  "mimeType": "image/jpeg",
+  "thumbnailPath": "/media/thumbnails/abc123_thumb.jpg"
+}
+```
+
+**Supported Media Types**:
+- **Images**: jpg, png, gif, webp, bmp, tiff, svg (max 10 MB)
+- **Videos**: mp4, webm, mov, avi, mkv, flv, wmv (max 50 MB)
+- **Audio**: mp3, wav, ogg, m4a, flac, aac (max 20 MB)
+- **Documents**: pdf, doc, docx, xls, xlsx, ppt, pptx, txt, rtf, csv (max 25 MB)
+- **Archives**: zip, rar, 7z, tar, gz, bz2 (max 100 MB)
 
 ### Response
 
@@ -215,6 +235,8 @@ Task<int> CountAsync();
 - **IResponseRepository**: GetIncompleteResponseAsync, GetCompletedCountAsync
 - **IUserRepository**: GetByTelegramIdAsync, CreateOrUpdateAsync (upsert)
 - **IAnswerRepository**: GetByResponseIdAsync, GetByQuestionIdAsync
+- **IMediaStorageService**: SaveMediaAsync, DeleteMediaAsync, GetMediaAsync (NEW in v1.3.0)
+- **IMediaValidationService**: ValidateMediaAsync, ValidateMediaWithAutoDetectionAsync (NEW in v1.3.0)
 
 ---
 
@@ -244,6 +266,8 @@ Task<int> CountAsync();
 - **IResponseService**: StartResponseAsync, SubmitAnswerAsync, CompleteResponseAsync
 - **IUserService**: GetOrCreateUserAsync (upsert pattern)
 - **IAuthService**: AuthenticateAsync, GenerateJwtToken, ValidateToken
+- **IMediaStorageService**: SaveMediaAsync, DeleteMediaAsync, GetMediaAsync (NEW in v1.3.0)
+- **IMediaValidationService**: ValidateMediaAsync, ValidateMediaWithAutoDetectionAsync (NEW in v1.3.0)
 
 ---
 
@@ -289,6 +313,11 @@ public class PagedResultDto<T>
 - `SurveyStatisticsDto` - Total/completed responses, completion rate, avg time
 - `QuestionStatisticsDto` - Response rate, choice distribution, rating averages
 
+**Media DTOs** (NEW in v1.3.0):
+- `MediaItemDto` - Media file metadata (id, type, path, size, mimeType, thumbnail)
+- `MediaContentDto` - Simplified media content for embedding in questions
+- `MediaValidationResult` - Validation result with errors and detected type
+
 ---
 
 ## Domain Exceptions
@@ -302,6 +331,8 @@ All inherit from `System.Exception`:
 - `InvalidAnswerFormatException` - Answer JSON doesn't match question type
 - `DuplicateResponseException` - Multiple responses when not allowed
 - `UnauthorizedAccessException` - User doesn't own resource
+- `MediaValidationException` - Media file validation fails (NEW in v1.3.0)
+- `MediaStorageException` - Media storage operation fails (NEW in v1.3.0)
 
 **Example**:
 ```csharp
@@ -541,8 +572,55 @@ const int PAGINATION_MAX_PAGE_SIZE = 100;
 
 ---
 
+## Related Documentation
+
+### Documentation Hub
+
+For comprehensive project documentation, see the **centralized documentation folder**:
+
+**Main Documentation**:
+- [Project Root CLAUDE.md](../../CLAUDE.md) - Overall project overview and quick start
+- [Documentation Index](../../documentation/INDEX.md) - Complete documentation catalog
+- [Navigation Guide](../../documentation/NAVIGATION.md) - Role-based navigation
+
+**Architecture Documentation**:
+- [Architecture Overview](../../documentation/architecture/ARCHITECTURE.md) - Detailed architecture patterns
+- [ER Diagram](../../documentation/database/ER_DIAGRAM.md) - Entity relationships
+- [Entity Relationships](../../documentation/database/RELATIONSHIPS.md) - Database relationships
+
+**Related Layer Documentation**:
+- [Infrastructure Layer](../SurveyBot.Infrastructure/CLAUDE.md) - Repository implementations, DbContext
+- [API Layer](../SurveyBot.API/CLAUDE.md) - REST API endpoints using Core DTOs
+- [Bot Layer](../SurveyBot.Bot/CLAUDE.md) - Telegram bot using Core services
+
+**Development Resources**:
+- [DI Structure](../../documentation/development/DI-STRUCTURE.md) - Dependency injection setup
+- [Developer Onboarding](../../documentation/DEVELOPER_ONBOARDING.md) - Getting started guide
+
+### Documentation Maintenance
+
+**When updating Core layer**:
+1. Update this CLAUDE.md file with entity/interface changes
+2. Update [ER Diagram](../../documentation/database/ER_DIAGRAM.md) if relationships change
+3. Update [Infrastructure CLAUDE.md](../SurveyBot.Infrastructure/CLAUDE.md) if repository contracts change
+4. Update [Documentation Index](../../documentation/INDEX.md) if adding significant documentation
+
+**Where to save Core-related documentation**:
+- Entity model changes → This file
+- Business logic patterns → This file
+- DTO specifications → This file
+- Domain validation rules → This file
+- Architecture decisions → `documentation/architecture/`
+- Database relationships → `documentation/database/`
+
+---
+
 **Core Responsibilities**: Define domain entities, interfaces, DTOs, exceptions, utilities, configuration models
 
 **Core Should NOT**: Reference other projects, contain database code, include HTTP/API code, have external package dependencies
 
 **Key Principle**: High-level policy (Core) does not depend on low-level details (Infrastructure/Bot/API). Both depend on abstractions (interfaces defined in Core).
+
+---
+
+**Last Updated**: 2025-11-21 | **Version**: 1.3.0

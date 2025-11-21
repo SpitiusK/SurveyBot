@@ -1,6 +1,6 @@
 # SurveyBot - Project Documentation
 
-**Version**: 1.2.0 | **Framework**: .NET 8.0 | **Status**: Active Development
+**Version**: 1.3.0 | **Framework**: .NET 8.0 | **Status**: Active Development
 
 ---
 
@@ -23,6 +23,7 @@
 - Telegram Bot Interface - Create and take surveys
 - REST API - Full-featured programmatic access
 - Survey Code Sharing - 6-character alphanumeric codes
+- Multimedia Support - Images, videos, audio, documents in questions
 - Real-time Analytics - Statistics, charts, CSV export
 - JWT Authentication - Secure token-based auth
 - Clean Architecture - Maintainable, testable, scalable
@@ -438,6 +439,10 @@ User (1) ──creates──> Surveys (*)
 - GET `/code/{code}` - Get by code (PUBLIC)
 - GET `/{id}/statistics` - Statistics (auth)
 
+**Media** (`/api/media`)
+- POST `/upload` - Upload media file (auth, auto-detects type)
+- DELETE `/{mediaId}` - Delete media file (auth)
+
 **Questions** (`/api/surveys/{surveyId}/questions`)
 - POST - Add question (auth)
 - GET - List questions (public for active)
@@ -459,6 +464,117 @@ User (1) ──creates──> Surveys (*)
 
 ---
 
+## Documentation Structure
+
+### Centralized Documentation Hub
+
+All project documentation is organized in the **`documentation/`** folder for easy access and maintenance. This centralized approach keeps documentation organized by category while maintaining layer-specific CLAUDE.md files in their respective directories.
+
+**Location**: `C:\Users\User\Desktop\SurveyBot\documentation\`
+
+### Documentation Organization
+
+```
+documentation/
+├── INDEX.md                        # Complete documentation index (start here)
+├── NAVIGATION.md                   # Role-based navigation guide
+├── AGENT_DOCUMENTATION_UPDATE_REPORT.md  # Documentation maintenance report
+├── PRD_SurveyBot_MVP.md           # Product requirements document
+├── api/                           # API layer documentation
+│   ├── LOGGING-ERROR-HANDLING.md
+│   ├── QUICK-REFERENCE.md
+│   ├── API_REFERENCE.md
+│   └── PHASE2_API_REFERENCE.md
+├── architecture/                  # Architecture documentation
+│   └── ARCHITECTURE.md
+├── auth/                          # Authentication documentation
+│   └── AUTHENTICATION_FLOW.md
+├── bot/                           # Bot layer documentation
+│   ├── BOT_COMMAND_REFERENCE.md
+│   ├── BOT_FAQ.md
+│   ├── BOT_QUICK_START.md
+│   ├── BOT_TROUBLESHOOTING.md
+│   ├── BOT_USER_GUIDE.md
+│   ├── COMMAND_HANDLERS_GUIDE.md
+│   ├── HELP_MESSAGES.md
+│   ├── INTEGRATION_GUIDE.md
+│   ├── QUICK_START.md
+│   ├── README.md
+│   └── STATE-MACHINE-DESIGN.md
+├── database/                      # Database documentation
+│   ├── ER_DIAGRAM.md
+│   ├── INDEX_OPTIMIZATION.md
+│   ├── QUICK-START-DATABASE.md
+│   ├── README.md
+│   ├── RELATIONSHIPS.md
+│   └── TASK_*.md
+├── deployment/                    # Deployment guides
+│   ├── DOCKER-README.md
+│   ├── DOCKER-STARTUP-GUIDE.md
+│   └── README-DOCKER.md
+├── development/                   # Development documentation
+│   └── DI-STRUCTURE.md
+├── fixes/                         # Fix documentation
+│   └── MEDIA_STORAGE_FIX.md
+├── flows/                         # User flow documentation
+│   ├── SURVEY_CREATION_FLOW.md
+│   └── SURVEY_TAKING_FLOW.md
+├── guides/                        # General guides
+│   └── DOCUMENTATION_OVERVIEW.md
+└── testing/                       # Testing documentation
+    ├── MANUAL_TESTING_MEDIA_CHECKLIST.md
+    ├── PHASE2_TESTING_GUIDE.md
+    └── TEST_SUMMARY.md
+```
+
+### Quick Access Documentation
+
+**Essential Starting Points**:
+- **[Documentation Index](documentation/INDEX.md)** - Complete documentation catalog with descriptions
+- **[Navigation Guide](documentation/NAVIGATION.md)** - Role-based navigation (developer, DevOps, user, AI)
+- **[Developer Onboarding](documentation/DEVELOPER_ONBOARDING.md)** - New developer quick start
+- **[Troubleshooting Guide](documentation/TROUBLESHOOTING.md)** - Common issues and solutions
+
+**Layer-Specific CLAUDE.md Files** (remain in layer directories):
+- [Core Layer](src/SurveyBot.Core/CLAUDE.md) - Domain entities, interfaces, DTOs
+- [Infrastructure Layer](src/SurveyBot.Infrastructure/CLAUDE.md) - Database, repositories, services
+- [Bot Layer](src/SurveyBot.Bot/CLAUDE.md) - Telegram bot implementation
+- [API Layer](src/SurveyBot.API/CLAUDE.md) - REST API, controllers, middleware
+- [Frontend](frontend/CLAUDE.md) - React admin panel
+
+**By Topic**:
+- **Architecture**: [Architecture Overview](documentation/architecture/ARCHITECTURE.md)
+- **API**: [API Quick Reference](documentation/api/QUICK-REFERENCE.md) | [API Reference](documentation/api/API_REFERENCE.md)
+- **Bot**: [Bot User Guide](documentation/bot/BOT_USER_GUIDE.md) | [Bot FAQ](documentation/bot/BOT_FAQ.md)
+- **Database**: [Quick Start Database](documentation/database/QUICK-START-DATABASE.md) | [ER Diagram](documentation/database/ER_DIAGRAM.md)
+- **Deployment**: [Docker Startup Guide](documentation/deployment/DOCKER-STARTUP-GUIDE.md)
+- **Testing**: [Test Summary](documentation/testing/TEST_SUMMARY.md)
+
+### Documentation Maintenance
+
+**When to Update Documentation**:
+1. After implementing new features - Update relevant layer CLAUDE.md and add specific docs to `documentation/`
+2. After architecture changes - Update architecture and layer documentation
+3. After API changes - Update `documentation/api/` files
+4. After bot changes - Update `documentation/bot/` files
+5. After fixing bugs - Add to `documentation/fixes/` if significant
+
+**Where to Save Documentation**:
+- **Layer-specific implementation details** → Layer's CLAUDE.md file
+- **User guides and references** → `documentation/` subfolders by category
+- **Fix documentation** → `documentation/fixes/`
+- **Testing procedures** → `documentation/testing/`
+- **Deployment guides** → `documentation/deployment/`
+
+**Documentation Standards**:
+- Keep layer CLAUDE.md files focused on technical implementation
+- Use `documentation/` for user-facing guides and comprehensive references
+- Always update [Documentation Index](documentation/INDEX.md) when adding new docs
+- Include version numbers and last-updated dates
+- Cross-reference related documentation
+
+---
+
 ## Summary for AI Assistants
 
 **SurveyBot** is a .NET 8.0 Telegram bot with React admin panel following Clean Architecture.
@@ -471,14 +587,14 @@ User (1) ──creates──> Surveys (*)
 5. **Auth**: JWT Bearer with Telegram-based login
 6. **Survey codes**: 6-char alphanumeric (Base36)
 7. **File paths**: Always use absolute paths
+8. **Documentation**: Centralized in `documentation/` folder - see [INDEX.md](documentation/INDEX.md)
 
 **Quick Setup**: Docker PostgreSQL → Configure bot token → Apply migrations → Run API → Access Swagger
 
-**Layer Documentation**:
-- [Core](src/SurveyBot.Core/CLAUDE.md) - Entities, interfaces, DTOs, exceptions
-- [Infrastructure](src/SurveyBot.Infrastructure/CLAUDE.md) - Database, repositories, services, migrations
-- [Bot](src/SurveyBot.Bot/CLAUDE.md) - Telegram handlers, commands, state management
-- [API](src/SurveyBot.API/CLAUDE.md) - Controllers, middleware, authentication, Swagger
+**Documentation Hub**:
+- **Start Here**: [Documentation Index](documentation/INDEX.md) | [Navigation Guide](documentation/NAVIGATION.md)
+- **Layer Documentation**: [Core](src/SurveyBot.Core/CLAUDE.md) | [Infrastructure](src/SurveyBot.Infrastructure/CLAUDE.md) | [Bot](src/SurveyBot.Bot/CLAUDE.md) | [API](src/SurveyBot.API/CLAUDE.md)
+- **Quick References**: [API](documentation/api/QUICK-REFERENCE.md) | [Bot Commands](documentation/bot/BOT_COMMAND_REFERENCE.md) | [Database](documentation/database/QUICK-START-DATABASE.md)
 
 **Common Tasks**:
 - Add migration: `dotnet ef migrations add Name`
@@ -486,7 +602,8 @@ User (1) ──creates──> Surveys (*)
 - Run API: `cd src/SurveyBot.API && dotnet run`
 - Access Swagger: http://localhost:5000/swagger
 - Check bot: `curl https://api.telegram.org/bot<TOKEN>/getMe`
+- Find documentation: Check [documentation/INDEX.md](documentation/INDEX.md)
 
 ---
 
-**Last Updated**: 2025-11-12 | **Version**: 1.2.0 | **Target Framework**: .NET 8.0
+**Last Updated**: 2025-11-21 | **Version**: 1.3.0 | **Target Framework**: .NET 8.0

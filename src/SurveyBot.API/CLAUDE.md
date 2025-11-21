@@ -1,6 +1,6 @@
 # SurveyBot.API - REST API Presentation Layer
 
-**Version**: 1.0.0 | **Framework**: .NET 8.0 | **ASP.NET Core** 8.0
+**Version**: 1.3.0 | **Framework**: .NET 8.0 | **ASP.NET Core** 8.0
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [Infrastructure Layer](../SurveyBot.Infrastructure/CLAUDE.md) | [Bot Layer](../SurveyBot.Bot/CLAUDE.md)
@@ -62,11 +62,15 @@ builder.Services.AddBotHandlers();
 // 9. Background Task Queue
 builder.Services.AddBackgroundTaskQueue(queueCapacity: 100);
 
-// 10. Health Checks
+// 10. Media Services (NEW in v1.3.0)
+builder.Services.AddScoped<IMediaStorageService, MediaStorageService>();
+builder.Services.AddScoped<IMediaValidationService, MediaValidationService>();
+
+// 11. Health Checks
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<SurveyBotDbContext>(name: "database");
 
-// 11. Swagger/OpenAPI
+// 12. Swagger/OpenAPI
 builder.Services.AddSwaggerGen(/* JWT bearer config */);
 ```
 
@@ -267,6 +271,57 @@ private bool ValidateWebhookSecret()
 | `/health` | GET | Basic health status |
 | `/health/ready` | GET | Readiness check |
 | `/health/live` | GET | Liveness check |
+
+### MediaController (NEW in v1.3.0)
+
+**Route**: `/api/media`
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/upload` | POST | Yes | Upload media file with auto-detection |
+| `/{mediaId}` | DELETE | Yes | Delete media file |
+
+**Upload Endpoint Features**:
+- **Auto-detection**: Analyzes file content to determine type (magic bytes, MIME, extension)
+- **Multi-format support**: Images, videos, audio, documents, archives
+- **Size limits**: Type-specific (10-100 MB)
+- **Thumbnail generation**: Automatic for images (200x200px)
+- **Validation**: Comprehensive file validation with detailed error messages
+
+**Request Example**:
+```bash
+POST /api/media/upload
+Content-Type: multipart/form-data
+Authorization: Bearer <token>
+
+form-data:
+- file: [binary file data]
+- mediaType: "image" (optional, auto-detects if omitted)
+```
+
+**Response Example** (201 Created):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "abc123-def456-ghi789",
+    "type": "image",
+    "filePath": "/media/images/photo_20251121_123456.jpg",
+    "thumbnailPath": "/media/thumbnails/photo_20251121_123456_thumb.jpg",
+    "fileSize": 1048576,
+    "mimeType": "image/jpeg",
+    "uploadedAt": "2025-11-21T10:30:00Z"
+  },
+  "message": "Media uploaded successfully. Type: image"
+}
+```
+
+**Supported File Types**:
+- Images: jpg, png, gif, webp, bmp, tiff, svg (max 10 MB)
+- Videos: mp4, webm, mov, avi, mkv, flv, wmv (max 50 MB)
+- Audio: mp3, wav, ogg, m4a, flac, aac (max 20 MB)
+- Documents: pdf, doc, docx, xls, xlsx, ppt, pptx, txt, csv (max 25 MB)
+- Archives: zip, rar, 7z, tar, gz, bz2 (max 100 MB)
 
 ---
 
@@ -712,12 +767,83 @@ app.UseCors("AllowAll"); // Before UseAuthentication
 
 **Middleware Order**: Logging → Exception → Swagger → HTTPS → Auth → Authorization → Controllers
 
-**Key Controllers**: Auth (JWT), Surveys (CRUD), Questions, Responses (public), Bot (webhook)
+**Key Controllers**: Auth (JWT), Surveys (CRUD), Questions, Responses (public), Bot (webhook), Media (upload/delete)
 
 ---
 
-**Related Documentation**:
-- [Core Layer](../SurveyBot.Core/CLAUDE.md) - Entities, interfaces, DTOs
-- [Infrastructure Layer](../SurveyBot.Infrastructure/CLAUDE.md) - Services, repositories
-- [Bot Layer](../SurveyBot.Bot/CLAUDE.md) - Telegram integration
-- [Main Documentation](../../CLAUDE.md) - Setup, configuration, troubleshooting
+## Related Documentation
+
+### Documentation Hub
+
+For comprehensive project documentation, see the **centralized documentation folder**:
+
+**Main Documentation**:
+- [Project Root CLAUDE.md](../../CLAUDE.md) - Overall project overview and quick start
+- [Documentation Index](../../documentation/INDEX.md) - Complete documentation catalog
+- [Navigation Guide](../../documentation/NAVIGATION.md) - Role-based navigation
+
+**API Documentation**:
+- [API Quick Reference](../../documentation/api/QUICK-REFERENCE.md) - Quick endpoint reference
+- [API Reference](../../documentation/api/API_REFERENCE.md) - Complete API documentation
+- [Phase 2 API Reference](../../documentation/api/PHASE2_API_REFERENCE.md) - Phase 2 endpoints
+- [Logging & Error Handling](../../documentation/api/LOGGING-ERROR-HANDLING.md) - Error handling patterns
+
+**Related Layer Documentation**:
+- [Core Layer](../SurveyBot.Core/CLAUDE.md) - Domain entities, DTOs, interfaces
+- [Infrastructure Layer](../SurveyBot.Infrastructure/CLAUDE.md) - Services and repositories used by API
+- [Bot Layer](../SurveyBot.Bot/CLAUDE.md) - Telegram bot integrated with API
+- [Frontend](../../frontend/CLAUDE.md) - React admin panel consuming this API
+
+**Authentication & Authorization**:
+- [Authentication Flow](../../documentation/auth/AUTHENTICATION_FLOW.md) - JWT authentication process
+
+**Development Resources**:
+- [DI Structure](../../documentation/development/DI-STRUCTURE.md) - Dependency injection patterns
+- [Developer Onboarding](../../documentation/DEVELOPER_ONBOARDING.md) - Getting started guide
+- [Troubleshooting](../../documentation/TROUBLESHOOTING.md) - Common API issues
+
+**Deployment**:
+- [Docker Startup Guide](../../documentation/deployment/DOCKER-STARTUP-GUIDE.md) - Docker setup
+- [Docker README](../../documentation/deployment/DOCKER-README.md) - Production deployment
+- [README Docker](../../documentation/deployment/README-DOCKER.md) - Additional Docker info
+
+**Testing**:
+- [Test Summary](../../documentation/testing/TEST_SUMMARY.md) - Test coverage
+- [Phase 2 Testing Guide](../../documentation/testing/PHASE2_TESTING_GUIDE.md) - Testing procedures
+- [Manual Testing Checklist](../../documentation/testing/MANUAL_TESTING_MEDIA_CHECKLIST.md) - Media testing
+
+### Documentation Maintenance
+
+**When updating API layer**:
+1. Update this CLAUDE.md file with controller/middleware changes
+2. Update [API Quick Reference](../../documentation/api/QUICK-REFERENCE.md) if adding/changing endpoints
+3. Update [API Reference](../../documentation/api/API_REFERENCE.md) with detailed endpoint documentation
+4. Update [Logging & Error Handling](../../documentation/api/LOGGING-ERROR-HANDLING.md) if error handling changes
+5. Update [Authentication Flow](../../documentation/auth/AUTHENTICATION_FLOW.md) if auth logic changes
+6. Update [Main CLAUDE.md](../../CLAUDE.md) API Endpoints section if major changes
+7. Update [Frontend CLAUDE.md](../../frontend/CLAUDE.md) if API changes affect frontend
+8. Update [Documentation Index](../../documentation/INDEX.md) if adding significant documentation
+
+**Where to save API-related documentation**:
+- Technical implementation details → This file
+- API endpoint reference → `documentation/api/API_REFERENCE.md`
+- Quick reference → `documentation/api/QUICK-REFERENCE.md`
+- Error handling patterns → `documentation/api/LOGGING-ERROR-HANDLING.md`
+- Authentication flows → `documentation/auth/`
+- Testing procedures → `documentation/testing/`
+- Deployment guides → `documentation/deployment/`
+
+**Swagger Documentation**:
+- Keep Swagger annotations up to date in controller code
+- Access Swagger UI: `http://localhost:5000/swagger`
+- Use Swagger as source of truth for API contract
+
+**Breaking Changes**:
+- Document breaking changes in [Main CLAUDE.md](../../CLAUDE.md)
+- Update API version if necessary
+- Notify frontend team via [Frontend CLAUDE.md](../../frontend/CLAUDE.md)
+- Update all API documentation files
+
+---
+
+**Last Updated**: 2025-11-21 | **Version**: 1.3.0

@@ -1,6 +1,6 @@
 # SurveyBot.Bot - Telegram Bot Layer
 
-**Version**: 1.0.0 | **Framework**: .NET 8.0 | **Telegram.Bot**: 22.7.4
+**Version**: 1.3.0 | **Framework**: .NET 8.0 | **Telegram.Bot**: 22.7.4
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [API Layer](../SurveyBot.API/CLAUDE.md)
@@ -11,7 +11,7 @@
 
 Bot layer provides Telegram interface for survey management. **Depends ONLY on Core layer**.
 
-**Responsibilities**: Update routing, command handling, question handlers, conversation state, navigation, performance monitoring.
+**Responsibilities**: Update routing, command handling, question handlers with multimedia support, conversation state, navigation, performance monitoring.
 
 ---
 
@@ -155,23 +155,57 @@ public interface IQuestionHandler
 - Input: Free-form text message
 - Validation: Required check, 4000 char max
 - Skip: `/skip` for optional questions only
+- **Multimedia display**: Shows attached images, videos, audio, documents (NEW in v1.3.0)
 - Answer format: `{"text": "User's answer"}`
 
 **SingleChoiceQuestionHandler** (`QuestionType.SingleChoice`):
 - Input: Inline keyboard (radio buttons)
 - One button per option, stacked vertically
+- **Multimedia display**: Shows attached media before options (NEW in v1.3.0)
 - Answer format: `{"selectedOption": "Option 2"}`
 
 **MultipleChoiceQuestionHandler** (`QuestionType.MultipleChoice`):
 - Input: Inline keyboard (toggleable checkboxes)
 - Click to toggle: ☐ ↔ ☑️
 - "Submit Selected" to finalize
+- **Multimedia display**: Shows attached media before options (NEW in v1.3.0)
 - Answer format: `{"selectedOptions": ["Option A", "Option C"]}`
 
 **RatingQuestionHandler** (`QuestionType.Rating`):
 - Input: Inline keyboard (1-5 stars)
+- **Multimedia display**: Shows attached media before rating scale (NEW in v1.3.0)
 - Answer format: `{"rating": 4}`
 - Validation: Rating 1-5
+
+### Multimedia Support (NEW in v1.3.0)
+
+**Question Media Display**:
+All question handlers automatically display attached multimedia content before the question text using Telegram's native media sending methods:
+
+- **Images**: Sent via `SendPhotoAsync` with caption
+- **Videos**: Sent via `SendVideoAsync` with caption
+- **Audio**: Sent via `SendAudioAsync` with caption
+- **Documents**: Sent via `SendDocumentAsync` with caption
+
+**Implementation Pattern**:
+```csharp
+// In each question handler's DisplayQuestionAsync method
+if (question.MediaContent != null)
+{
+    var mediaContent = JsonSerializer.Deserialize<MediaContentDto>(question.MediaContent);
+    await SendMediaAsync(chatId, mediaContent, question.QuestionText);
+}
+else
+{
+    await SendMessage(chatId, question.QuestionText);
+}
+```
+
+**Media File Handling**:
+- Files retrieved from media storage service
+- Automatic type detection and appropriate Telegram method selection
+- Graceful fallback if media unavailable
+- Thumbnail support for images
 
 ---
 
@@ -404,6 +438,7 @@ return apiResponse?.Data;
 - POST `/api/surveys/{id}/responses` - Start response
 - POST `/api/responses/{id}/answers` - Submit answer
 - POST `/api/responses/{id}/complete` - Complete survey
+- GET `/api/media/{mediaId}` - Fetch media file for display (NEW in v1.3.0)
 
 ---
 
@@ -526,7 +561,70 @@ await _stateManager.CompleteSurveyAsync(userId);
 
 ---
 
-**Related Documentation**:
-- [Core Layer](../SurveyBot.Core/CLAUDE.md) - Entities, DTOs, interfaces
-- [API Layer](../SurveyBot.API/CLAUDE.md) - REST endpoints, authentication
-- [Main Documentation](../../CLAUDE.md) - Setup, bot configuration, troubleshooting
+## Related Documentation
+
+### Documentation Hub
+
+For comprehensive project documentation, see the **centralized documentation folder**:
+
+**Main Documentation**:
+- [Project Root CLAUDE.md](../../CLAUDE.md) - Overall project overview and quick start
+- [Documentation Index](../../documentation/INDEX.md) - Complete documentation catalog
+- [Navigation Guide](../../documentation/NAVIGATION.md) - Role-based navigation
+
+**Bot Documentation**:
+- [Bot User Guide](../../documentation/bot/BOT_USER_GUIDE.md) - Complete user guide
+- [Bot Command Reference](../../documentation/bot/BOT_COMMAND_REFERENCE.md) - All available commands
+- [Bot FAQ](../../documentation/bot/BOT_FAQ.md) - Frequently asked questions
+- [Bot Quick Start](../../documentation/bot/BOT_QUICK_START.md) - User quick start guide
+- [Bot Troubleshooting](../../documentation/bot/BOT_TROUBLESHOOTING.md) - Common issues
+- [Command Handlers Guide](../../documentation/bot/COMMAND_HANDLERS_GUIDE.md) - Handler implementation
+- [State Machine Design](../../documentation/bot/STATE-MACHINE-DESIGN.md) - Conversation state management
+- [Integration Guide](../../documentation/bot/INTEGRATION_GUIDE.md) - Bot integration patterns
+- [Help Messages](../../documentation/bot/HELP_MESSAGES.md) - Bot messages and text
+- [Bot README](../../documentation/bot/README.md) - Bot layer overview
+
+**Related Layer Documentation**:
+- [Core Layer](../SurveyBot.Core/CLAUDE.md) - Domain entities and interfaces
+- [Infrastructure Layer](../SurveyBot.Infrastructure/CLAUDE.md) - Services used by bot
+- [API Layer](../SurveyBot.API/CLAUDE.md) - API endpoints and bot registration
+
+**User Flow Documentation**:
+- [Survey Creation Flow](../../documentation/flows/SURVEY_CREATION_FLOW.md) - Creating surveys via bot
+- [Survey Taking Flow](../../documentation/flows/SURVEY_TAKING_FLOW.md) - Taking surveys via bot
+
+**Development Resources**:
+- [DI Structure](../../documentation/development/DI-STRUCTURE.md) - Dependency injection patterns
+- [Developer Onboarding](../../documentation/DEVELOPER_ONBOARDING.md) - Getting started guide
+- [Troubleshooting](../../documentation/TROUBLESHOOTING.md) - Common bot issues
+
+### Documentation Maintenance
+
+**When updating Bot layer**:
+1. Update this CLAUDE.md file with handler/service changes
+2. Update [Bot Command Reference](../../documentation/bot/BOT_COMMAND_REFERENCE.md) if adding/changing commands
+3. Update [Command Handlers Guide](../../documentation/bot/COMMAND_HANDLERS_GUIDE.md) if handler patterns change
+4. Update [State Machine Design](../../documentation/bot/STATE-MACHINE-DESIGN.md) if conversation flow changes
+5. Update [Bot User Guide](../../documentation/bot/BOT_USER_GUIDE.md) if user-facing features change
+6. Update [Bot FAQ](../../documentation/bot/BOT_FAQ.md) with common questions
+7. Update [Help Messages](../../documentation/bot/HELP_MESSAGES.md) if bot messages change
+8. Update [Documentation Index](../../documentation/INDEX.md) if adding significant documentation
+
+**Where to save Bot-related documentation**:
+- Technical implementation details → This file
+- User-facing documentation → `documentation/bot/`
+- Command reference → `documentation/bot/BOT_COMMAND_REFERENCE.md`
+- Troubleshooting → `documentation/bot/BOT_TROUBLESHOOTING.md`
+- User guides → `documentation/bot/BOT_USER_GUIDE.md`
+- Handler patterns → `documentation/bot/COMMAND_HANDLERS_GUIDE.md`
+- State management → `documentation/bot/STATE-MACHINE-DESIGN.md`
+
+**User Documentation Updates**:
+- After adding new commands, update all user-facing documentation
+- After changing bot behavior, update [Bot User Guide](../../documentation/bot/BOT_USER_GUIDE.md)
+- After fixing common issues, update [Bot FAQ](../../documentation/bot/BOT_FAQ.md)
+- After changing help text, update [Help Messages](../../documentation/bot/HELP_MESSAGES.md)
+
+---
+
+**Last Updated**: 2025-11-21 | **Version**: 1.3.0
