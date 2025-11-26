@@ -77,6 +77,13 @@ public class ConversationState
     public Dictionary<string, object> Metadata { get; set; } = new();
 
     /// <summary>
+    /// Track visited questions in this conversation.
+    /// Used for runtime cycle prevention in conditional question flows.
+    /// Stores question IDs that have been displayed/answered.
+    /// </summary>
+    public List<int> VisitedQuestionIds { get; set; } = new();
+
+    /// <summary>
     /// Checks if this state has expired (30 minutes of inactivity)
     /// </summary>
     public bool IsExpired => DateTime.UtcNow - LastActivityAt > TimeSpan.FromMinutes(30);
@@ -166,6 +173,35 @@ public class ConversationState
     }
 
     /// <summary>
+    /// Check if a question has been visited in this conversation.
+    /// Used for client-side cycle prevention in conditional flows.
+    /// </summary>
+    public bool HasVisitedQuestion(int questionId)
+    {
+        return VisitedQuestionIds.Contains(questionId);
+    }
+
+    /// <summary>
+    /// Record a question as visited.
+    /// Call this when displaying a question to the user.
+    /// </summary>
+    public void RecordVisitedQuestion(int questionId)
+    {
+        if (!VisitedQuestionIds.Contains(questionId))
+        {
+            VisitedQuestionIds.Add(questionId);
+        }
+    }
+
+    /// <summary>
+    /// Clear visited questions (when starting new survey).
+    /// </summary>
+    public void ClearVisitedQuestions()
+    {
+        VisitedQuestionIds.Clear();
+    }
+
+    /// <summary>
     /// Clears all survey-related data for new survey
     /// </summary>
     public void ClearSurveyData()
@@ -177,6 +213,7 @@ public class ConversationState
         AnsweredQuestionIndices.Clear();
         CachedAnswers.Clear();
         Metadata.Clear();
+        ClearVisitedQuestions();
     }
 
     /// <summary>

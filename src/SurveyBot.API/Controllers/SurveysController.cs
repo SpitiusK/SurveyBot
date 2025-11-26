@@ -414,6 +414,26 @@ public class SurveysController : ControllerBase
                 Message = ex.Message
             });
         }
+        catch (SurveyCycleException ex)
+        {
+            _logger.LogWarning(ex, "Survey {SurveyId} has cycle in flow", id);
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Message = $"Invalid survey flow: {ex.Message}",
+                Data = new { cyclePath = ex.CyclePath, error = "CYCLE_DETECTED" }
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Survey {SurveyId} validation failed", id);
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message,
+                Data = new { error = "VALIDATION_FAILED" }
+            });
+        }
         catch (SurveyValidationException ex)
         {
             _logger.LogWarning(ex, "Cannot activate survey {SurveyId}", id);

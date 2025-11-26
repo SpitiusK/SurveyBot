@@ -39,6 +39,9 @@ public static class DependencyInjection
         services.AddScoped<ISurveyService, SurveyService>();
         services.AddScoped<IQuestionService, QuestionService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IResponseService, ResponseService>();
+        services.AddScoped<IUserService, UserService>();
+        services.AddScoped<ISurveyValidationService, SurveyValidationService>();
 
         // Media Services
         services.AddScoped<IMediaValidationService, MediaValidationService>();

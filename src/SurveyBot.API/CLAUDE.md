@@ -1,6 +1,6 @@
 # SurveyBot.API - REST API Presentation Layer
 
-**Version**: 1.3.0 | **Framework**: .NET 8.0 | **ASP.NET Core** 8.0
+**Version**: 1.4.0 | **Framework**: .NET 8.0 | **ASP.NET Core** 8.0
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [Infrastructure Layer](../SurveyBot.Infrastructure/CLAUDE.md) | [Bot Layer](../SurveyBot.Bot/CLAUDE.md)
@@ -122,6 +122,29 @@ app.MapGet("/health/db/details", /* detailed check */);
 
 ## Controllers
 
+### Controller Inventory
+
+**Total Controllers**: 10
+
+| Controller | Route | Purpose | Auth | Status |
+|------------|-------|---------|------|--------|
+| **AuthController** | `/api/auth` | JWT authentication, user registration | Mixed | Stable |
+| **SurveysController** | `/api/surveys` | Survey CRUD, activation, statistics | Yes | Enhanced v1.4.0 |
+| **QuestionsController** | `/api/surveys/{surveyId}/questions` | Question CRUD, reordering | Mixed | Stable |
+| **QuestionFlowController** | `/api/surveys/{surveyId}/questions` | Flow configuration, validation | Yes | NEW v1.4.0 |
+| **ResponsesController** | `/api/responses` | Response submission, navigation | Mixed | Enhanced v1.4.0 |
+| **MediaController** | `/api/media` | Media upload, deletion | Yes | NEW v1.3.0 |
+| **BotController** | `/api/bot` | Webhook, status | Secret | Stable |
+| **UsersController** | `/api/users` | User management | Yes | Stable |
+| **HealthController** | `/health` | Health checks | No | Stable |
+| **TestErrorsController** | `/api/test/errors` | Error testing (dev only) | No | Development |
+
+**Recent Changes (v1.4.0 - Conditional Question Flow)**:
+- **QuestionFlowController**: NEW - Complete flow CRUD with cycle detection (685 lines)
+- **SurveysController.ActivateSurvey**: Enhanced with flow validation
+- **ResponsesController.GetNextQuestion**: NEW - Next question navigation endpoint
+- **AutoMapper**: Enhanced for ConditionalFlowDto, NextQuestionDeterminant mappings
+
 ### Base Pattern
 
 ```csharp
@@ -179,6 +202,12 @@ public class ExampleController : ControllerBase
 
 **Authorization**: User must own survey (except `/code/{code}`)
 
+**NEW in v1.4.0 - Conditional Flow**:
+- **ActivateSurvey** now validates survey flow before activation
+- Returns 400 with cycle details if survey has cycle in question flow
+- Error response includes `cyclePath` array showing the cycle
+- Example: `{ error: "Invalid survey flow", cyclePath: [1, 2, 3, 1] }`
+
 **Helper Method**:
 ```csharp
 private int GetUserIdFromClaims()
@@ -209,6 +238,113 @@ private int GetUserIdFromClaims()
 - Public access for active survey questions
 - Reordering with transaction
 
+### QuestionFlowController (NEW in v1.4.0)
+
+**File**: `Controllers/QuestionFlowController.cs` (685 lines)
+**Route**: `/api/surveys/{surveyId}/questions`
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/{questionId}/flow` | GET | Yes | Get question flow configuration |
+| `/{questionId}/flow` | PUT | Yes | Update question flow configuration |
+| `/validate` | POST | Yes | Validate survey flow (cycle detection) |
+
+**Features** (NEW in v1.4.0 - Conditional Question Flow):
+- Get/update question flow for branching and non-branching questions
+- Cycle detection prevents invalid survey structures
+- Returns ConditionalFlowDto with flow configuration details
+- Supports both SingleChoice/Rating (branching) and Text/MultipleChoice (non-branching)
+- **Comprehensive diagnostic logging** with emoji markers (Development only)
+
+**Key Endpoints**:
+
+**GET /{surveyId}/questions/{questionId}/flow**
+```
+Returns ConditionalFlowDto with:
+- SupportsBranching: true/false based on question type
+- DefaultNextQuestionId: for non-branching questions
+- OptionFlows: array of options with their next questions
+```
+
+**PUT /{surveyId}/questions/{questionId}/flow**
+```
+Request: UpdateQuestionFlowDto
+- For branching: OptionNextQuestions (dict of option_id → next_question_id)
+- For non-branching: DefaultNextQuestionId
+
+Returns: Updated ConditionalFlowDto or 400 if cycle detected
+```
+
+**POST /{surveyId}/questions/validate**
+```
+Validates entire survey for cycles
+Returns: { valid: true/false, cyclePath: [1,2,3,1], errors: [...] }
+```
+
+**Diagnostic Logging Pattern** (Development Mode Only):
+
+The QuestionFlowController implements comprehensive emoji-based logging for easy log scanning:
+
+```csharp
+// Entry point logging
+_logger.LogInformation("🔧 [QuestionFlow] UpdateQuestionFlow called: SurveyId={SurveyId}, QuestionId={QuestionId}", surveyId, questionId);
+
+// Authorization logging
+_logger.LogInformation("🔑 [QuestionFlow] User {UserId} requesting flow update", userId);
+
+// Ownership validation
+_logger.LogInformation("✅ [QuestionFlow] Ownership validated: User {UserId} owns Survey {SurveyId}", userId, surveyId);
+
+// Validation errors
+_logger.LogWarning("⚠️ [QuestionFlow] Validation failed: {ErrorMessage}", errorMessage);
+
+// Success logging
+_logger.LogInformation("✅ [QuestionFlow] Flow updated successfully for Question {QuestionId}", questionId);
+
+// Exception logging
+_logger.LogError(ex, "❌ [QuestionFlow] Failed to update flow: {ErrorMessage}", ex.Message);
+```
+
+**Emoji Legend**:
+- 🔧 = Entry point / operation start
+- 🔑 = Authentication / authorization
+- ✅ = Success / validation passed
+- ⚠️ = Warning / validation failed
+- ❌ = Error / exception
+- 🔍 = Data lookup / inspection
+- 📊 = Validation result
+
+**Log Scanning Examples**:
+
+```bash
+# Find all flow update operations
+grep "🔧 \[QuestionFlow\]" logs/api.log
+
+# Find validation failures
+grep "⚠️ \[QuestionFlow\]" logs/api.log
+
+# Find authorization issues
+grep "🔑 \[QuestionFlow\]" logs/api.log
+
+# Find errors
+grep "❌ \[QuestionFlow\]" logs/api.log
+```
+
+**Integration with SurveyValidationService**:
+
+The controller delegates cycle detection to `ISurveyValidationService`:
+
+```csharp
+var cycleDetectionResult = await _validationService.DetectCycleAsync(surveyId);
+if (cycleDetectionResult.HasCycle)
+{
+    return BadRequest(ApiResponse<object>.Error(
+        $"Survey contains a cycle: {cycleDetectionResult.CycleDescription}",
+        new { cyclePath = cycleDetectionResult.CyclePath }
+    ));
+}
+```
+
 ### ResponsesController
 
 **Routes**: `/api/surveys/{surveyId}/responses`, `/api/responses/{id}`
@@ -218,10 +354,22 @@ private int GetUserIdFromClaims()
 | `/surveys/{surveyId}/responses` | POST | **No** | Start response |
 | `/responses/{id}/answers` | POST | **No** | Save answer |
 | `/responses/{id}/complete` | POST | **No** | Complete response |
+| `/responses/{id}/next-question` | GET | **No** | Get next question (NEW v1.4.0) |
 | `/surveys/{surveyId}/responses` | GET | Yes | List responses |
 | `/responses/{id}` | GET | Yes | Get response details |
 
 **Key**: Response submission is PUBLIC (for bot integration), viewing requires auth
+
+**NEW in v1.4.0 - Conditional Flow**:
+
+**GET /responses/{id}/next-question**
+```
+Returns next question for respondent based on flow configuration
+- 200 OK: QuestionDto with next question
+- 204 No Content: Survey complete (empty body)
+- 404 Not Found: Response not found
+- Public endpoint (no auth required) for bot/frontend integration
+```
 
 ### BotController
 
@@ -429,13 +577,145 @@ public class ErrorResponse
 
 ---
 
+## Conditional Flow DTOs (NEW in v1.4.0)
+
+### NextQuestionDeterminantDto
+
+**Location**: `Core/DTOs/NextQuestionDeterminantDto.cs`
+
+**Purpose**: Data transfer object for NextQuestionDeterminant value object. Represents the next step decision after answering a question.
+
+```csharp
+public class NextQuestionDeterminantDto
+{
+    public NextStepType Type { get; set; }           // GoToQuestion or EndSurvey
+    public int? NextQuestionId { get; set; }         // Only when Type = GoToQuestion
+}
+```
+
+**Factory Methods**:
+
+```csharp
+// Navigate to question 5
+var next = NextQuestionDeterminantDto.ToQuestion(5);
+
+// End the survey
+var end = NextQuestionDeterminantDto.End();
+```
+
+**Breaking Change from v1.3.0**:
+- **Old**: `int? nextQuestionId` where 0 meant "end survey" (magic value)
+- **New**: `NextQuestionDeterminantDto` with explicit `Type` enum
+- **Reason**: Eliminates magic values, type system prevents invalid states
+- **Migration**: Use factory methods or explicit constructor with validation
+
+**JSON Examples**:
+
+GoToQuestion:
+```json
+{
+  "type": "GoToQuestion",
+  "nextQuestionId": 5
+}
+```
+
+EndSurvey:
+```json
+{
+  "type": "EndSurvey",
+  "nextQuestionId": null
+}
+```
+
+### ConditionalFlowDto
+
+**Purpose**: Represents the complete flow configuration for a single question.
+
+```csharp
+public class ConditionalFlowDto
+{
+    public int QuestionId { get; set; }
+    public bool SupportsBranching { get; set; }
+    public NextQuestionDeterminantDto? DefaultNextDeterminant { get; set; }  // For non-branching
+    public List<OptionFlowDto> OptionFlows { get; set; } = new();
+}
+```
+
+**Usage**:
+- GET `/api/surveys/{surveyId}/questions/{questionId}/flow` returns this structure
+- Shows current flow configuration for a question
+- For branching questions: includes individual flows per option
+- For non-branching: only DefaultNextDeterminant applies to all answers
+
+### OptionFlowDto
+
+**Purpose**: Represents flow configuration for a single option in a choice question.
+
+```csharp
+public class OptionFlowDto
+{
+    public int OptionId { get; set; }
+    public string OptionText { get; set; }
+    public NextQuestionDeterminantDto NextDeterminant { get; set; }  // Use value object, not magic int
+}
+```
+
+**Example**:
+```json
+{
+  "optionId": 1,
+  "optionText": "Option A",
+  "nextDeterminant": {
+    "type": "GoToQuestion",
+    "nextQuestionId": 5
+  }
+}
+```
+
+### UpdateQuestionFlowDto
+
+**Purpose**: Request body for updating question flow configuration.
+
+```csharp
+public class UpdateQuestionFlowDto
+{
+    public NextQuestionDeterminantDto? DefaultNextDeterminant { get; set; }  // For non-branching
+    public Dictionary<int, NextQuestionDeterminantDto> OptionNextDeterminants { get; set; } = new();  // For branching
+}
+```
+
+**Example Request - Non-branching**:
+```json
+{
+  "defaultNextDeterminant": {
+    "type": "GoToQuestion",
+    "nextQuestionId": 3
+  },
+  "optionNextDeterminants": {}
+}
+```
+
+**Example Request - Branching**:
+```json
+{
+  "defaultNextDeterminant": null,
+  "optionNextDeterminants": {
+    "1": { "type": "GoToQuestion", "nextQuestionId": 5 },
+    "2": { "type": "EndSurvey", "nextQuestionId": null },
+    "3": { "type": "GoToQuestion", "nextQuestionId": 7 }
+  }
+}
+```
+
+---
+
 ## AutoMapper Configuration
 
 **Profiles Location**: `Mapping/` directory
 
 **Key Profiles**:
 - `SurveyMappingProfile` - Survey mappings
-- `QuestionMappingProfile` - Question mappings
+- `QuestionMappingProfile` - Question mappings (enhanced v1.4.0)
 - `ResponseMappingProfile` - Response mappings
 - `AnswerMappingProfile` - Answer mappings
 - `UserMappingProfile` - User mappings
@@ -446,6 +726,101 @@ public class ErrorResponse
 - `SurveyTotalResponsesResolver` - Count total responses
 - `SurveyCompletedResponsesResolver` - Count completed
 
+### Enhanced Value Object Mappings (v1.4.0)
+
+**NextQuestionDeterminant Value Object Mapping**:
+
+AutoMapper now handles the complex mapping between `int?` fields in entities and `NextQuestionDeterminantDto` value objects:
+
+```csharp
+// QuestionMappingProfile.cs
+CreateMap<Question, ConditionalFlowDto>()
+    .ForMember(dest => dest.QuestionId, opt => opt.MapFrom(src => src.Id))
+    .ForMember(dest => dest.SupportsBranching, opt => opt.MapFrom(src => src.SupportsBranching))
+    .ForMember(dest => dest.DefaultNextDeterminant, opt => opt.MapFrom(src =>
+        src.DefaultNextQuestionId.HasValue
+            ? (src.DefaultNextQuestionId.Value == 0
+                ? NextQuestionDeterminantDto.End()
+                : NextQuestionDeterminantDto.ToQuestion(src.DefaultNextQuestionId.Value))
+            : null))
+    .ForMember(dest => dest.OptionFlows, opt => opt.MapFrom(src =>
+        src.Options.Select(o => new OptionFlowDto
+        {
+            OptionId = o.Id,
+            OptionText = o.Text,
+            NextDeterminant = o.NextQuestionId.HasValue
+                ? (o.NextQuestionId.Value == 0
+                    ? NextQuestionDeterminantDto.End()
+                    : NextQuestionDeterminantDto.ToQuestion(o.NextQuestionId.Value))
+                : NextQuestionDeterminantDto.End()
+        })));
+```
+
+**Key Mapping Patterns**:
+
+1. **Factory Method Pattern**: Uses `NextQuestionDeterminantDto.ToQuestion(id)` and `NextQuestionDeterminantDto.End()` instead of direct construction
+2. **Magic Value Conversion**: Converts `0` → `EndSurvey`, `1..N` → `GoToQuestion`
+3. **Null Handling**: `null` in entity → `null` in DTO (sequential flow)
+
+**ConditionalFlowDto Complex Nested Mapping**:
+
+```csharp
+CreateMap<Question, ConditionalFlowDto>()
+    .ForMember(dest => dest.OptionFlows, opt => opt.MapFrom(src =>
+        src.Options
+            .OrderBy(o => o.OrderIndex)
+            .Select(o => new OptionFlowDto
+            {
+                OptionId = o.Id,
+                OptionText = o.Text,
+                NextDeterminant = MapToNextDeterminant(o.NextQuestionId)
+            })
+            .ToList()));
+
+// Helper method for consistent mapping
+private static NextQuestionDeterminantDto? MapToNextDeterminant(int? nextQuestionId)
+{
+    if (!nextQuestionId.HasValue) return null;
+    return nextQuestionId.Value == SurveyConstants.EndOfSurveyMarker
+        ? NextQuestionDeterminantDto.End()
+        : NextQuestionDeterminantDto.ToQuestion(nextQuestionId.Value);
+}
+```
+
+**ConstructUsing Pattern for Private Constructors**:
+
+If value objects have private constructors (recommended for DDD), use `ConstructUsing`:
+
+```csharp
+CreateMap<UpdateQuestionFlowDto, Question>()
+    .ForMember(dest => dest.DefaultNextQuestionId, opt => opt.MapFrom(src =>
+        src.DefaultNextDeterminant == null
+            ? (int?)null
+            : (src.DefaultNextDeterminant.Type == NextStepType.EndSurvey
+                ? 0
+                : src.DefaultNextDeterminant.NextQuestionId)));
+```
+
+**Reverse Mapping (DTO → Entity)**:
+
+```csharp
+// When updating from API request
+CreateMap<UpdateQuestionFlowDto, Question>()
+    .ForMember(dest => dest.DefaultNextQuestionId, opt => opt.MapFrom(src =>
+        ConvertDeterminantToInt(src.DefaultNextDeterminant)));
+
+private static int? ConvertDeterminantToInt(NextQuestionDeterminantDto? determinant)
+{
+    if (determinant == null) return null;
+    return determinant.Type switch
+    {
+        NextStepType.EndSurvey => 0,
+        NextStepType.GoToQuestion => determinant.NextQuestionId,
+        _ => throw new InvalidOperationException($"Unknown NextStepType: {determinant.Type}")
+    };
+}
+```
+
 **Configuration Validation**:
 ```csharp
 // AutoMapperConfigurationTest.cs
@@ -455,6 +830,40 @@ public void AutoMapper_Configuration_IsValid()
     var config = new MapperConfiguration(cfg =>
         cfg.AddMaps(typeof(Program).Assembly));
     config.AssertConfigurationIsValid(); // Throws if invalid
+}
+```
+
+**Testing Value Object Mappings**:
+
+```csharp
+[Fact]
+public void Should_Map_EndOfSurvey_To_NextDeterminant()
+{
+    // Arrange
+    var question = new Question { DefaultNextQuestionId = 0 };
+
+    // Act
+    var dto = _mapper.Map<ConditionalFlowDto>(question);
+
+    // Assert
+    Assert.NotNull(dto.DefaultNextDeterminant);
+    Assert.Equal(NextStepType.EndSurvey, dto.DefaultNextDeterminant.Type);
+    Assert.Null(dto.DefaultNextDeterminant.NextQuestionId);
+}
+
+[Fact]
+public void Should_Map_QuestionId_To_NextDeterminant()
+{
+    // Arrange
+    var question = new Question { DefaultNextQuestionId = 5 };
+
+    // Act
+    var dto = _mapper.Map<ConditionalFlowDto>(question);
+
+    // Assert
+    Assert.NotNull(dto.DefaultNextDeterminant);
+    Assert.Equal(NextStepType.GoToQuestion, dto.DefaultNextDeterminant.Type);
+    Assert.Equal(5, dto.DefaultNextDeterminant.NextQuestionId);
 }
 ```
 
@@ -565,9 +974,31 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 ```
 
+### JWT Claims Structure
+
+**Claims in Token** (set by AuthService):
+
+```csharp
+var claims = new List<Claim>
+{
+    new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),           // User ID (database)
+    new Claim("TelegramId", user.TelegramId.ToString()),                // Telegram ID
+    new Claim(ClaimTypes.Name, user.Username ?? user.TelegramId.ToString()),
+    new Claim(ClaimTypes.GivenName, user.FirstName ?? string.Empty),
+    new Claim(ClaimTypes.Surname, user.LastName ?? string.Empty),
+    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())   // Unique token ID
+};
+```
+
+**Claims Usage**:
+- **ClaimTypes.NameIdentifier**: Primary user ID (int) - used for ownership checks
+- **"TelegramId"**: Telegram user ID (long) - used for bot integration
+- **ClaimTypes.Name**: Display name for UI
+- **JwtRegisteredClaimNames.Jti**: Token revocation tracking
+
 ### Using in Controllers
 
-**Controller-level**:
+**Controller-level Authentication**:
 ```csharp
 [Authorize]  // All endpoints require auth
 public class SurveysController : ControllerBase { }
@@ -576,15 +1007,217 @@ public class SurveysController : ControllerBase { }
 **Endpoint-level override**:
 ```csharp
 [HttpGet("code/{code}")]
-[AllowAnonymous]  // Public endpoint
+[AllowAnonymous]  // Public endpoint (survey taking)
 public async Task<ActionResult> GetSurveyByCode(string code) { }
 ```
 
-**Extract claims**:
+**Mixed Authorization Pattern** (common for survey responses):
 ```csharp
-var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
-var telegramId = long.Parse(User.FindFirst("TelegramId")!.Value);
-var username = User.FindFirst(ClaimTypes.Name)?.Value;
+// Some endpoints public (survey taking), others protected (viewing results)
+public class ResponsesController : ControllerBase
+{
+    [HttpPost("/surveys/{surveyId}/responses")]
+    [AllowAnonymous]  // PUBLIC - anyone can start survey
+    public async Task<ActionResult> StartResponse(int surveyId) { }
+
+    [HttpGet("/surveys/{surveyId}/responses")]
+    [Authorize]  // PROTECTED - only survey owner can view
+    public async Task<ActionResult> GetResponses(int surveyId) { }
+}
+```
+
+### GetUserIdFromClaims Helper Pattern
+
+**Standard Implementation** (used across all controllers):
+
+```csharp
+private int GetUserIdFromClaims()
+{
+    var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+    if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+    {
+        _logger.LogWarning("Invalid or missing user ID claim");
+        throw new UnauthorizedAccessException("Invalid authentication token");
+    }
+
+    return userId;
+}
+```
+
+**Usage in Endpoints**:
+
+```csharp
+[HttpPost]
+[Authorize]
+public async Task<ActionResult<ApiResponse<SurveyDto>>> CreateSurvey([FromBody] CreateSurveyDto dto)
+{
+    var userId = GetUserIdFromClaims();  // Extract once, use throughout
+    var survey = await _surveyService.CreateSurveyAsync(userId, dto);
+    return CreatedAtAction(nameof(GetSurvey), new { id = survey.Id },
+        ApiResponse<SurveyDto>.Ok(survey, "Survey created successfully"));
+}
+```
+
+**Benefits**:
+- **Centralized extraction** - DRY principle
+- **Consistent error handling** - Throws if claim invalid/missing
+- **Type safety** - Returns int, not string
+- **Logging** - Warning logged if claim invalid
+
+### Ownership Verification Pattern
+
+**Service-Level Ownership Check** (recommended approach):
+
+```csharp
+[HttpPut("{id}")]
+[Authorize]
+public async Task<ActionResult<ApiResponse<SurveyDto>>> UpdateSurvey(int id, [FromBody] UpdateSurveyDto dto)
+{
+    try
+    {
+        var userId = GetUserIdFromClaims();
+
+        // Service throws ForbiddenException if user doesn't own survey
+        var survey = await _surveyService.UpdateSurveyAsync(userId, id, dto);
+
+        return Ok(ApiResponse<SurveyDto>.Ok(survey, "Survey updated successfully"));
+    }
+    catch (ForbiddenException ex)
+    {
+        return StatusCode(403, ApiResponse<object>.Error(ex.Message));
+    }
+}
+```
+
+**Service Implementation** (SurveyService.UpdateSurveyAsync):
+
+```csharp
+public async Task<SurveyDto> UpdateSurveyAsync(int userId, int surveyId, UpdateSurveyDto dto)
+{
+    var survey = await _surveyRepository.GetByIdAsync(surveyId);
+
+    if (survey == null)
+        throw new SurveyNotFoundException(surveyId);
+
+    // OWNERSHIP VERIFICATION
+    if (survey.CreatedByUserId != userId)
+    {
+        _logger.LogWarning(
+            "User {UserId} attempted to update survey {SurveyId} owned by {OwnerId}",
+            userId, surveyId, survey.CreatedByUserId);
+
+        throw new ForbiddenException($"User does not have permission to update survey {surveyId}");
+    }
+
+    // ... update logic
+}
+```
+
+**Alternative: Controller-Level Check** (for simple cases):
+
+```csharp
+[HttpDelete("{id}")]
+[Authorize]
+public async Task<ActionResult<ApiResponse<object>>> DeleteSurvey(int id)
+{
+    var userId = GetUserIdFromClaims();
+    var survey = await _surveyService.GetSurveyByIdAsync(id);
+
+    if (survey == null)
+        return NotFound(ApiResponse<object>.Error("Survey not found"));
+
+    // Check ownership at controller level
+    if (survey.CreatedByUserId != userId)
+    {
+        _logger.LogWarning("User {UserId} attempted to delete survey {SurveyId} they don't own", userId, id);
+        return StatusCode(403, ApiResponse<object>.Error("You do not have permission to delete this survey"));
+    }
+
+    await _surveyService.DeleteSurveyAsync(id);
+    return Ok(ApiResponse<object>.Ok(null, "Survey deleted successfully"));
+}
+```
+
+**Recommendation**: Prefer **service-level** ownership checks for:
+- Consistency across API and Bot layers
+- Centralized business rules
+- Easier testing
+- DRY principle
+
+### Authorization Flow Example
+
+**Complete Request Flow with Authorization**:
+
+```
+1. Client Request
+   POST /api/surveys/5/questions
+   Authorization: Bearer eyJhbGc...
+   Body: { questionText: "What's your age?", ... }
+
+2. ASP.NET Core Middleware
+   - UseAuthentication(): Validates JWT signature, expiry
+   - Populates User.Claims from token
+   - UseAuthorization(): Checks [Authorize] attribute
+
+3. Controller Method Entry
+   [HttpPost]
+   [Authorize]
+   public async Task<ActionResult> CreateQuestion(int surveyId, CreateQuestionDto dto)
+   {
+       var userId = GetUserIdFromClaims();  // Extract: 123
+
+4. Ownership Verification
+       var survey = await _surveyService.GetSurveyByIdAsync(surveyId);
+       if (survey.CreatedByUserId != userId)
+           return Forbid();  // 403 Forbidden
+
+5. Business Logic Execution
+       var question = await _questionService.AddQuestionAsync(surveyId, dto);
+       return Ok(question);
+   }
+```
+
+### Common Authorization Scenarios
+
+**Scenario 1: Survey Owner Only**
+```csharp
+// All survey management endpoints require ownership
+// Pattern: Check CreatedByUserId == User.FindFirst(ClaimTypes.NameIdentifier)
+```
+
+**Scenario 2: Public Survey Access**
+```csharp
+// Survey taking is anonymous (no auth required)
+[AllowAnonymous]
+[HttpGet("/surveys/code/{code}")]
+public async Task<ActionResult> GetSurveyByCode(string code)
+{
+    var survey = await _surveyService.GetSurveyByCodeAsync(code);
+    if (!survey.IsActive)
+        return BadRequest("Survey is not active");
+    return Ok(survey);
+}
+```
+
+**Scenario 3: Conditional Authorization**
+```csharp
+// If authenticated, filter by user; if not, show public surveys
+[HttpGet]
+public async Task<ActionResult> GetSurveys()
+{
+    if (User.Identity?.IsAuthenticated == true)
+    {
+        var userId = GetUserIdFromClaims();
+        var surveys = await _surveyService.GetSurveysByUserAsync(userId);
+        return Ok(surveys);
+    }
+    else
+    {
+        var publicSurveys = await _surveyService.GetActiveSurveysAsync();
+        return Ok(publicSurveys);
+    }
+}
 ```
 
 ---
@@ -713,6 +1346,232 @@ public async Task<ActionResult<ApiResponse<ResultDto>>> Endpoint([FromBody] Requ
 
 ---
 
+## Data Flow Analysis (v1.4.0 Conditional Flow)
+
+### Survey Creation → Activation Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. Frontend: User creates survey with conditional flow         │
+│    POST /api/surveys                                            │
+│    Body: CreateSurveyDto { title, description }                │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. Add Questions with Flow Configuration                       │
+│    POST /api/surveys/{surveyId}/questions                      │
+│    Body: CreateQuestionDto {                                    │
+│      questionText: "Do you like pizza?",                       │
+│      questionType: "SingleChoice",                             │
+│      options: ["Yes", "No"],                                   │
+│      optionNextQuestions: { 0: 5, 1: 0 }  // Index→NextQID    │
+│    }                                                            │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 3. QuestionService: Creates Question + QuestionOptions         │
+│    - Maps option index to QuestionOption entity                │
+│    - Option 0 → QuestionOption { Id: 10, NextQuestionId: 5 }   │
+│    - Option 1 → QuestionOption { Id: 11, NextQuestionId: 0 }   │
+│    - Stores in database (no FK validation on NextQuestionId)   │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 4. Attempt Survey Activation                                   │
+│    POST /api/surveys/{surveyId}/activate                       │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 5. SurveysController.ActivateSurvey                            │
+│    - Calls ISurveyValidationService.ValidateSurveyStructureAsync│
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 6. SurveyValidationService: Cycle Detection                    │
+│    - Loads all questions with flow configuration               │
+│    - Builds directed graph: Q1 → Q5, Q5 → Q3, Q3 → Q1 (cycle!) │
+│    - Runs DFS to detect cycles                                 │
+│    - Result: { HasCycle: true, CyclePath: [1, 5, 3, 1] }       │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 7. Response: 400 Bad Request                                   │
+│    {                                                            │
+│      "success": false,                                          │
+│      "error": "Invalid survey flow",                           │
+│      "cyclePath": [1, 5, 3, 1],                                 │
+│      "message": "Cycle: Q1 → Q5 → Q3 → Q1"                     │
+│    }                                                            │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 8. User fixes cycle via flow configuration                     │
+│    PUT /api/surveys/{surveyId}/questions/{questionId}/flow     │
+│    Body: UpdateQuestionFlowDto {                                │
+│      optionNextQuestions: { 10: 7, 11: 0 }  // OptionId→NextQ  │
+│    }                                                            │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 9. Retry Activation: POST /api/surveys/{surveyId}/activate    │
+│    - Validation passes (no cycles)                             │
+│    - Survey.IsActive = true                                    │
+│    - Survey.SurveyCode generated (6-char Base36)               │
+│    - Response: 200 OK with SurveyDto                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Response Submission with Conditional Navigation
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. User starts survey via Bot or Frontend                      │
+│    POST /api/surveys/{surveyId}/responses                      │
+│    Body: { userIdentifier: "telegram_123456" }                 │
+│    Response: { responseId: 101, firstQuestionId: 1 }           │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. User answers Question 1 (SingleChoice: "Do you like pizza?")│
+│    POST /api/responses/101/answers                             │
+│    Body: {                                                      │
+│      questionId: 1,                                            │
+│      answerJson: "{\"selectedOption\": \"Yes\"}"               │
+│    }                                                            │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 3. ResponseService.SaveAnswerAsync                             │
+│    - Loads Question 1 with Options                             │
+│    - Question is branching (SingleChoice)                      │
+│    - Parses selectedOption: "Yes"                              │
+│    - Finds matching QuestionOption: { Id: 10, Text: "Yes",    │
+│                                        NextQuestionId: 5 }      │
+│    - Creates Answer: { NextQuestionId: 5 }                     │
+│    - Updates Response.VisitedQuestionIds: [1]                  │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 4. Get Next Question                                            │
+│    GET /api/responses/101/next-question                        │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 5. ResponsesController.GetNextQuestion                         │
+│    - Loads Response 101                                        │
+│    - Finds last Answer: { NextQuestionId: 5 }                  │
+│    - NextQuestionId != 0 (not end marker)                      │
+│    - Loads Question 5                                          │
+│    - Maps to QuestionDto                                       │
+│    - Response: 200 OK with QuestionDto                         │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 6. User answers Question 5 (Text: "Why do you like pizza?")   │
+│    POST /api/responses/101/answers                             │
+│    Body: {                                                      │
+│      questionId: 5,                                            │
+│      answerJson: "{\"answerText\": \"It's delicious!\"}"       │
+│    }                                                            │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 7. ResponseService.SaveAnswerAsync                             │
+│    - Question 5 is non-branching (Text)                        │
+│    - Uses Question.DefaultNextQuestionId: 0                    │
+│    - Creates Answer: { NextQuestionId: 0 }                     │
+│    - Updates Response.VisitedQuestionIds: [1, 5]               │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 8. Get Next Question                                            │
+│    GET /api/responses/101/next-question                        │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 9. ResponsesController.GetNextQuestion                         │
+│    - Loads last Answer: { NextQuestionId: 0 }                  │
+│    - Detects SurveyConstants.IsEndOfSurvey(0) → true           │
+│    - Marks Response.IsCompleted = true                         │
+│    - Response: 204 No Content (survey complete)                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Question Flow Update with Cycle Detection
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. User updates flow configuration                             │
+│    PUT /api/surveys/1/questions/5/flow                         │
+│    Body: UpdateQuestionFlowDto {                                │
+│      defaultNextDeterminant: null,                             │
+│      optionNextDeterminants: {                                 │
+│        10: { type: "GoToQuestion", nextQuestionId: 1 }  // Cycle!│
+│      }                                                          │
+│    }                                                            │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 2. QuestionFlowController.UpdateQuestionFlow                   │
+│    - Validates ownership (GetUserIdFromClaims)                 │
+│    - Calls QuestionService.UpdateQuestionFlowAsync             │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 3. QuestionService: Update Flow                                │
+│    - Converts NextQuestionDeterminantDto → int?                │
+│    - type: "GoToQuestion", nextQuestionId: 1 → int? = 1        │
+│    - Validates target question exists (database query)         │
+│    - Updates QuestionOption.NextQuestionId = 1                 │
+│    - SaveChanges to database                                   │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 4. Optional: Immediate Cycle Validation                        │
+│    POST /api/surveys/1/questions/validate                      │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 5. SurveyValidationService.DetectCycleAsync                    │
+│    - Loads all questions: Q1, Q5, Q7                           │
+│    - Builds adjacency list:                                    │
+│      Q1 → [Q5] (option "Yes")                                  │
+│      Q5 → [Q1] (option "Yes") ← CYCLE!                         │
+│      Q7 → [0] (end)                                            │
+│    - DFS from Q1: Visit Q1 → Q5 → Q1 (cycle detected)          │
+│    - Result: { HasCycle: true, CyclePath: [1, 5, 1] }          │
+└───────────────┬─────────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 6. Response: 400 Bad Request                                   │
+│    {                                                            │
+│      "valid": false,                                           │
+│      "cyclePath": [1, 5, 1],                                    │
+│      "errors": ["Cycle detected in question flow"]            │
+│    }                                                            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Integration Points**:
+
+1. **API ↔ Infrastructure**:
+   - Controllers inject `IQuestionService`, `ISurveyValidationService`
+   - Services handle all business logic, data access
+   - Controllers transform DTOs, handle HTTP concerns
+
+2. **API ↔ Bot**:
+   - Bot calls public endpoints: `/api/responses/{id}/next-question`
+   - No authentication required for survey taking
+   - Bot delegates ALL flow logic to API (clean separation)
+
+3. **API ↔ Frontend**:
+   - Frontend calls protected endpoints: `/api/surveys/{id}/questions/{id}/flow`
+   - JWT authentication required
+   - CORS configured for frontend origin
+   - Real-time flow visualization via GET endpoint
+
+---
+
 ## Best Practices
 
 1. **Thin Controllers**: Business logic in services, not controllers
@@ -722,6 +1581,9 @@ public async Task<ActionResult<ApiResponse<ResultDto>>> Endpoint([FromBody] Requ
 5. **Authentication**: Extract user ID once, pass to services
 6. **Swagger**: Document all endpoints with `[SwaggerOperation]`
 7. **Validation**: Check `ModelState.IsValid`, use Data Annotations
+8. **Ownership Verification**: Prefer service-level checks for consistency
+9. **Diagnostic Logging**: Use emoji markers for easy log scanning (Development only)
+10. **Value Object Mapping**: Use factory methods in AutoMapper for value objects
 
 ---
 
@@ -846,4 +1708,63 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 ---
 
-**Last Updated**: 2025-11-21 | **Version**: 1.3.0
+## Architecture Summary (v1.4.0)
+
+**SurveyBot.API** orchestrates the REST API layer with comprehensive conditional question flow support:
+
+### Layer Responsibilities
+- **Controllers** (10): Thin HTTP handlers delegating to services
+- **Middleware Pipeline**: Exception → Logging → Auth → Authorization → Controllers
+- **AutoMapper**: Complex value object mappings with factory methods
+- **Background Services**: Non-blocking webhook processing via Channels
+- **JWT Authentication**: Claims-based with ownership verification pattern
+
+### Conditional Flow Architecture (v1.4.0)
+
+**New Components**:
+1. **QuestionFlowController** (685 lines): Flow CRUD, cycle detection, comprehensive logging
+2. **Enhanced SurveysController**: Activation with flow validation (prevents cycles)
+3. **Enhanced ResponsesController**: Next-question navigation endpoint (204 No Content when complete)
+4. **AutoMapper Enhancements**: NextQuestionDeterminantDto factory method mappings
+
+**Data Flow**:
+- Survey creation → Question flow configuration → Cycle validation → Activation
+- Response submission → Answer with conditional navigation → Next question determination → Completion
+- Flow updates → Validation → Database update → Cycle re-check
+
+**Integration Points**:
+- **API ↔ Infrastructure**: Service injection, business logic delegation
+- **API ↔ Bot**: Public endpoints for survey taking, no auth required
+- **API ↔ Frontend**: Protected endpoints with JWT, CORS, flow visualization
+
+### Key Patterns
+
+1. **GetUserIdFromClaims Helper**: Centralized claim extraction with error handling
+2. **Ownership Verification**: Service-level checks for consistency (recommended)
+3. **Diagnostic Logging**: Emoji-based markers for easy log scanning (🔧 🔑 ✅ ⚠️ ❌)
+4. **Value Object Mapping**: Factory methods in AutoMapper (ToQuestion, End)
+5. **Mixed Authorization**: Public survey taking, protected survey management
+
+### Performance Considerations
+
+- **Background Processing**: Webhook handling via bounded Channel (capacity: 100)
+- **Cycle Detection**: DFS algorithm, runs only on activation/validation
+- **Database**: No FK constraints on NextQuestionId (allows magic value 0)
+- **Logging**: Structured logging with Serilog, TraceId correlation
+
+### Breaking Changes from v1.3.0
+
+**NextQuestionDeterminant Value Object**:
+- **Old**: `int? nextQuestionId` with magic value `0` = end survey
+- **New**: `NextQuestionDeterminantDto { Type, NextQuestionId }` with explicit enum
+- **Reason**: Type safety, eliminates magic values, prevents invalid states
+- **Migration**: Use factory methods `ToQuestion(id)` or `End()`
+
+**AutoMapper**:
+- **Old**: Direct int? mapping
+- **New**: Complex mapping with ConstructUsing for value objects
+- **Impact**: Compilation errors if custom mappings exist
+
+---
+
+**Last Updated**: 2025-11-25 | **Version**: 1.4.0 (Conditional Question Flow - API Layer Documentation Enhanced)

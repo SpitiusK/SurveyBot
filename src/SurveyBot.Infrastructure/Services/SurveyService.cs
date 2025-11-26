@@ -20,6 +20,7 @@ public class SurveyService : ISurveyService
     private readonly ISurveyRepository _surveyRepository;
     private readonly IResponseRepository _responseRepository;
     private readonly IAnswerRepository _answerRepository;
+    private readonly ISurveyValidationService _validationService;
     private readonly IMapper _mapper;
     private readonly ILogger<SurveyService> _logger;
 
@@ -30,12 +31,14 @@ public class SurveyService : ISurveyService
         ISurveyRepository surveyRepository,
         IResponseRepository responseRepository,
         IAnswerRepository answerRepository,
+        ISurveyValidationService validationService,
         IMapper mapper,
         ILogger<SurveyService> logger)
     {
         _surveyRepository = surveyRepository;
         _responseRepository = responseRepository;
         _answerRepository = answerRepository;
+        _validationService = validationService;
         _mapper = mapper;
         _logger = logger;
     }
@@ -271,13 +274,37 @@ public class SurveyService : ISurveyService
                 "Cannot activate a survey with no questions. Please add at least one question before activating.");
         }
 
+        // Validate survey flow before activation (conditional flow validation)
+        var cycleResult = await _validationService.DetectCycleAsync(surveyId);
+        if (cycleResult.HasCycle)
+        {
+            _logger.LogWarning(
+                "Cannot activate survey {SurveyId}: Cycle detected in question flow. Cycle path: {CyclePath}",
+                surveyId, string.Join(" -> ", cycleResult.CyclePath!));
+            throw new SurveyCycleException(
+                cycleResult.CyclePath!,
+                $"Cannot activate survey: {cycleResult.ErrorMessage}");
+        }
+
+        // Check that survey has at least one endpoint (at least one path to completion)
+        var endpoints = await _validationService.FindSurveyEndpointsAsync(surveyId);
+        if (!endpoints.Any())
+        {
+            _logger.LogWarning("Cannot activate survey {SurveyId}: No questions lead to survey completion", surveyId);
+            throw new InvalidOperationException(
+                "Cannot activate survey: No questions lead to survey completion. " +
+                "At least one question must point to end of survey.");
+        }
+
         // Activate survey
         survey.IsActive = true;
         survey.UpdatedAt = DateTime.UtcNow;
 
         await _surveyRepository.UpdateAsync(survey);
 
-        _logger.LogInformation("Survey {SurveyId} activated successfully", surveyId);
+        _logger.LogInformation(
+            "Survey {SurveyId} activated successfully after validation. Endpoints: {EndpointCount}",
+            surveyId, endpoints.Count);
 
         // Get response counts
         var responseCount = await _surveyRepository.GetResponseCountAsync(surveyId);

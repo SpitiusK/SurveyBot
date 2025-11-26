@@ -6,6 +6,7 @@ using SurveyBot.Bot.Configuration;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Models;
 using SurveyBot.Bot.Services;
+using SurveyBot.Bot.Utilities;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.DTOs.Survey;
 using SurveyBot.Core.Interfaces;
@@ -29,6 +30,7 @@ public class SurveyResponseHandler
     private readonly BotConfiguration _configuration;
     private readonly BotPerformanceMonitor _performanceMonitor;
     private readonly SurveyCache _surveyCache;
+    private readonly SurveyNavigationHelper _navigationHelper;
     private readonly ILogger<SurveyResponseHandler> _logger;
 
     public SurveyResponseHandler(
@@ -41,6 +43,7 @@ public class SurveyResponseHandler
         Microsoft.Extensions.Options.IOptions<BotConfiguration> configuration,
         BotPerformanceMonitor performanceMonitor,
         SurveyCache surveyCache,
+        SurveyNavigationHelper navigationHelper,
         ILogger<SurveyResponseHandler> logger)
     {
         _botService = botService ?? throw new ArgumentNullException(nameof(botService));
@@ -52,6 +55,7 @@ public class SurveyResponseHandler
         _configuration = configuration?.Value ?? throw new ArgumentNullException(nameof(configuration));
         _performanceMonitor = performanceMonitor ?? throw new ArgumentNullException(nameof(performanceMonitor));
         _surveyCache = surveyCache ?? throw new ArgumentNullException(nameof(surveyCache));
+        _navigationHelper = navigationHelper ?? throw new ArgumentNullException(nameof(navigationHelper));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         // Configure HttpClient base address
@@ -107,6 +111,21 @@ public class SurveyResponseHandler
             return false;
         }
 
+        // Check if already answered this question (cycle prevention)
+        if (state.HasVisitedQuestion(questionDto.Id))
+        {
+            _logger.LogWarning(
+                "User {UserId} attempted to re-answer question {QuestionId}",
+                userId,
+                questionDto.Id);
+
+            await _botService.Client.SendMessage(
+                chatId: chatId,
+                text: "⚠️ You've already answered this question. Cannot re-answer to prevent cycles.",
+                cancellationToken: cancellationToken);
+            return true;
+        }
+
         // Get handler for this question type
         var handler = _questionHandlers.FirstOrDefault(h => h.QuestionType == questionDto.QuestionType);
         if (handler == null)
@@ -138,42 +157,73 @@ public class SurveyResponseHandler
             {
                 await _botService.Client.SendMessage(
                     chatId: chatId,
-                    text: "Failed to save your answer. Please try again.",
+                    text: "❌ Failed to save your answer. Please try again.",
                     cancellationToken: cancellationToken);
                 return true;
             }
         }
 
+        // Record question as visited (for cycle prevention)
+        state.RecordVisitedQuestion(questionDto.Id);
+
         // Record answer in state
         await _stateManager.AnswerQuestionAsync(userId, state.CurrentQuestionIndex.Value, answerJson);
 
-        // Check if this was the last question
-        var isLastQuestion = state.IsLastQuestion;
-        if (!isLastQuestion)
-        {
-            // Move to next question
-            await _stateManager.NextQuestionAsync(userId);
+        // Use navigation helper to get next question based on conditional flow
+        var navigationResult = await _navigationHelper.GetNextQuestionAsync(
+            state.CurrentResponseId!.Value,
+            questionDto.Id,
+            answerJson,
+            cancellationToken);
 
+        // Handle navigation result
+        if (navigationResult.IsError)
+        {
+            _logger.LogError(
+                "Navigation error for user {UserId}: {ErrorMessage}",
+                userId,
+                navigationResult.ErrorMessage);
+
+            await _botService.Client.SendMessage(
+                chatId: chatId,
+                text: $"❌ {navigationResult.ErrorMessage}",
+                cancellationToken: cancellationToken);
+            return true;
+        }
+
+        if (navigationResult.IsComplete)
+        {
+            // Survey complete
+            await CompleteSurveyAsync(userId, state.CurrentResponseId.Value, chatId, cancellationToken);
+            return true;
+        }
+
+        if (navigationResult.NextQuestion != null)
+        {
             // Display next question
-            state = await _stateManager.GetStateAsync(userId);
-            if (state != null && state.CurrentQuestionIndex.HasValue)
-            {
-                var nextQuestion = survey.Questions.ElementAtOrDefault(state.CurrentQuestionIndex.Value);
-                if (nextQuestion != null)
-                {
-                    await DisplayQuestionAsync(
-                        chatId,
-                        nextQuestion,
-                        state.CurrentQuestionIndex.Value,
-                        state.TotalQuestions ?? survey.Questions.Count,
-                        cancellationToken);
-                }
-            }
+            var nextQuestion = navigationResult.NextQuestion;
+
+            // Update CurrentQuestionIndex to match the next question's position in the questions list
+            // This is required because answer processing uses the index to fetch questions from cache
+            await UpdateQuestionIndexAsync(userId, state, survey, nextQuestion.Id);
+
+            await DisplayQuestionAsync(
+                chatId,
+                nextQuestion,
+                state.CurrentQuestionIndex ?? 0,
+                state.TotalQuestions ?? survey.Questions.Count,
+                cancellationToken);
         }
         else
         {
-            // Last question - complete survey
-            await CompleteSurveyAsync(userId, state.CurrentResponseId!.Value, chatId, cancellationToken);
+            _logger.LogWarning(
+                "Unexpected navigation state for user {UserId}: no next question and not complete",
+                userId);
+
+            await _botService.Client.SendMessage(
+                chatId: chatId,
+                text: "❌ Unable to determine next question. Survey may be misconfigured.",
+                cancellationToken: cancellationToken);
         }
 
         return true;
@@ -222,6 +272,22 @@ public class SurveyResponseHandler
             return false;
         }
 
+        // Check if already answered this question (cycle prevention)
+        if (state.HasVisitedQuestion(questionDto.Id))
+        {
+            _logger.LogWarning(
+                "User {UserId} attempted to re-answer question {QuestionId}",
+                userId,
+                questionDto.Id);
+
+            await _botService.Client.AnswerCallbackQuery(
+                callbackQueryId: callbackQuery.Id,
+                text: "You've already answered this question",
+                showAlert: true,
+                cancellationToken: cancellationToken);
+            return true;
+        }
+
         // Get handler for this question type
         var handler = _questionHandlers.FirstOrDefault(h => h.QuestionType == questionDto.QuestionType);
         if (handler == null)
@@ -243,7 +309,7 @@ public class SurveyResponseHandler
         // Answer callback query to remove loading state
         await _botService.Client.AnswerCallbackQuery(
             callbackQueryId: callbackQuery.Id,
-            text: "Answer recorded",
+            text: "✅ Answer recorded",
             cancellationToken: cancellationToken);
 
         // Submit answer to API
@@ -259,42 +325,73 @@ public class SurveyResponseHandler
             {
                 await _botService.Client.SendMessage(
                     chatId: chatId,
-                    text: "Failed to save your answer. Please try again.",
+                    text: "❌ Failed to save your answer. Please try again.",
                     cancellationToken: cancellationToken);
                 return true;
             }
         }
 
+        // Record question as visited (for cycle prevention)
+        state.RecordVisitedQuestion(questionDto.Id);
+
         // Record answer in state
         await _stateManager.AnswerQuestionAsync(userId, state.CurrentQuestionIndex.Value, answerJson);
 
-        // Check if this was the last question
-        var isLastQuestion = state.IsLastQuestion;
-        if (!isLastQuestion)
-        {
-            // Move to next question
-            await _stateManager.NextQuestionAsync(userId);
+        // Use navigation helper to get next question based on conditional flow
+        var navigationResult = await _navigationHelper.GetNextQuestionAsync(
+            state.CurrentResponseId!.Value,
+            questionDto.Id,
+            answerJson,
+            cancellationToken);
 
+        // Handle navigation result
+        if (navigationResult.IsError)
+        {
+            _logger.LogError(
+                "Navigation error for user {UserId}: {ErrorMessage}",
+                userId,
+                navigationResult.ErrorMessage);
+
+            await _botService.Client.SendMessage(
+                chatId: chatId,
+                text: $"❌ {navigationResult.ErrorMessage}",
+                cancellationToken: cancellationToken);
+            return true;
+        }
+
+        if (navigationResult.IsComplete)
+        {
+            // Survey complete
+            await CompleteSurveyAsync(userId, state.CurrentResponseId.Value, chatId, cancellationToken);
+            return true;
+        }
+
+        if (navigationResult.NextQuestion != null)
+        {
             // Display next question
-            state = await _stateManager.GetStateAsync(userId);
-            if (state != null && state.CurrentQuestionIndex.HasValue)
-            {
-                var nextQuestion = survey.Questions.ElementAtOrDefault(state.CurrentQuestionIndex.Value);
-                if (nextQuestion != null)
-                {
-                    await DisplayQuestionAsync(
-                        chatId,
-                        nextQuestion,
-                        state.CurrentQuestionIndex.Value,
-                        state.TotalQuestions ?? survey.Questions.Count,
-                        cancellationToken);
-                }
-            }
+            var nextQuestion = navigationResult.NextQuestion;
+
+            // Update CurrentQuestionIndex to match the next question's position in the questions list
+            // This is required because answer processing uses the index to fetch questions from cache
+            await UpdateQuestionIndexAsync(userId, state, survey, nextQuestion.Id);
+
+            await DisplayQuestionAsync(
+                chatId,
+                nextQuestion,
+                state.CurrentQuestionIndex ?? 0,
+                state.TotalQuestions ?? survey.Questions.Count,
+                cancellationToken);
         }
         else
         {
-            // Last question - complete survey
-            await CompleteSurveyAsync(userId, state.CurrentResponseId!.Value, chatId, cancellationToken);
+            _logger.LogWarning(
+                "Unexpected navigation state for user {UserId}: no next question and not complete",
+                userId);
+
+            await _botService.Client.SendMessage(
+                chatId: chatId,
+                text: "❌ Unable to determine next question. Survey may be misconfigured.",
+                cancellationToken: cancellationToken);
         }
 
         return true;
@@ -452,6 +549,42 @@ public class SurveyResponseHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error completing survey for user {UserId}", userId);
+        }
+    }
+
+    /// <summary>
+    /// Updates the CurrentQuestionIndex in conversation state to match the question ID.
+    /// Required for conditional flow navigation where questions may be accessed non-sequentially.
+    /// </summary>
+    /// <param name="userId">The user ID.</param>
+    /// <param name="state">The conversation state to update.</param>
+    /// <param name="survey">The survey containing the questions list.</param>
+    /// <param name="questionId">The ID of the current question.</param>
+    private async Task UpdateQuestionIndexAsync(
+        long userId,
+        ConversationState state,
+        SurveyDto survey,
+        int questionId)
+    {
+        // Find the index of the question in the cached questions list
+        var questionIndex = survey.Questions.FindIndex(q => q.Id == questionId);
+
+        if (questionIndex >= 0)
+        {
+            _logger.LogDebug(
+                "Updating CurrentQuestionIndex from {OldIndex} to {NewIndex} for Question {QuestionId}",
+                state.CurrentQuestionIndex,
+                questionIndex,
+                questionId);
+
+            state.CurrentQuestionIndex = questionIndex;
+            await _stateManager.SetStateAsync(userId, state);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Could not find Question {QuestionId} in cached survey questions list. Index not updated.",
+                questionId);
         }
     }
 

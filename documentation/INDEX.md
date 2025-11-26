@@ -66,6 +66,7 @@ This is a comprehensive index of all documentation available in the SurveyBot pr
 - [API Layer CLAUDE.md](../src/SurveyBot.API/CLAUDE.md) - Main API documentation
 - [Logging & Error Handling](./api/LOGGING-ERROR-HANDLING.md) - Error handling patterns
 - [Quick Reference](./api/QUICK-REFERENCE.md) - API quick reference guide
+- [QuestionFlow Debug Logging Guide](./api/QUESTIONFLOW_DEBUG_LOGGING_GUIDE.md) - Debug logging for question flow API
 
 **Topics Covered**:
 - REST API endpoints
@@ -73,6 +74,7 @@ This is a comprehensive index of all documentation available in the SurveyBot pr
 - Controllers and middleware
 - Swagger documentation
 - Health checks
+- Debug logging and troubleshooting
 
 ### Frontend
 **Location**: `C:\Users\User\Desktop\SurveyBot\frontend\CLAUDE.md`

@@ -294,9 +294,31 @@ Moving to next question...
 
 **Note:** Required questions (marked with *) cannot be skipped.
 
+### Branching and Conditional Questions (NEW in v1.4.0)
+
+Some surveys use **conditional logic** where your answers determine which questions you see next:
+
+```
+Example 1: Satisfaction-based branching
+Question 1: How satisfied are you?
+  → If "Satisfied": Next question about your experience
+  → If "Unsatisfied": Next question about problems
+
+Example 2: Skip based on answer
+Question 1: Do you use mobile app?
+  → If "Yes": Questions 2-5 about mobile features
+  → If "No": Skip to question 6 (desktop questions)
+```
+
+**How it works:**
+- Your answer to a question determines which question appears next
+- You won't see questions that don't apply based on your answers
+- Survey completes when all relevant questions are answered
+- You cannot re-answer a question once answered (prevents infinite loops)
+
 ### Completing the Survey
 
-After answering all questions:
+After answering all relevant questions:
 
 ```
 ✅ Survey Completed!

@@ -37,7 +37,7 @@ public class DataValidationTests : IClassFixture<WebApplicationFactoryFixture<Pr
         var loginRequest = new LoginRequestDto { TelegramId = telegramId };
         var response = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
         var result = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
-        return result!.Data!.AccessToken;
+        return result!.Data!.Token;
     }
 
     [Fact]

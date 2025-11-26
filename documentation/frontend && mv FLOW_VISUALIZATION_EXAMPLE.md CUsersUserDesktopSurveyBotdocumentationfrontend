@@ -1,0 +1,279 @@
+# Conditional Question Flow - Quick Start Guide
+
+**For Developers**: Quick reference for using the flow configuration feature.
+
+---
+
+## Quick Access
+
+**Route**: `/dashboard/surveys/:id/flow`
+
+**Components**:
+```typescript
+import {
+  FlowConfigurationPanel,
+  FlowVisualization,
+  FlowValidationWarning
+} from '@/components/Surveys';
+```
+
+**Service**:
+```typescript
+import questionFlowService from '@/services/questionFlowService';
+```
+
+---
+
+## Common Use Cases
+
+### 1. Add "Configure Flow" Button
+
+```typescript
+import { useNavigate } from 'react-router-dom';
+import { AccountTree as FlowIcon } from '@mui/icons-material';
+
+const navigate = useNavigate();
+
+<Button
+  startIcon={<FlowIcon />}
+  onClick={() => navigate(`/dashboard/surveys/${surveyId}/flow`)}
+>
+  Configure Flow
+</Button>
+```
+
+---
+
+### 2. Validate Before Activation
+
+```typescript
+import questionFlowService from '@/services/questionFlowService';
+import { FlowValidationWarning } from '@/components/Surveys';
+
+const [validationResult, setValidationResult] = useState(null);
+
+const handleActivate = async () => {
+  // Validate first
+  const result = await questionFlowService.validateSurveyFlow(surveyId);
+  setValidationResult(result);
+
+  if (!result.valid) {
+    // Block activation, show warning
+    return;
+  }
+
+  // Proceed with activation
+  await surveyService.activateSurvey(surveyId);
+};
+
+// In JSX
+{validationResult && !validationResult.valid && (
+  <FlowValidationWarning
+    surveyId={surveyId}
+    onFixClick={() => navigate(`/dashboard/surveys/${surveyId}/flow`)}
+  />
+)}
+```
+
+---
+
+### 3. Use Flow Service
+
+```typescript
+import questionFlowService from '@/services/questionFlowService';
+
+// Get flow config
+const flow = await questionFlowService.getQuestionFlow(surveyId, questionId);
+console.log(flow.supportsBranching); // true for SingleChoice/Rating
+console.log(flow.optionFlows); // Array of option -> next question mappings
+
+// Update flow (branching question)
+await questionFlowService.updateQuestionFlow(surveyId, questionId, {
+  optionNextQuestions: {
+    10: 5,  // Option 10 → Question 5
+    11: -1  // Option 11 → End Survey
+  }
+});
+
+// Update flow (non-branching question)
+await questionFlowService.updateQuestionFlow(surveyId, questionId, {
+  defaultNextQuestionId: 3  // → Question 3
+});
+
+// Validate
+const validation = await questionFlowService.validateSurveyFlow(surveyId);
+if (!validation.valid) {
+  console.error('Errors:', validation.errors);
+  console.error('Cycle:', validation.cyclePath);
+}
+
+// Delete flow
+await questionFlowService.deleteQuestionFlow(surveyId, questionId);
+```
+
+---
+
+### 4. Embed Components
+
+**Flow Configuration Panel**:
+```typescript
+<FlowConfigurationPanel
+  surveyId={surveyId}
+  question={selectedQuestion}
+  allQuestions={questions}
+  onFlowUpdated={() => {
+    // Callback when flow is saved
+    validateFlow();
+  }}
+/>
+```
+
+**Flow Visualization**:
+```typescript
+<FlowVisualization
+  surveyId={surveyId}
+  questions={questions}
+/>
+```
+
+**Validation Warning**:
+```typescript
+<FlowValidationWarning
+  surveyId={surveyId}
+  onFixClick={() => navigate(`/dashboard/surveys/${surveyId}/flow`)}
+  autoValidate={true} // Auto-validate on mount
+/>
+```
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Returns |
+|--------|----------|---------|
+| GET | `/api/surveys/{surveyId}/questions/{questionId}/flow` | `ConditionalFlowDto` |
+| PUT | `/api/surveys/{surveyId}/questions/{questionId}/flow` | `ConditionalFlowDto` |
+| DELETE | `/api/surveys/{surveyId}/questions/{questionId}/flow` | `void` |
+| POST | `/api/surveys/{surveyId}/questions/validate` | `SurveyValidationResult` |
+
+---
+
+## TypeScript Types
+
+```typescript
+interface ConditionalFlowDto {
+  questionId: number;
+  supportsBranching: boolean; // true for SingleChoice/Rating
+  defaultNextQuestionId?: number | null;
+  optionFlows: OptionFlowDto[];
+}
+
+interface OptionFlowDto {
+  optionId: number;
+  optionText: string;
+  nextQuestionId: number | null;
+  isEndOfSurvey: boolean; // true if nextQuestionId is -1
+}
+
+interface UpdateQuestionFlowDto {
+  defaultNextQuestionId?: number | null; // For non-branching
+  optionNextQuestions?: Record<number, number>; // For branching (optionId -> nextQuestionId)
+}
+
+interface SurveyValidationResult {
+  valid: boolean;
+  errors?: string[]; // Human-readable error messages
+  cyclePath?: number[]; // Question IDs forming the cycle
+}
+```
+
+---
+
+## Key Concepts
+
+### Branching vs Non-Branching
+
+**Branching Questions** (SingleChoice, Rating):
+- Can have different next question per option
+- Use `optionNextQuestions` in update DTO
+- `supportsBranching: true`
+
+**Non-Branching Questions** (Text, MultipleChoice):
+- Single default next question
+- Use `defaultNextQuestionId` in update DTO
+- `supportsBranching: false`
+
+### End Survey Marker
+
+Use `-1` as `nextQuestionId` to end the survey:
+```typescript
+{
+  optionNextQuestions: {
+    10: -1  // Option 10 ends the survey
+  }
+}
+```
+
+### Null vs Undefined
+
+- `null` or `undefined` = No flow configured (use default order)
+- `-1` = End survey
+- `> 0` = Next question ID
+
+---
+
+## Common Patterns
+
+### Check if flow is configured
+```typescript
+const hasFlow = flow.optionFlows.length > 0 || flow.defaultNextQuestionId !== null;
+```
+
+### Check if question is endpoint
+```typescript
+const isEndpoint =
+  flow.optionFlows.every(opt => opt.isEndOfSurvey) ||
+  flow.defaultNextQuestionId === -1;
+```
+
+### Filter questions for selector
+```typescript
+// Don't allow question to point to itself
+const availableQuestions = allQuestions.filter(q => q.id !== currentQuestion.id);
+```
+
+---
+
+## Troubleshooting
+
+### "Cycle detected" error
+- A question's next question eventually leads back to itself
+- Use FlowVisualization to see the cycle path
+- Fix by changing one question's next question
+
+### "Question not found" error
+- Next question ID doesn't exist
+- Possibly deleted question
+- Fix by removing flow or pointing to valid question
+
+### Flow not saving
+- Check API errors in console
+- Verify question type matches configuration
+- Ensure next question IDs are valid
+
+---
+
+## Best Practices
+
+1. **Always validate** before activating a survey
+2. **Show validation warnings** to users
+3. **Provide "Fix" button** that navigates to flow config
+4. **Use type-safe** service methods
+5. **Handle loading states** during API calls
+6. **Show success/error** feedback to users
+
+---
+
+For detailed documentation, see:
+- `frontend/PHASE5_CONDITIONAL_FLOW_IMPLEMENTATION.md` - Full documentation
+- `PHASE5_FRONTEND_SUMMARY.md` - Implementation summary

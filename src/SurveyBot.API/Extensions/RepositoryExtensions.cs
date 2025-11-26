@@ -18,7 +18,8 @@ public static class RepositoryExtensions
         // Register repositories with Scoped lifetime
         // Scoped ensures one instance per HTTP request, which aligns with DbContext lifetime
         services.AddScoped<ISurveyRepository, SurveyRepository>();
-        services.AddScoped<IQuestionRepository, QuestionRepository>();
+        // TEMPORARY: Commented for migration generation (INFRA-002)
+        // services.AddScoped<IQuestionRepository, QuestionRepository>();
         services.AddScoped<IResponseRepository, ResponseRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
 

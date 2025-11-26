@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using SurveyBot.Core.ValueObjects;
+using SurveyBot.Core.Enums;
 
 namespace SurveyBot.Core.Entities;
 
@@ -51,6 +53,26 @@ public class Question : BaseEntity
     /// </summary>
     public string? MediaContent { get; set; }
 
+    // NEW: Conditional flow configuration
+
+    /// <summary>
+    /// Gets a value indicating whether this question type supports conditional branching.
+    /// Only SingleChoice and Rating questions support branching.
+    /// This is a computed property and not persisted to the database.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public bool SupportsBranching =>
+        QuestionType == QuestionType.SingleChoice || QuestionType == QuestionType.Rating;
+
+    /// <summary>
+    /// Gets or sets the default navigation behavior for non-branching questions.
+    /// For Text and MultipleChoice questions, all answers navigate according to this determinant.
+    /// Ignored for branching questions (SingleChoice, Rating) which use option-specific navigation.
+    /// Set to null to maintain backward compatibility (no default flow defined).
+    /// Use NextQuestionDeterminant.End() to end the survey or NextQuestionDeterminant.ToQuestion(id) to navigate.
+    /// </summary>
+    public NextQuestionDeterminant? DefaultNext { get; set; }
+
     // Navigation properties
 
     /// <summary>
@@ -62,4 +84,9 @@ public class Question : BaseEntity
     /// Gets or sets the collection of answers to this question across all responses.
     /// </summary>
     public ICollection<Answer> Answers { get; set; } = new List<Answer>();
+
+    /// <summary>
+    /// Gets or sets the collection of options for this question (if applicable).
+    /// </summary>
+    public ICollection<QuestionOption> Options { get; set; } = new List<QuestionOption>();
 }

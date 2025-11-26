@@ -1,6 +1,6 @@
-# Telegram Survey Bot MVP
+# Telegram Survey Bot
 
-A Telegram bot application for creating and managing surveys with an admin panel for analytics and management.
+A comprehensive Telegram-based survey management system with conditional question flow, multimedia support, and React admin panel for analytics.
 
 ## Table of Contents
 
@@ -16,33 +16,41 @@ A Telegram bot application for creating and managing surveys with an admin panel
 
 ## Overview
 
-The Telegram Survey Bot MVP enables users to create surveys directly from Telegram, distribute them to respondents, and analyze results through an admin panel. The system is built with Clean Architecture principles, ensuring maintainability and testability.
+SurveyBot is a full-featured survey platform that enables users to create surveys via Telegram bot or web interface, distribute them with shareable codes, collect responses with conditional branching, and analyze results through an admin panel. Built with Clean Architecture and Domain-Driven Design principles for maintainability and scalability.
 
 ### Key Features
 
-- Create surveys via Telegram bot interface
-- Multiple question types (text, multiple choice, single choice, yes/no, rating)
-- Survey distribution through Telegram
-- Response collection and validation
-- Admin panel for analytics and management
-- Real-time response tracking
-- Export capabilities for survey results
+- **Conditional Question Flow** - Dynamic branching based on user answers with cycle detection (v1.4.0)
+- **Telegram Bot Interface** - Create and take surveys with conditional navigation
+- **Multiple Question Types** - Text, single choice, multiple choice, rating scales
+- **Multimedia Support** - Images (JPG, PNG), videos (MP4), audio (MP3, OGG), documents (PDF)
+- **Survey Code Sharing** - 6-character alphanumeric codes (Base36)
+- **Admin Panel** - React-based dashboard for analytics and management
+- **Real-time Analytics** - Statistics, charts, CSV export
+- **JWT Authentication** - Secure token-based authentication
+- **Value Object Pattern** - Type-safe domain modeling with DDD principles
 
 ## Technology Stack
 
 ### Backend
 - **.NET 8.0** - Modern, cross-platform framework
-- **ASP.NET Core Web API** - REST API endpoints
-- **Entity Framework Core 8.0** - Object-relational mapping
-- **PostgreSQL 15** - Relational database
+- **ASP.NET Core Web API** - REST API with 10 controllers
+- **Entity Framework Core 9.0** - ORM with owned types for value objects
+- **PostgreSQL 15** - Relational database with JSONB support
 - **Npgsql** - PostgreSQL provider for EF Core
 
 ### Telegram Integration
-- **Telegram.Bot 19.0+** - Official Telegram Bot API library
-- **Webhook-based** - Real-time message processing
+- **Telegram.Bot 22.7.4** - Official Telegram Bot API library
+- **Polling/Webhook** - Flexible message processing modes
+
+### Frontend
+- **React 19.2** - Modern UI framework
+- **TypeScript** - Type-safe JavaScript
+- **Material-UI** - Component library
 
 ### Development Tools
 - **Serilog** - Structured logging
+- **AutoMapper 12.0** - Object-to-object mapping with value object support
 - **Swashbuckle** - API documentation (Swagger/OpenAPI)
 - **xUnit** - Unit and integration testing
 - **Docker & Docker Compose** - Containerization
@@ -52,40 +60,57 @@ The Telegram Survey Bot MVP enables users to create surveys directly from Telegr
 ```
 SurveyBot/
 ├── src/
-│   ├── SurveyBot.Core/              # Domain layer (entities, interfaces)
-│   │   ├── Entities/                # Domain entities
-│   │   ├── Interfaces/              # Repository and service interfaces
-│   │   └── Enums/                   # Domain enumerations
+│   ├── SurveyBot.Core/              # Domain layer (ZERO dependencies)
+│   │   ├── Entities/                # 7 entities (User, Survey, Question, QuestionOption, Response, Answer, MediaFile)
+│   │   ├── Interfaces/              # 16 repository/service interfaces
+│   │   ├── DTOs/                    # 42+ data transfer objects
+│   │   ├── ValueObjects/            # NextQuestionDeterminant (v1.4.0)
+│   │   ├── Exceptions/              # Domain exceptions (SurveyCycleException)
+│   │   └── Enums/                   # QuestionType, MediaType, SurveyStatus
 │   │
 │   ├── SurveyBot.Infrastructure/    # Data access layer
-│   │   ├── Data/                    # DbContext and configurations
-│   │   ├── Repositories/            # Repository implementations
-│   │   └── Migrations/              # EF Core migrations
+│   │   ├── Data/                    # DbContext with owned type configurations
+│   │   │   └── Configurations/      # Entity configurations with value objects
+│   │   ├── Repositories/            # Generic + specialized repositories
+│   │   ├── Services/                # QuestionService, ResponseService, SurveyValidationService
+│   │   └── Migrations/              # EF Core migrations (clean slate approach)
 │   │
 │   ├── SurveyBot.Bot/               # Telegram bot logic
-│   │   ├── Handlers/                # Message and callback handlers
-│   │   ├── Services/                # Bot business logic
-│   │   └── States/                  # Conversation state management
+│   │   ├── Handlers/                # Message, callback, and survey response handlers
+│   │   ├── Services/                # TelegramBotService (polling/webhook)
+│   │   ├── Models/                  # ConversationState with VisitedQuestions
+│   │   └── Utilities/               # SurveyNavigationHelper for conditional flow
 │   │
 │   └── SurveyBot.API/               # Web API layer
-│       ├── Controllers/             # REST API endpoints
-│       ├── Middleware/              # Custom middleware
-│       ├── Models/                  # DTOs and request/response models
+│       ├── Controllers/             # 10 controllers (incl. QuestionFlowController)
+│       ├── Middleware/              # Exception handling, request logging
+│       ├── Mapping/                 # AutoMapper profiles with value object support
 │       └── Extensions/              # Service registration extensions
+│
+├── frontend/                        # React admin panel
+│   ├── src/
+│   │   ├── components/              # Survey builder, charts, forms
+│   │   ├── pages/                   # Dashboard, survey management
+│   │   └── services/                # API integration
+│   └── package.json
 │
 ├── tests/
 │   └── SurveyBot.Tests/             # Test project
-│       ├── Unit/                    # Unit tests
-│       ├── Integration/             # Integration tests
+│       ├── Unit/                    # Unit tests (services, handlers)
+│       ├── Integration/             # Integration tests (API, database)
 │       └── Fixtures/                # Test data and fixtures
 │
-├── documentation/                    # Project documentation
-│   ├── database/                    # Database schema and design
+├── documentation/                    # Centralized documentation hub
+│   ├── INDEX.md                     # Documentation catalog
+│   ├── api/                         # API documentation
 │   ├── architecture/                # Architecture documentation
-│   └── api/                         # API documentation
+│   ├── bot/                         # Bot user guides
+│   ├── database/                    # Database schema and design
+│   └── testing/                     # Testing guides
 │
 ├── docker-compose.yml               # Docker services configuration
 ├── .env.example                     # Environment variables template
+├── CLAUDE.md                        # AI assistant documentation
 └── SurveyBot.sln                    # Visual Studio solution file
 ```
 
@@ -189,42 +214,77 @@ If you prefer to set up PostgreSQL manually:
 
 ## Architecture
 
-This project follows **Clean Architecture** principles with clear separation of concerns:
+This project follows **Clean Architecture** and **Domain-Driven Design** principles with clear separation of concerns:
 
 ### Layer Overview
 
 ```
 ┌─────────────────────────────────────────────────┐
-│         SurveyBot.API (Presentation)            │
-│  - Controllers, Middleware, API Models          │
-│  - Dependency: Core, Infrastructure, Bot        │
-└─────────────────────────────────────────────────┘
-                      ↓
+│           SurveyBot.API (v1.4.0)                │
+│   REST API, 10 Controllers, Middleware          │
+│   NEW: QuestionFlowController                   │
+└───────────────┬─────────────────────────────────┘
+                │ depends on
+                ▼
 ┌─────────────────────────────────────────────────┐
-│     SurveyBot.Bot (Application - Bot Logic)     │
-│  - Telegram handlers, Bot services              │
-│  - Dependency: Core only                        │
-└─────────────────────────────────────────────────┘
-                      ↓
+│   SurveyBot.Infrastructure (v1.4.1)             │
+│   Database, Repositories, Services              │
+│   NEW: Owned Types, Cycle Detection (DFS)       │
+└───────────────┬─────────────────────────────────┘
+                │ depends on
+                ▼
 ┌─────────────────────────────────────────────────┐
-│  SurveyBot.Infrastructure (Infrastructure)      │
-│  - EF Core, Repositories, Data Access           │
-│  - Dependency: Core only                        │
-└─────────────────────────────────────────────────┘
-                      ↓
-┌─────────────────────────────────────────────────┐
-│         SurveyBot.Core (Domain Layer)           │
-│  - Entities, Interfaces, Business Rules         │
-│  - No dependencies on other projects            │
+│       SurveyBot.Core (v1.4.0)                   │
+│   7 Entities, 16 Interfaces, 42+ DTOs           │
+│   NEW: QuestionOption, Value Objects            │
+│   ZERO DEPENDENCIES ✓                           │
+└───────────────▲─────────────────────────────────┘
+                │ depends on
+┌───────────────┴─────────────────────────────────┐
+│       SurveyBot.Bot (v1.4.0)                    │
+│   Telegram Bot, Handlers, State Mgmt            │
+│   NEW: Conditional Flow, Navigation Helper      │
 └─────────────────────────────────────────────────┘
 ```
 
+### Architectural Patterns
+
+SurveyBot implements 8 core design patterns:
+
+1. **Clean Architecture** - Zero-dependency core, onion-style layers
+2. **Repository Pattern** - Generic + specialized repositories with Include support
+3. **Service Layer Pattern** - Business logic encapsulation
+4. **DTO Pattern** - 42+ DTOs for API contracts
+5. **Value Object Pattern** - NextQuestionDeterminant (type-safe, immutable)
+6. **Owned Entity Types** - EF Core owned types for value objects
+7. **Graph Algorithms** - DFS-based cycle detection for survey validation
+8. **Strategy Pattern** - Polymorphic question handling
+
 ### Core Principles
 
-1. **Dependency Inversion**: High-level modules don't depend on low-level modules
-2. **Single Responsibility**: Each layer has a distinct purpose
-3. **Interface Segregation**: Repository pattern with clean interfaces
-4. **Testability**: Business logic isolated from infrastructure
+1. **Dependency Inversion** - High-level modules don't depend on low-level modules
+2. **Single Responsibility** - Each layer has a distinct purpose
+3. **Interface Segregation** - Repository pattern with clean interfaces
+4. **Testability** - Business logic isolated from infrastructure
+5. **Domain-Driven Design** - Value objects, aggregates, domain services
+
+### Entity Relationships
+
+```
+User (1) ──creates──> Survey (*) ──contains──> Question (*)
+                        │                        │
+                        │                        ├──> DefaultNext (0..1) ─────┐
+                        │                        │                           │
+                        │                        └──> QuestionOption (*) ────┤
+                        │                             (for choice questions) │
+                        │                             └──> NextQuestion (0..1)┘
+                        │
+                        └──receives──> Response (*)
+                                        │
+                                        ├──> VisitedQuestionIds (List<int>)
+                                        │
+                                        └──contains──> Answer (*)
+```
 
 For detailed architecture documentation, see [documentation/architecture/ARCHITECTURE.md](documentation/architecture/ARCHITECTURE.md)
 
@@ -316,69 +376,120 @@ dotnet test --filter "FullyQualifiedName~SurveyBot.Tests.SurveyServiceTests"
 
 ## Documentation
 
-Comprehensive documentation is available in the `documentation/` directory:
+Comprehensive documentation is organized in two locations:
 
-### Available Documentation
+### Centralized Documentation Hub (`documentation/`)
 
-- **[Developer Onboarding Guide](documentation/DEVELOPER_ONBOARDING.md)** - Complete setup guide for new developers
-- **[Architecture Documentation](documentation/architecture/ARCHITECTURE.md)** - System design and patterns
-- **[Database Documentation](documentation/database/README.md)** - Database schema, ER diagrams, and query patterns
-- **[API Documentation](documentation/api/API_REFERENCE.md)** - REST API endpoints and examples
+- **[Documentation Index](documentation/INDEX.md)** - Complete catalog of all documentation
+- **[Navigation Guide](documentation/NAVIGATION.md)** - Role-based navigation (developer, DevOps, user, AI)
+- **[Developer Onboarding](documentation/DEVELOPER_ONBOARDING.md)** - New developer quick start
 - **[Troubleshooting Guide](documentation/TROUBLESHOOTING.md)** - Common issues and solutions
+
+**By Topic**:
+- **Architecture**: [Architecture Overview](documentation/architecture/ARCHITECTURE.md)
+- **API**: [API Reference](documentation/api/API_REFERENCE.md) | [Quick Reference](documentation/api/QUICK-REFERENCE.md)
+- **Bot**: [User Guide](documentation/bot/BOT_USER_GUIDE.md) | [Commands](documentation/bot/BOT_COMMAND_REFERENCE.md)
+- **Database**: [ER Diagram](documentation/database/ER_DIAGRAM.md) | [Quick Start](documentation/database/QUICK-START-DATABASE.md)
+- **Deployment**: [Docker Guide](documentation/deployment/DOCKER-STARTUP-GUIDE.md)
+- **Testing**: [Test Summary](documentation/testing/TEST_SUMMARY.md)
+
+### Layer-Specific Documentation (CLAUDE.md files)
+
+Technical implementation details for AI assistants and developers:
+
+- **[Root CLAUDE.md](CLAUDE.md)** - Project overview, quick start, configuration
+- **[Core Layer](src/SurveyBot.Core/CLAUDE.md)** - Entities, interfaces, DTOs, value objects
+- **[Infrastructure Layer](src/SurveyBot.Infrastructure/CLAUDE.md)** - Database, repositories, services
+- **[Bot Layer](src/SurveyBot.Bot/CLAUDE.md)** - Telegram handlers, state management
+- **[API Layer](src/SurveyBot.API/CLAUDE.md)** - Controllers, middleware, authentication
+- **[Frontend](frontend/CLAUDE.md)** - React admin panel
 
 ### Quick References
 
-- **Setup Instructions**: See [DEVELOPER_ONBOARDING.md](documentation/DEVELOPER_ONBOARDING.md)
-- **Database Schema**: See [database/ER_DIAGRAM.md](documentation/database/ER_DIAGRAM.md)
-- **API Endpoints**: Run the app and visit http://localhost:5000/swagger
-- **Docker Setup**: See [DOCKER-STARTUP-GUIDE.md](DOCKER-STARTUP-GUIDE.md)
+- **API Endpoints**: http://localhost:5000/swagger
+- **Health Check**: http://localhost:5000/health/db
+- **pgAdmin**: http://localhost:5050
 
 ## Project Status
 
-### Completed
-- [x] Solution and project structure
-- [x] Database schema design and implementation
-- [x] Entity Framework Core setup with migrations
-- [x] Repository pattern implementation
+### Completed (v1.4.1)
+
+**Core Features**
+- [x] Solution and project structure with Clean Architecture
+- [x] Database schema design with PostgreSQL
+- [x] Entity Framework Core 9.0 with owned types
+- [x] Repository pattern (generic + specialized)
 - [x] Dependency injection configuration
-- [x] API controllers and endpoints
+- [x] 10 API controllers with full CRUD
 - [x] Global exception handling middleware
 - [x] Request logging middleware
 - [x] Health checks
 - [x] Swagger/OpenAPI documentation
 - [x] Docker Compose setup
-- [x] Core documentation
+- [x] Comprehensive documentation
+
+**Telegram Bot (v1.4.0)**
+- [x] Complete Telegram bot handler implementation
+- [x] Bot conversation state management with VisitedQuestions
+- [x] Conditional question flow navigation
+- [x] SurveyNavigationHelper for branching logic
+- [x] Multimedia support (images, videos, audio, documents)
+- [x] Polling and webhook modes
+
+**Admin Panel**
+- [x] React 19.2 + TypeScript frontend
+- [x] Survey builder with drag-and-drop
+- [x] Question flow visualization
+- [x] Analytics dashboard
+- [x] JWT authentication integration
+
+**Advanced Features (v1.4.0+)**
+- [x] JWT authentication
+- [x] Conditional question flow with cycle detection
+- [x] Value objects (NextQuestionDeterminant)
+- [x] DFS-based survey validation
+- [x] QuestionFlowController for flow configuration
+- [x] Survey code sharing (6-char Base36)
 
 ### In Progress
-- [ ] Telegram bot handler implementation
-- [ ] Bot conversation state management
-- [ ] Admin panel (React)
+- [ ] CSV export functionality
+- [ ] Advanced analytics charts
+- [ ] CI/CD pipeline
 
 ### Planned
-- [ ] JWT authentication
-- [ ] Survey export functionality
-- [ ] Advanced analytics
-- [ ] Deployment configuration
-- [ ] CI/CD pipeline
+- [ ] Production deployment configuration
+- [ ] Rate limiting
+- [ ] Multi-language support
 
 ## Common Development Tasks
 
 ### Adding a New Entity
 
 1. Create entity in `SurveyBot.Core/Entities/`
-2. Add DbSet to `ApplicationDbContext`
-3. Create migration: `dotnet ef migrations add AddNewEntity`
-4. Apply migration: `dotnet ef database update`
-5. Create repository interface and implementation
-6. Add controller if needed
+2. Add DbSet to `SurveyBotDbContext`
+3. Create entity configuration in `Infrastructure/Data/Configurations/`
+4. Create migration: `dotnet ef migrations add AddNewEntity`
+5. Apply migration: `dotnet ef database update`
+6. Create repository interface in `Core/Interfaces/`
+7. Implement repository in `Infrastructure/Repositories/`
+8. Add controller if needed
+
+### Adding Conditional Flow Logic
+
+1. Update `QuestionOption` entity with `NextQuestionId` property
+2. Ensure `NextQuestionDeterminant` value object is used correctly
+3. Update `QuestionFlowController` for flow configuration
+4. Use `SurveyValidationService` for cycle detection
+5. Update bot handlers via `SurveyNavigationHelper`
 
 ### Adding a New API Endpoint
 
 1. Create/update controller in `SurveyBot.API/Controllers/`
-2. Add DTOs in `SurveyBot.API/Models/`
-3. Implement business logic in service/repository
-4. Add XML documentation comments
-5. Test with Swagger UI
+2. Add DTOs in `SurveyBot.Core/DTOs/`
+3. Add AutoMapper profile in `API/Mapping/`
+4. Implement business logic in service
+5. Add XML documentation comments
+6. Test with Swagger UI
 
 ### Debugging
 
@@ -386,6 +497,7 @@ Comprehensive documentation is available in the `documentation/` directory:
 - **Database Queries**: Enable EF Core logging in `appsettings.json`
 - **Bot Messages**: Check Serilog console output
 - **Database**: Use pgAdmin at http://localhost:5050
+- **Conditional Flow**: Check `SurveyValidationService` logs for cycle detection
 
 ## Environment Variables
 
@@ -451,6 +563,6 @@ TBD
 
 ---
 
-**Last Updated**: 2025-11-06
-**Version**: 1.0.0-MVP
+**Last Updated**: 2025-11-25
+**Version**: 1.4.1
 **Status**: Active Development

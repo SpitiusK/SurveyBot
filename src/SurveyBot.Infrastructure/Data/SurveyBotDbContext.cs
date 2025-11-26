@@ -40,6 +40,11 @@ public class SurveyBotDbContext : DbContext
     /// </summary>
     public DbSet<Answer> Answers { get; set; } = null!;
 
+    /// <summary>
+    /// Gets or sets the QuestionOptions DbSet.
+    /// </summary>
+    public DbSet<QuestionOption> QuestionOptions { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -48,6 +53,7 @@ public class SurveyBotDbContext : DbContext
         modelBuilder.ApplyConfiguration(new UserConfiguration());
         modelBuilder.ApplyConfiguration(new SurveyConfiguration());
         modelBuilder.ApplyConfiguration(new QuestionConfiguration());
+        modelBuilder.ApplyConfiguration(new QuestionOptionConfiguration());
         modelBuilder.ApplyConfiguration(new ResponseConfiguration());
         modelBuilder.ApplyConfiguration(new AnswerConfiguration());
 

@@ -133,4 +133,20 @@ public interface IResponseService
     /// <param name="surveyId">The ID of the survey.</param>
     /// <returns>The count of completed responses.</returns>
     Task<int> GetCompletedResponseCountAsync(int surveyId);
+
+    /// <summary>
+    /// Records a question as visited in a response (for cycle prevention).
+    /// </summary>
+    /// <param name="responseId">The ID of the response.</param>
+    /// <param name="questionId">The ID of the visited question.</param>
+    /// <exception cref="Exceptions.ResponseNotFoundException">Thrown when the response is not found.</exception>
+    Task RecordVisitedQuestionAsync(int responseId, int questionId);
+
+    /// <summary>
+    /// Gets the next question ID in the survey flow for a response.
+    /// </summary>
+    /// <param name="responseId">The ID of the response.</param>
+    /// <returns>The next question ID, or null if survey is complete.</returns>
+    /// <exception cref="Exceptions.ResponseNotFoundException">Thrown when the response is not found.</exception>
+    Task<int?> GetNextQuestionAsync(int responseId);
 }

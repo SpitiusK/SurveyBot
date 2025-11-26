@@ -59,14 +59,14 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
         result.Should().NotBeNull();
         result!.Success.Should().BeTrue();
         result.Data.Should().NotBeNull();
-        result.Data!.AccessToken.Should().NotBeEmpty();
+        result.Data!.Token.Should().NotBeEmpty();
         result.Data.TelegramId.Should().Be(123456789);
         result.Data.Username.Should().Be("testuser");
         result.Data.ExpiresAt.Should().BeAfter(DateTime.UtcNow);
 
         // Verify JWT token structure
         var handler = new JwtSecurityTokenHandler();
-        var token = handler.ReadJwtToken(result.Data.AccessToken);
+        var token = handler.ReadJwtToken(result.Data.Token);
         token.Claims.Should().Contain(c => c.Type == ClaimTypes.NameIdentifier);
         token.Claims.Should().Contain(c => c.Type == "TelegramId" && c.Value == "123456789");
     }
@@ -92,7 +92,7 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
         var result = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
         result.Should().NotBeNull();
         result!.Data.Should().NotBeNull();
-        result.Data!.AccessToken.Should().NotBeEmpty();
+        result.Data!.Token.Should().NotBeEmpty();
         result.Data.TelegramId.Should().Be(999888777);
 
         // Verify user was created in database
@@ -117,7 +117,7 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
         var loginRequest = new LoginRequestDto { TelegramId = 123456789 };
         var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
         var loginResult = await loginResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
-        var token = loginResult!.Data!.AccessToken;
+        var token = loginResult!.Data!.Token;
 
         // Add token to request headers
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -192,7 +192,7 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
         var loginRequest = new LoginRequestDto { TelegramId = 123456789, Username = "testuser" };
         var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
         var loginResult = await loginResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
-        var token = loginResult!.Data!.AccessToken;
+        var token = loginResult!.Data!.Token;
 
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 

@@ -92,11 +92,47 @@ const QuestionsStep: React.FC<QuestionsStepProps> = ({
     onUpdateQuestions(reorderedQuestions);
   };
 
+  // Helper: Ensure last question ends survey (if no conditional flow configured)
+  const ensureLastQuestionEndsSurvey = (questionList: QuestionDraft[]): QuestionDraft[] => {
+    if (questionList.length === 0) return questionList;
+
+    const updated = [...questionList];
+    const lastQuestion = updated[updated.length - 1];
+
+    // Check if last question already has conditional flow configured
+    const hasConditionalFlow =
+      lastQuestion.questionType === 1 || lastQuestion.questionType === 3
+        ? lastQuestion.optionNextQuestions && Object.keys(lastQuestion.optionNextQuestions).length > 0
+        : lastQuestion.defaultNextQuestionId !== undefined;
+
+    // If no conditional flow is configured, ensure last question ends survey
+    if (!hasConditionalFlow) {
+      if (lastQuestion.questionType === 0 || lastQuestion.questionType === 2) {
+        // Non-branching: set defaultNextQuestionId = null
+        lastQuestion.defaultNextQuestionId = null;
+      } else if (lastQuestion.questionType === 1 || lastQuestion.questionType === 3) {
+        // Branching: set first option to end survey if no options configured
+        if (!lastQuestion.optionNextQuestions || Object.keys(lastQuestion.optionNextQuestions).length === 0) {
+          lastQuestion.defaultNextQuestionId = null;
+        }
+      }
+    }
+
+    return updated;
+  };
+
   const handleNext = () => {
     if (questions.length === 0) {
       setValidationError('Please add at least one question before proceeding.');
       return;
     }
+
+    // Auto-fix: ensure last question ends survey
+    const fixedQuestions = ensureLastQuestionEndsSurvey(questions);
+    if (JSON.stringify(fixedQuestions) !== JSON.stringify(questions)) {
+      onUpdateQuestions(fixedQuestions);
+    }
+
     setValidationError('');
     onNext();
   };
@@ -266,6 +302,7 @@ const QuestionsStep: React.FC<QuestionsStepProps> = ({
         onSave={handleSaveQuestion}
         question={editingQuestion}
         orderIndex={questions.length}
+        allQuestions={questions}
       />
     </Box>
   );

@@ -1,8 +1,20 @@
 # API Reference Documentation
 ## Telegram Survey Bot MVP
 
-### Version: 1.0.0
-### Last Updated: 2025-11-06
+### Version: 1.4.0 (Updated with Conditional Question Flow)
+### Last Updated: 2025-11-23
+
+---
+
+## What's New in v1.4.0
+
+**Conditional Question Flow Feature**: Surveys can now have questions that branch to different next questions based on respondent answers.
+
+**Breaking Changes**:
+- Answer entity now uses `NextStep: NextQuestionDeterminantDto` instead of `int nextQuestionId`
+- Magic value `0` (end survey) replaced with explicit `NextStepType.EndSurvey` enum
+- Flow configuration endpoints now use `NextQuestionDeterminantDto` instead of integer IDs
+- See [Migration Guide](#migration-from-v1.3.0-to-v1.4.0) below
 
 ---
 
@@ -716,6 +728,160 @@ DELETE /api/questions/{id}
 
 ---
 
+### Conditional Question Flow Endpoints (NEW in v1.4.0)
+
+#### Get Question Flow Configuration
+
+Retrieve the flow configuration for a specific question (how it determines next step).
+
+```http
+GET /api/surveys/{surveyId}/questions/{questionId}/flow
+```
+
+**Response 200 OK - Branching Question (SingleChoice/Rating)**:
+```json
+{
+  "success": true,
+  "data": {
+    "questionId": 1,
+    "supportsBranching": true,
+    "defaultNextDeterminant": null,
+    "optionFlows": [
+      {
+        "optionId": 1,
+        "optionText": "Very Satisfied",
+        "nextDeterminant": {
+          "type": "EndSurvey",
+          "nextQuestionId": null
+        }
+      },
+      {
+        "optionId": 2,
+        "optionText": "Satisfied",
+        "nextDeterminant": {
+          "type": "GoToQuestion",
+          "nextQuestionId": 3
+        }
+      },
+      {
+        "optionId": 3,
+        "optionText": "Unsatisfied",
+        "nextDeterminant": {
+          "type": "GoToQuestion",
+          "nextQuestionId": 5
+        }
+      }
+    ]
+  }
+}
+```
+
+**Response 200 OK - Non-Branching Question (Text/MultipleChoice)**:
+```json
+{
+  "success": true,
+  "data": {
+    "questionId": 2,
+    "supportsBranching": false,
+    "defaultNextDeterminant": {
+      "type": "GoToQuestion",
+      "nextQuestionId": 3
+    },
+    "optionFlows": []
+  }
+}
+```
+
+#### Update Question Flow Configuration
+
+Configure how a question determines the next step for respondents.
+
+```http
+PUT /api/surveys/{surveyId}/questions/{questionId}/flow
+```
+
+**Request Body - Branching Question**:
+```json
+{
+  "defaultNextDeterminant": null,
+  "optionNextDeterminants": {
+    "1": {
+      "type": "GoToQuestion",
+      "nextQuestionId": 5
+    },
+    "2": {
+      "type": "EndSurvey",
+      "nextQuestionId": null
+    },
+    "3": {
+      "type": "GoToQuestion",
+      "nextQuestionId": 7
+    }
+  }
+}
+```
+
+**Request Body - Non-Branching Question**:
+```json
+{
+  "defaultNextDeterminant": {
+    "type": "GoToQuestion",
+    "nextQuestionId": 4
+  },
+  "optionNextDeterminants": {}
+}
+```
+
+**Response 200 OK**: Returns updated ConditionalFlowDto
+
+**Response 400 Bad Request** (if update creates a cycle):
+```json
+{
+  "success": false,
+  "statusCode": 400,
+  "message": "Invalid survey flow: cycle detected",
+  "errors": {
+    "cyclePath": ["Question 1 → Question 2 → Question 3 → Question 1"]
+  }
+}
+```
+
+#### Validate Survey Flow
+
+Check if the entire survey flow is valid (no cycles, has endpoints).
+
+```http
+POST /api/surveys/{surveyId}/questions/validate
+```
+
+**Response 200 OK** (Valid):
+```json
+{
+  "success": true,
+  "data": {
+    "isValid": true,
+    "hasCycle": false,
+    "cyclePath": null,
+    "endpoints": [2, 5, 7]
+  }
+}
+```
+
+**Response 200 OK** (Invalid - Cycle detected):
+```json
+{
+  "success": true,
+  "data": {
+    "isValid": false,
+    "hasCycle": true,
+    "cyclePath": [1, 3, 5, 1],
+    "endpoints": []
+  }
+}
+```
+
+---
+
 ### Responses Endpoints
 
 #### Get Response by ID
@@ -1024,9 +1190,80 @@ X-RateLimit-Reset: 1699282800
 
 ---
 
+## Migration from v1.3.0 to v1.4.0
+
+### Breaking Changes
+
+**NextQuestionId → NextQuestionDeterminant**
+
+The Answer entity and flow DTOs now use `NextQuestionDeterminantDto` instead of `int? nextQuestionId`:
+
+**Old (v1.3.0)**:
+```json
+{
+  "id": 1,
+  "responseId": 1,
+  "questionId": 1,
+  "answerText": "5",
+  "nextQuestionId": 0,
+  "nextQuestionIdNote": "0 means end of survey"
+}
+```
+
+**New (v1.4.0)**:
+```json
+{
+  "id": 1,
+  "responseId": 1,
+  "questionId": 1,
+  "answerText": "5",
+  "nextStep": {
+    "type": "EndSurvey",
+    "nextQuestionId": null
+  }
+}
+```
+
+### Migration Steps
+
+1. **Update API Clients**:
+   - Replace `answer.nextQuestionId` with `answer.nextStep.type` check
+   - Use `NextQuestionDeterminantDto.ToQuestion(id)` or `ToDto()` factory methods
+
+2. **Flow Configuration Endpoints**:
+   - Old: `PUT /api/surveys/{surveyId}/questions/{questionId}/flow` with `{ "1": 5, "2": 0, ... }`
+   - New: `PUT /api/surveys/{surveyId}/questions/{questionId}/flow` with dictionary of NextQuestionDeterminantDto
+
+3. **Frontend Updates** (if applicable):
+   - Update question navigation logic to check `nextStep.type === "EndSurvey"`
+   - Replace magic `0` checks with explicit enum comparison
+
+### Benefits of New Approach
+
+- **Type Safety**: Compiler prevents invalid states
+- **No Magic Values**: Explicit intent with enum types
+- **Self-Documenting**: Code clearly shows GoToQuestion vs EndSurvey
+- **Validation**: DTO validates invariants on deserialization
+
+---
+
 ## Changelog
 
-### v1.0.0 (Current - MVP)
+### v1.4.0 (Current)
+- **NEW**: Conditional question flow with branching support
+- **NEW**: NextQuestionDeterminant value object (replaces magic 0 value)
+- **NEW**: Question flow configuration endpoints (`/flow` routes)
+- **NEW**: Cycle detection for survey validation
+- **CHANGED**: Answer.nextQuestionId → Answer.nextStep (NextQuestionDeterminantDto)
+- **CHANGED**: Flow DTOs now use NextQuestionDeterminantDto
+- **BREAKING**: See [Migration Guide](#migration-from-v1.3.0-to-v1.4.0)
+
+### v1.3.0
+- Multimedia support (images, videos, audio, documents)
+- Media upload/delete endpoints
+- Media content in questions
+
+### v1.0.0 (MVP)
 - Basic CRUD operations for all entities
 - Health check endpoint
 - Swagger documentation
@@ -1034,9 +1271,8 @@ X-RateLimit-Reset: 1699282800
 - Request logging
 
 ### Planned (Future Versions)
-- JWT authentication
 - Rate limiting
-- API versioning
+- API versioning improvements
 - Pagination improvements
 - Filtering and sorting
 - Bulk operations
@@ -1054,5 +1290,5 @@ For API issues or questions:
 
 ---
 
-**Document Status**: Complete for MVP implementation
-**Last Updated**: 2025-11-06
+**Document Status**: Complete with v1.4.0 Conditional Question Flow
+**Last Updated**: 2025-11-23

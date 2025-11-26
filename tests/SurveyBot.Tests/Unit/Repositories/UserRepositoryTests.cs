@@ -189,8 +189,8 @@ public class UserRepositoryTests : RepositoryTestBase
         // Assert
         result.Should().NotBeNull();
         result.Id.Should().BeGreaterThan(0);
-        result.TelegramId.Should().Be(12345);
-        result.Username.Should().Be("newuser");
+        result.User.TelegramId.Should().Be(12345);
+        result.User.Username.Should().Be("newuser");
         result.FirstName.Should().Be("New");
         result.LastName.Should().Be("User");
     }
@@ -216,7 +216,7 @@ public class UserRepositoryTests : RepositoryTestBase
         // Assert
         result.Should().NotBeNull();
         result.Id.Should().Be(user.Id); // Same ID
-        result.Username.Should().Be("newuser");
+        result.User.Username.Should().Be("newuser");
         result.FirstName.Should().Be("New");
 
         var allUsers = await _repository.GetAllAsync();

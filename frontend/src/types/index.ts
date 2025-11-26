@@ -47,6 +47,9 @@ export interface Question {
   orderIndex: number;
   isRequired: boolean;
   options: string[] | null;
+  optionDetails?: QuestionOption[] | null; // Detailed option info with IDs
+  defaultNext?: NextQuestionDeterminant | null;
+  supportsBranching?: boolean;
   mediaContent?: string | null; // JSON string of MediaContentDto
   createdAt: string;
   updatedAt: string;
@@ -100,6 +103,7 @@ export interface CreateQuestionDto {
   questionType: QuestionType;
   isRequired: boolean;
   options?: string[];
+  defaultNext?: NextQuestionDeterminant | null; // For conditional flow
   mediaContent?: string | null; // JSON string of MediaContentDto
 }
 
@@ -107,6 +111,7 @@ export interface UpdateQuestionDto {
   questionText?: string;
   isRequired?: boolean;
   options?: string[];
+  defaultNext?: NextQuestionDeterminant | null; // For conditional flow
   mediaContent?: string | null; // JSON string of MediaContentDto
 }
 
@@ -208,6 +213,8 @@ export interface QuestionDraft {
   options: string[];
   orderIndex: number;
   mediaContent?: import('./media').MediaContentDto | null; // Deserialized MediaContentDto object
+  defaultNextQuestionId?: string | null; // For Text/MultipleChoice/Rating questions
+  optionNextQuestions?: Record<number, string | null>; // For SingleChoice: optionIndex -> nextQuestionId
 }
 
 // Wizard Step Types
@@ -222,3 +229,46 @@ export interface StepConfig {
 
 // Re-export media types
 export * from './media';
+
+// Conditional Question Flow Types (Phase 5)
+
+// Next step types for conditional flow
+// Backend expects INTEGER enum values: 0 = GoToQuestion, 1 = EndSurvey
+export type NextStepType = 0 | 1;
+
+// Value object for determining next question
+export interface NextQuestionDeterminant {
+  type: NextStepType;  // 0 = GoToQuestion, 1 = EndSurvey
+  nextQuestionId?: number | null;
+}
+
+export interface QuestionOption {
+  id: number;
+  text: string;
+  orderIndex: number;
+  next?: NextQuestionDeterminant | null;
+}
+
+export interface OptionFlowDto {
+  optionId: number;
+  optionText: string;
+  next?: NextQuestionDeterminant | null;
+}
+
+export interface ConditionalFlowDto {
+  questionId: number;
+  supportsBranching: boolean;
+  defaultNext?: NextQuestionDeterminant | null;
+  optionFlows: OptionFlowDto[];
+}
+
+export interface UpdateQuestionFlowDto {
+  defaultNext?: NextQuestionDeterminant | null;
+  optionNextDeterminants?: Record<number, NextQuestionDeterminant>; // optionId -> NextQuestionDeterminant
+}
+
+export interface SurveyValidationResult {
+  valid: boolean;
+  errors?: string[];
+  cyclePath?: number[]; // Question IDs forming the cycle
+}

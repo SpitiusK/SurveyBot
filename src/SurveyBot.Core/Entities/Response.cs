@@ -41,6 +41,30 @@ public class Response
     /// </summary>
     public DateTime? SubmittedAt { get; set; }
 
+    // NEW: Conditional flow tracking
+
+    /// <summary>
+    /// Gets or sets the list of question IDs visited in this response.
+    /// Used to prevent revisiting the same question (runtime cycle prevention).
+    /// Stored as PostgreSQL JSON array.
+    /// </summary>
+    public List<int> VisitedQuestionIds { get; set; } = new();
+
+    /// <summary>
+    /// Helper method to check if a question has been visited in this response.
+    /// </summary>
+    public bool HasVisitedQuestion(int questionId) =>
+        VisitedQuestionIds.Contains(questionId);
+
+    /// <summary>
+    /// Helper method to record a question as visited in this response.
+    /// </summary>
+    public void RecordVisitedQuestion(int questionId)
+    {
+        if (!VisitedQuestionIds.Contains(questionId))
+            VisitedQuestionIds.Add(questionId);
+    }
+
     // Navigation properties
 
     /// <summary>

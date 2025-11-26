@@ -1,12 +1,40 @@
 import * as z from 'zod';
 import { QuestionType } from '../types';
 
-// Question text validation
+// Helper function to strip HTML tags for validation
+const stripHtml = (html: string): string => {
+  if (typeof document !== 'undefined') {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return (tmp.textContent || tmp.innerText || '').trim();
+  }
+  // Fallback for server-side or testing
+  return html.replace(/<[^>]*>/g, '').trim();
+};
+
+// Question text validation - handles HTML content from RichTextEditor
 export const questionTextSchema = z
   .string()
-  .min(5, 'Question text must be at least 5 characters')
-  .max(500, 'Question text must not exceed 500 characters')
-  .trim();
+  .min(1, 'Question text is required')
+  .max(5000, 'Question text must not exceed 5000 characters (including formatting)')
+  .refine(
+    (value) => {
+      const actualText = stripHtml(value);
+      return actualText.length >= 5;
+    },
+    {
+      message: 'Question text must contain at least 5 characters of actual content',
+    }
+  )
+  .refine(
+    (value) => {
+      const actualText = stripHtml(value);
+      return actualText.length <= 500;
+    },
+    {
+      message: 'Question text content must not exceed 500 characters',
+    }
+  );
 
 // Option validation (for choice questions)
 export const optionSchema = z
@@ -87,6 +115,17 @@ export const questionDraftSchema = z.object({
   options: z.array(optionSchema).optional(),
   orderIndex: z.number().int().min(0),
   mediaContent: z.any().optional().nullable(), // MediaContentDto object
+  defaultNextQuestionId: z.string().nullable().optional(),
+  // Fix: Make optionNextQuestions accept empty objects, null, undefined, or proper Record
+  optionNextQuestions: z
+    .union([
+      z.record(z.string().nullable()), // Valid conditional flow config
+      z.object({}).optional(), // Empty object for no config
+      z.null(), // Null
+      z.undefined(), // Undefined
+    ])
+    .optional()
+    .nullable(),
 });
 
 // Questions array validation
@@ -102,6 +141,17 @@ export const questionEditorFormSchema = z
     questionType: z.nativeEnum(QuestionType),
     isRequired: z.boolean().default(true),
     options: z.array(optionSchema).optional(),
+    defaultNextQuestionId: z.string().nullable().optional(),
+    // Fix: Make optionNextQuestions accept empty objects, null, undefined, or proper Record
+    optionNextQuestions: z
+      .union([
+        z.record(z.string().nullable()), // Valid conditional flow config
+        z.object({}).optional(), // Empty object for no config
+        z.null(), // Null
+        z.undefined(), // Undefined
+      ])
+      .optional()
+      .nullable(),
   })
   .refine(
     (data) => {

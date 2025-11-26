@@ -43,6 +43,22 @@ public class CreateQuestionDto
     /// </summary>
     public string? MediaContent { get; set; }
 
+    // NEW: Conditional flow configuration
+
+    /// <summary>
+    /// Gets or sets the default navigation behavior for non-branching questions (Text, MultipleChoice, Rating).
+    /// For branching questions (SingleChoice), this is used as fallback when option doesn't define navigation.
+    /// Null means sequential flow (next question by OrderIndex).
+    /// </summary>
+    public NextQuestionDeterminantDto? DefaultNext { get; set; }
+
+    /// <summary>
+    /// Gets or sets option-specific navigation for branching (SingleChoice questions).
+    /// Dictionary key is option index (0-based), value is navigation determinant.
+    /// Only applicable when QuestionType is SingleChoice.
+    /// </summary>
+    public Dictionary<int, NextQuestionDeterminantDto>? OptionNextDeterminants { get; set; }
+
     /// <summary>
     /// Validates that options are provided for choice-based questions.
     /// </summary>
@@ -80,6 +96,85 @@ public class CreateQuestionDto
             yield return new ValidationResult(
                 "Text and Rating questions should not have options",
                 new[] { nameof(Options) });
+        }
+
+        // Validate conditional flow configuration
+        if (OptionNextDeterminants != null && OptionNextDeterminants.Any())
+        {
+            // OptionNextDeterminants only valid for SingleChoice
+            if (QuestionType != QuestionType.SingleChoice)
+            {
+                yield return new ValidationResult(
+                    "OptionNextDeterminants can only be used with SingleChoice questions",
+                    new[] { nameof(OptionNextDeterminants) });
+            }
+            // Validate option indices match options count
+            else if (Options != null)
+            {
+                var maxIndex = OptionNextDeterminants.Keys.Max();
+                if (maxIndex >= Options.Count)
+                {
+                    yield return new ValidationResult(
+                        $"OptionNextDeterminants contains invalid option index {maxIndex}. Maximum valid index is {Options.Count - 1}",
+                        new[] { nameof(OptionNextDeterminants) });
+                }
+
+                var minIndex = OptionNextDeterminants.Keys.Min();
+                if (minIndex < 0)
+                {
+                    yield return new ValidationResult(
+                        "OptionNextDeterminants indices must be non-negative",
+                        new[] { nameof(OptionNextDeterminants) });
+                }
+
+                // Validate each determinant
+                foreach (var kvp in OptionNextDeterminants)
+                {
+                    var validationError = ValidateDeterminant(kvp.Value, $"option {kvp.Key}");
+                    if (validationError != null)
+                    {
+                        yield return new ValidationResult(
+                            validationError,
+                            new[] { nameof(OptionNextDeterminants) });
+                    }
+                }
+            }
+        }
+
+        // Validate DefaultNext if provided
+        if (DefaultNext != null)
+        {
+            var validationError = ValidateDeterminant(DefaultNext, "default navigation");
+            if (validationError != null)
+            {
+                yield return new ValidationResult(
+                    validationError,
+                    new[] { nameof(DefaultNext) });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Validates a NextQuestionDeterminantDto and returns error message if invalid.
+    /// </summary>
+    /// <param name="determinant">The determinant to validate.</param>
+    /// <param name="context">Context description for error message.</param>
+    /// <returns>Error message if invalid, null if valid.</returns>
+    private static string? ValidateDeterminant(NextQuestionDeterminantDto? determinant, string context)
+    {
+        if (determinant == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            determinant.Validate();
+            return null;
+        }
+        catch (ArgumentException ex)
+        {
+            return $"Invalid navigation for {context}: {ex.Message}";
         }
     }
 }

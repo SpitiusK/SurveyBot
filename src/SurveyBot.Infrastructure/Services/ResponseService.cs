@@ -1,11 +1,14 @@
 using AutoMapper;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Core.DTOs.Answer;
 using SurveyBot.Core.DTOs.Common;
 using SurveyBot.Core.DTOs.Response;
 using SurveyBot.Core.Entities;
+using SurveyBot.Core.Enums;
 using SurveyBot.Core.Exceptions;
 using SurveyBot.Core.Interfaces;
+using SurveyBot.Infrastructure.Data;
 using System.Text.Json;
 using ValidationResult = SurveyBot.Core.Models.ValidationResult;
 
@@ -20,6 +23,7 @@ public class ResponseService : IResponseService
     private readonly IAnswerRepository _answerRepository;
     private readonly ISurveyRepository _surveyRepository;
     private readonly IQuestionRepository _questionRepository;
+    private readonly SurveyBotDbContext _context;
     private readonly IMapper _mapper;
     private readonly ILogger<ResponseService> _logger;
 
@@ -35,6 +39,7 @@ public class ResponseService : IResponseService
         IAnswerRepository answerRepository,
         ISurveyRepository surveyRepository,
         IQuestionRepository questionRepository,
+        SurveyBotDbContext context,
         IMapper mapper,
         ILogger<ResponseService> logger)
     {
@@ -42,6 +47,7 @@ public class ResponseService : IResponseService
         _answerRepository = answerRepository;
         _surveyRepository = surveyRepository;
         _questionRepository = questionRepository;
+        _context = context;
         _mapper = mapper;
         _logger = logger;
     }
@@ -122,8 +128,8 @@ public class ResponseService : IResponseService
             await AuthorizeUserForResponseAsync(response, userId.Value);
         }
 
-        // Validate question exists and belongs to survey
-        var question = await _questionRepository.GetByIdAsync(questionId);
+        // Validate question exists and belongs to survey (load with flow configuration)
+        var question = await _questionRepository.GetByIdWithFlowConfigAsync(questionId);
         if (question == null)
         {
             _logger.LogWarning("Question {QuestionId} not found", questionId);
@@ -146,6 +152,36 @@ public class ResponseService : IResponseService
             throw new InvalidAnswerFormatException(questionId, question.QuestionType, validationResult.ErrorMessage!);
         }
 
+        // Convert selectedOptions from strings to option indexes
+        List<int>? selectedOptionIndexes = null;
+        if (selectedOptions != null && selectedOptions.Any())
+        {
+            selectedOptionIndexes = new List<int>();
+            var options = question.Options?.OrderBy(o => o.OrderIndex).ToList();
+            if (options != null)
+            {
+                foreach (var selectedText in selectedOptions)
+                {
+                    var optionIndex = options.FindIndex(o => o.Text == selectedText);
+                    if (optionIndex >= 0)
+                    {
+                        selectedOptionIndexes.Add(optionIndex);
+                    }
+                }
+            }
+        }
+
+        // Determine next question based on conditional flow
+        var nextQuestionId = await DetermineNextQuestionIdAsync(
+            question,
+            selectedOptionIndexes,
+            response.SurveyId,
+            CancellationToken.None);
+
+        _logger.LogInformation(
+            "Determined next question for Response {ResponseId}, Question {QuestionId}: NextQuestionId={NextQuestionId}",
+            response.Id, question.Id, nextQuestionId);
+
         // Check if answer already exists for this question
         var existingAnswer = await _answerRepository.GetByResponseAndQuestionAsync(responseId, questionId);
 
@@ -154,6 +190,7 @@ public class ResponseService : IResponseService
             // Update existing answer
             existingAnswer.AnswerText = answerText;
             existingAnswer.AnswerJson = CreateAnswerJson(question.QuestionType, selectedOptions, ratingValue);
+            existingAnswer.NextQuestionId = nextQuestionId;
             existingAnswer.CreatedAt = DateTime.UtcNow;
 
             await _answerRepository.UpdateAsync(existingAnswer);
@@ -168,6 +205,7 @@ public class ResponseService : IResponseService
                 QuestionId = questionId,
                 AnswerText = answerText,
                 AnswerJson = CreateAnswerJson(question.QuestionType, selectedOptions, ratingValue),
+                NextQuestionId = nextQuestionId,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -382,6 +420,113 @@ public class ResponseService : IResponseService
     public async Task<int> GetCompletedResponseCountAsync(int surveyId)
     {
         return await _responseRepository.GetCompletedCountAsync(surveyId);
+    }
+
+    /// <inheritdoc/>
+    public async Task RecordVisitedQuestionAsync(int responseId, int questionId)
+    {
+        _logger.LogInformation("Recording visited question {QuestionId} for response {ResponseId}", questionId, responseId);
+
+        var response = await _responseRepository.GetByIdAsync(responseId);
+        if (response == null)
+        {
+            _logger.LogWarning("Response {ResponseId} not found", responseId);
+            throw new ResponseNotFoundException(responseId);
+        }
+
+        // Check if already visited
+        if (response.HasVisitedQuestion(questionId))
+        {
+            _logger.LogWarning(
+                "Question {QuestionId} already visited in response {ResponseId}",
+                questionId, responseId);
+            return;
+        }
+
+        // Record as visited
+        response.RecordVisitedQuestion(questionId);
+        await _responseRepository.UpdateAsync(response);
+
+        _logger.LogInformation(
+            "Question {QuestionId} recorded as visited for response {ResponseId}. Total visited: {VisitedCount}",
+            questionId, responseId, response.VisitedQuestionIds.Count);
+    }
+
+    /// <inheritdoc/>
+    public async Task<int?> GetNextQuestionAsync(int responseId)
+    {
+        _logger.LogInformation("Getting next question for response {ResponseId}", responseId);
+
+        var response = await _responseRepository.GetByIdWithAnswersAsync(responseId);
+        if (response == null)
+        {
+            _logger.LogWarning("Response {ResponseId} not found", responseId);
+            throw new ResponseNotFoundException(responseId);
+        }
+
+        // Check if already completed
+        if (response.IsComplete)
+        {
+            _logger.LogInformation("Response {ResponseId} is already complete, no next question", responseId);
+            return null;
+        }
+
+        // Get last answer to determine next question
+        var lastAnswer = response.Answers
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefault();
+
+        if (lastAnswer == null)
+        {
+            // No answers yet, return first question by OrderIndex
+            var survey = await _surveyRepository.GetByIdWithQuestionsAsync(response.SurveyId);
+            if (survey == null)
+            {
+                _logger.LogError("Survey {SurveyId} not found for response {ResponseId}", response.SurveyId, responseId);
+                throw new SurveyNotFoundException(response.SurveyId);
+            }
+
+            var firstQuestion = survey.Questions
+                .OrderBy(q => q.OrderIndex)
+                .FirstOrDefault();
+
+            if (firstQuestion == null)
+            {
+                _logger.LogWarning("Survey {SurveyId} has no questions", response.SurveyId);
+                return null;
+            }
+
+            _logger.LogInformation(
+                "No answers yet for response {ResponseId}, returning first question {QuestionId}",
+                responseId, firstQuestion.Id);
+
+            return firstQuestion.Id;
+        }
+
+        // TODO: Refactor Answer entity to use NextQuestionDeterminant value object
+        // This is the ONE remaining magic value check in the codebase (NextQuestionId = 0 means end of survey)
+        // Answer.NextQuestionId is still int (not yet refactored to NextQuestionDeterminant)
+        // Future refactoring: Answer.Next?.Type == NextStepType.EndSurvey
+        // Check if last answer indicates end of survey (NextQuestionId = 0 means end)
+        if (lastAnswer.NextQuestionId == 0)
+        {
+            _logger.LogInformation(
+                "Response {ResponseId} reached end of survey, marking as complete",
+                responseId);
+
+            response.IsComplete = true;
+            response.SubmittedAt = DateTime.UtcNow;
+            await _responseRepository.UpdateAsync(response);
+
+            return null;
+        }
+
+        // Return NextQuestionId from last answer
+        _logger.LogInformation(
+            "Next question for response {ResponseId} is {NextQuestionId}",
+            responseId, lastAnswer.NextQuestionId);
+
+        return lastAnswer.NextQuestionId;
     }
 
     // Private helper methods
@@ -618,5 +763,162 @@ public class ResponseService : IResponseService
         }
 
         return ValidationResult.Success();
+    }
+
+    // Conditional Flow Logic
+
+    /// <summary>
+    /// Determines the next question ID based on the question type and answer.
+    /// Implements the conditional flow logic priority: Conditional → Default → Sequential → End.
+    /// </summary>
+    private async Task<int> DetermineNextQuestionIdAsync(
+        Question question,
+        List<int>? selectedOptions,
+        int surveyId,
+        CancellationToken cancellationToken)
+    {
+        // For branching question types (SingleChoice, Rating)
+        if (question.QuestionType == QuestionType.SingleChoice || question.QuestionType == QuestionType.Rating)
+        {
+            return await DetermineBranchingNextQuestionAsync(question, selectedOptions, cancellationToken);
+        }
+
+        // For non-branching question types (Text, MultipleChoice)
+        return await DetermineNonBranchingNextQuestionAsync(question, surveyId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Determines next question for branching question types (SingleChoice, Rating).
+    /// Priority: Option's Next → Question's DefaultNext → Sequential fallback → End (0).
+    /// </summary>
+    private async Task<int> DetermineBranchingNextQuestionAsync(
+        Question question,
+        List<int>? selectedOptions,
+        CancellationToken cancellationToken)
+    {
+        // Get the first selected option (single-choice/rating has only one)
+        if (selectedOptions == null || !selectedOptions.Any())
+        {
+            _logger.LogWarning(
+                "No option selected for branching question {QuestionId}, ending survey",
+                question.Id);
+            return 0; // No selection, end survey
+        }
+
+        var selectedOptionIndex = selectedOptions.First();
+
+        // Find the QuestionOption entity for this selection
+        var selectedOption = question.Options?
+            .OrderBy(o => o.OrderIndex)
+            .Skip(selectedOptionIndex)
+            .FirstOrDefault();
+
+        if (selectedOption == null)
+        {
+            _logger.LogWarning(
+                "Invalid option index {OptionIndex} for question {QuestionId}, ending survey",
+                selectedOptionIndex, question.Id);
+            return 0; // Invalid option, end survey
+        }
+
+        // Priority 1: Check option's conditional flow
+        if (selectedOption.Next != null &&
+            selectedOption.Next.Type == NextStepType.GoToQuestion)
+        {
+            _logger.LogInformation(
+                "Using option conditional flow for question {QuestionId}, option {OptionId}: NextQuestionId={NextQuestionId}",
+                question.Id, selectedOption.Id, selectedOption.Next.NextQuestionId);
+            return selectedOption.Next.NextQuestionId ?? 0;
+        }
+
+        // Priority 2: Check question's default flow
+        if (question.DefaultNext != null &&
+            question.DefaultNext.Type == NextStepType.GoToQuestion)
+        {
+            _logger.LogInformation(
+                "Using question default flow for question {QuestionId}: NextQuestionId={NextQuestionId}",
+                question.Id, question.DefaultNext.NextQuestionId);
+            return question.DefaultNext.NextQuestionId ?? 0;
+        }
+
+        // Priority 3: Sequential fallback (backward compatibility)
+        var sequentialNextId = await GetNextSequentialQuestionIdAsync(
+            question.SurveyId,
+            question.OrderIndex,
+            cancellationToken);
+
+        if (sequentialNextId > 0)
+        {
+            _logger.LogInformation(
+                "Using sequential fallback for question {QuestionId}: NextQuestionId={NextQuestionId}",
+                question.Id, sequentialNextId);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "No next question found for question {QuestionId}, ending survey",
+                question.Id);
+        }
+
+        return sequentialNextId;
+    }
+
+    /// <summary>
+    /// Determines next question for non-branching question types (Text, MultipleChoice).
+    /// Priority: Question's DefaultNext → Sequential fallback → End (0).
+    /// </summary>
+    private async Task<int> DetermineNonBranchingNextQuestionAsync(
+        Question question,
+        int surveyId,
+        CancellationToken cancellationToken)
+    {
+        // Priority 1: Check question's default flow
+        if (question.DefaultNext != null &&
+            question.DefaultNext.Type == NextStepType.GoToQuestion)
+        {
+            _logger.LogInformation(
+                "Using question default flow for non-branching question {QuestionId}: NextQuestionId={NextQuestionId}",
+                question.Id, question.DefaultNext.NextQuestionId);
+            return question.DefaultNext.NextQuestionId ?? 0;
+        }
+
+        // Priority 2: Sequential fallback (backward compatibility)
+        var sequentialNextId = await GetNextSequentialQuestionIdAsync(
+            surveyId,
+            question.OrderIndex,
+            cancellationToken);
+
+        if (sequentialNextId > 0)
+        {
+            _logger.LogInformation(
+                "Using sequential fallback for non-branching question {QuestionId}: NextQuestionId={NextQuestionId}",
+                question.Id, sequentialNextId);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "No next question found for non-branching question {QuestionId}, ending survey",
+                question.Id);
+        }
+
+        return sequentialNextId;
+    }
+
+    /// <summary>
+    /// Finds the next question in sequential order (backward compatibility).
+    /// Returns 0 if no next question found (end of survey).
+    /// </summary>
+    private async Task<int> GetNextSequentialQuestionIdAsync(
+        int surveyId,
+        int currentOrderIndex,
+        CancellationToken cancellationToken)
+    {
+        var nextQuestion = await _context.Questions
+            .AsNoTracking()
+            .Where(q => q.SurveyId == surveyId && q.OrderIndex > currentOrderIndex)
+            .OrderBy(q => q.OrderIndex)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return nextQuestion?.Id ?? 0; // Return 0 if last question
     }
 }

@@ -45,6 +45,12 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<int>("NextQuestionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("next_question_id");
+
                     b.Property<int>("QuestionId")
                         .HasColumnType("integer")
                         .HasColumnName("question_id");
@@ -59,6 +65,9 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasDatabaseName("idx_answers_answer_json");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("AnswerJson"), "gin");
+
+                    b.HasIndex("NextQuestionId")
+                        .HasDatabaseName("idx_answers_next_question_id");
 
                     b.HasIndex("QuestionId")
                         .HasDatabaseName("idx_answers_question_id");
@@ -157,6 +166,53 @@ namespace SurveyBot.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SurveyBot.Core.Entities.QuestionOption", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_index");
+
+                    b.Property<int>("QuestionId")
+                        .HasColumnType("integer")
+                        .HasColumnName("question_id");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuestionId")
+                        .HasDatabaseName("idx_question_options_question_id");
+
+                    b.HasIndex("QuestionId", "OrderIndex")
+                        .IsUnique()
+                        .HasDatabaseName("idx_question_options_question_order_unique");
+
+                    b.ToTable("question_options", null, t =>
+                        {
+                            t.HasCheckConstraint("chk_question_option_order_index", "order_index >= 0");
+                        });
+                });
+
             modelBuilder.Entity("SurveyBot.Core.Entities.Response", b =>
                 {
                     b.Property<int>("Id")
@@ -188,6 +244,13 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("survey_id");
 
+                    b.Property<string>("VisitedQuestionIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("visited_question_ids")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.HasKey("Id");
 
                     b.HasIndex("IsComplete")
@@ -200,6 +263,11 @@ namespace SurveyBot.Infrastructure.Migrations
 
                     b.HasIndex("SurveyId")
                         .HasDatabaseName("idx_responses_survey_id");
+
+                    b.HasIndex("VisitedQuestionIds")
+                        .HasDatabaseName("idx_responses_visited_question_ids");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("VisitedQuestionIds"), "gin");
 
                     b.HasIndex("SurveyId", "RespondentTelegramId")
                         .HasDatabaseName("idx_responses_survey_respondent");
@@ -376,7 +444,71 @@ namespace SurveyBot.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_questions_survey");
 
+                    b.OwnsOne("SurveyBot.Core.ValueObjects.NextQuestionDeterminant", "DefaultNext", b1 =>
+                        {
+                            b1.Property<int>("QuestionId")
+                                .HasColumnType("integer");
+
+                            b1.Property<int?>("NextQuestionId")
+                                .HasColumnType("integer")
+                                .HasColumnName("default_next_question_id")
+                                .HasAnnotation("Relational:JsonPropertyName", "nextQuestionId");
+
+                            b1.Property<string>("Type")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("default_next_step_type")
+                                .HasAnnotation("Relational:JsonPropertyName", "type");
+
+                            b1.HasKey("QuestionId");
+
+                            b1.ToTable("questions");
+
+                            b1.WithOwner()
+                                .HasForeignKey("QuestionId");
+                        });
+
+                    b.Navigation("DefaultNext");
+
                     b.Navigation("Survey");
+                });
+
+            modelBuilder.Entity("SurveyBot.Core.Entities.QuestionOption", b =>
+                {
+                    b.HasOne("SurveyBot.Core.Entities.Question", "Question")
+                        .WithMany("Options")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_question_options_question");
+
+                    b.OwnsOne("SurveyBot.Core.ValueObjects.NextQuestionDeterminant", "Next", b1 =>
+                        {
+                            b1.Property<int>("QuestionOptionId")
+                                .HasColumnType("integer");
+
+                            b1.Property<int?>("NextQuestionId")
+                                .HasColumnType("integer")
+                                .HasColumnName("next_question_id")
+                                .HasAnnotation("Relational:JsonPropertyName", "nextQuestionId");
+
+                            b1.Property<string>("Type")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("next_step_type")
+                                .HasAnnotation("Relational:JsonPropertyName", "type");
+
+                            b1.HasKey("QuestionOptionId");
+
+                            b1.ToTable("question_options");
+
+                            b1.WithOwner()
+                                .HasForeignKey("QuestionOptionId");
+                        });
+
+                    b.Navigation("Next");
+
+                    b.Navigation("Question");
                 });
 
             modelBuilder.Entity("SurveyBot.Core.Entities.Response", b =>
@@ -406,6 +538,8 @@ namespace SurveyBot.Infrastructure.Migrations
             modelBuilder.Entity("SurveyBot.Core.Entities.Question", b =>
                 {
                     b.Navigation("Answers");
+
+                    b.Navigation("Options");
                 });
 
             modelBuilder.Entity("SurveyBot.Core.Entities.Response", b =>

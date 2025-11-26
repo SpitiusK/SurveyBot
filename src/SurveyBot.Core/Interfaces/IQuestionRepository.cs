@@ -22,6 +22,14 @@ public interface IQuestionRepository : IRepository<Question>
     Task<Question?> GetByIdWithAnswersAsync(int id);
 
     /// <summary>
+    /// Gets a question by ID with the Options collection included (eager loaded).
+    /// Used after creating a question to retrieve database-generated option IDs.
+    /// </summary>
+    /// <param name="id">The question ID.</param>
+    /// <returns>The question with Options collection if found, otherwise null.</returns>
+    Task<Question?> GetByIdWithOptionsAsync(int id);
+
+    /// <summary>
     /// Reorders questions within a survey.
     /// </summary>
     /// <param name="questionOrders">Dictionary mapping question IDs to their new OrderIndex values.</param>
@@ -64,4 +72,31 @@ public interface IQuestionRepository : IRepository<Question>
     /// <param name="surveyId">The survey ID.</param>
     /// <returns>True if the question belongs to the survey, otherwise false.</returns>
     Task<bool> BelongsToSurveyAsync(int questionId, int surveyId);
+
+    /// <summary>
+    /// Gets all questions for a survey with flow configuration (Options, DefaultNextQuestion).
+    /// Used for cycle detection and flow validation.
+    /// </summary>
+    /// <param name="surveyId">The survey ID.</param>
+    /// <returns>A collection of questions with Options and DefaultNextQuestion navigation properties loaded.</returns>
+    Task<List<Question>> GetWithFlowConfigurationAsync(int surveyId);
+
+    /// <summary>
+    /// Determines the next question ID based on the current question and selected option.
+    /// For branching questions: looks up the option's NextQuestionId.
+    /// For non-branching questions: returns DefaultNextQuestionId.
+    /// </summary>
+    /// <param name="questionId">The current question ID.</param>
+    /// <param name="selectedOptionText">The selected option text (for branching questions, null for non-branching).</param>
+    /// <returns>The next question ID, or null if no next question configured.</returns>
+    Task<int?> GetNextQuestionIdAsync(int questionId, string? selectedOptionText);
+
+    /// <summary>
+    /// Gets a question by ID with Options collection for conditional flow determination.
+    /// Uses AsNoTracking for read-only queries during flow logic execution.
+    /// </summary>
+    /// <param name="questionId">The question ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The question with Options collection if found, otherwise null.</returns>
+    Task<Question?> GetByIdWithFlowConfigAsync(int questionId, CancellationToken cancellationToken = default);
 }

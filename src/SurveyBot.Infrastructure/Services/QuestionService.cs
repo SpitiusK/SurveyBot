@@ -4,8 +4,10 @@ using SurveyBot.Core.DTOs.Media;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 using SurveyBot.Core.Exceptions;
+using SurveyBot.Core.Extensions;
 using SurveyBot.Core.Interfaces;
 using SurveyBot.Core.Models;
+using SurveyBot.Core.ValueObjects;
 using System.Text.Json;
 
 namespace SurveyBot.Infrastructure.Services;
@@ -89,13 +91,38 @@ public class QuestionService : IQuestionService
             QuestionText = dto.QuestionText,
             QuestionType = dto.QuestionType,
             IsRequired = dto.IsRequired,
-            OrderIndex = await _questionRepository.GetNextOrderIndexAsync(surveyId)
+            OrderIndex = await _questionRepository.GetNextOrderIndexAsync(surveyId),
+            // NEW: Set conditional flow using value object (use extension method to convert DTO)
+            DefaultNext = dto.DefaultNext.ToValueObject()
         };
 
-        // Serialize options for choice-based questions
+        // Handle options for choice-based questions
         if (dto.QuestionType == QuestionType.SingleChoice || dto.QuestionType == QuestionType.MultipleChoice)
         {
-            question.OptionsJson = JsonSerializer.Serialize(dto.Options);
+            if (dto.Options != null && dto.Options.Any())
+            {
+                // Create QuestionOption entities (NEW approach with flow support)
+                question.Options = new List<QuestionOption>();
+
+                for (int i = 0; i < dto.Options.Count; i++)
+                {
+                    var option = new QuestionOption
+                    {
+                        Text = dto.Options[i],
+                        OrderIndex = i,
+                        Question = question,
+                        // Set Next from OptionNextDeterminants dictionary using extension method
+                        Next = dto.OptionNextDeterminants?.ContainsKey(i) == true
+                            ? dto.OptionNextDeterminants[i].ToValueObject()
+                            : null
+                    };
+
+                    question.Options.Add(option);
+                }
+
+                // Keep legacy OptionsJson for backwards compatibility
+                question.OptionsJson = JsonSerializer.Serialize(dto.Options);
+            }
         }
 
         // Handle media content if provided
@@ -110,8 +137,17 @@ public class QuestionService : IQuestionService
         _logger.LogInformation("Question {QuestionId} added to survey {SurveyId} successfully",
             createdQuestion.Id, surveyId);
 
-        // Map to DTO
-        return MapToDto(createdQuestion);
+        // Reload question with Options collection to get database-generated IDs
+        var questionWithOptions = await _questionRepository.GetByIdWithOptionsAsync(createdQuestion.Id);
+        if (questionWithOptions == null)
+        {
+            // Fallback: return created question even if reload fails
+            _logger.LogWarning("Failed to reload question {QuestionId} with options after creation", createdQuestion.Id);
+            return MapToDto(createdQuestion);
+        }
+
+        // Map to DTO (now includes OptionDetails with database IDs)
+        return MapToDto(questionWithOptions);
     }
 
     /// <inheritdoc/>
@@ -478,7 +514,240 @@ public class QuestionService : IQuestionService
             }
         }
 
+        // Map QuestionOption entities to OptionDetails (includes database IDs)
+        if (question.Options != null && question.Options.Any())
+        {
+            dto.OptionDetails = question.Options
+                .OrderBy(o => o.OrderIndex)
+                .Select(o => new QuestionOptionDto
+                {
+                    Id = o.Id,  // Database-generated ID
+                    Text = o.Text,
+                    OrderIndex = o.OrderIndex
+                })
+                .ToList();
+        }
+
+        // Set SupportsBranching flag
+        dto.SupportsBranching = question.SupportsBranching;
+
         return dto;
+    }
+
+    /// <inheritdoc/>
+    public async Task<Question?> GetByIdAsync(int id)
+    {
+        _logger.LogInformation("Getting question entity {QuestionId}", id);
+
+        var question = await _questionRepository.GetByIdAsync(id);
+        if (question == null)
+        {
+            _logger.LogWarning("Question {QuestionId} not found", id);
+        }
+
+        return question;
+    }
+
+    /// <inheritdoc/>
+    public async Task<Question?> GetByIdWithOptionsAsync(int id)
+    {
+        _logger.LogInformation("Getting question entity {QuestionId} with Options", id);
+
+        var question = await _questionRepository.GetByIdWithOptionsAsync(id);
+        if (question == null)
+        {
+            _logger.LogWarning("Question {QuestionId} not found", id);
+        }
+        else
+        {
+            _logger.LogInformation("Question {QuestionId} loaded with {OptionCount} options",
+                id, question.Options?.Count ?? 0);
+        }
+
+        return question;
+    }
+
+    /// <inheritdoc/>
+    public async Task<Question> UpdateQuestionFlowAsync(int id, Core.DTOs.UpdateQuestionFlowDto dto)
+    {
+        _logger.LogInformation("═══════════════════════════════════════════════════");
+        _logger.LogInformation("🔧 SERVICE LAYER: UpdateQuestionFlowAsync");
+        _logger.LogInformation("═══════════════════════════════════════════════════");
+        _logger.LogInformation("Question ID: {QuestionId}", id);
+
+        // Get question WITH OPTIONS for flow configuration (critical for AutoMapper)
+        var question = await _questionRepository.GetByIdWithOptionsAsync(id);
+        if (question == null)
+        {
+            _logger.LogWarning("❌ Question {QuestionId} not found", id);
+            throw new QuestionNotFoundException(id);
+        }
+
+        _logger.LogInformation("📋 Current Question State (BEFORE update):");
+        _logger.LogInformation("  Question ID: {QuestionId}", question.Id);
+        _logger.LogInformation("  Question Text: {Text}", question.QuestionText);
+        _logger.LogInformation("  Question Type: {Type}", question.QuestionType);
+        _logger.LogInformation("  Survey ID: {SurveyId}", question.SurveyId);
+        _logger.LogInformation("  CURRENT DefaultNext: {DefaultNext}",
+            question.DefaultNext?.ToString() ?? "NULL");
+        _logger.LogInformation("  Options Count: {Count}", question.Options?.Count ?? 0);
+
+        if (question.Options != null && question.Options.Any())
+        {
+            _logger.LogInformation("  Available Options:");
+            foreach (var opt in question.Options)
+            {
+                _logger.LogInformation("    Option {OptionId}: '{Text}' (Current Next: {Next})",
+                    opt.Id, opt.Text, opt.Next?.ToString() ?? "NULL");
+            }
+        }
+
+        _logger.LogInformation("───────────────────────────────────────────────────");
+        _logger.LogInformation("🔄 DTO → Entity Transformation:");
+
+        try
+        {
+            // Validate and set DefaultNext using value object
+            if (dto.DefaultNext != null)
+            {
+                _logger.LogInformation("📌 Processing DefaultNext:");
+                _logger.LogInformation("   DTO Value: {Value}", dto.DefaultNext);
+
+                if (dto.DefaultNext.Type == Core.Enums.NextStepType.EndSurvey)
+                {
+                    // EndSurvey type
+                    _logger.LogInformation("   ✅ END SURVEY type → Creating EndSurvey determinant");
+                    question.DefaultNext = NextQuestionDeterminant.End();
+                    _logger.LogInformation("   NEW Value: {Value}", question.DefaultNext);
+                }
+                else if (dto.DefaultNext.Type == Core.Enums.NextStepType.GoToQuestion)
+                {
+                    // Validate that the target question exists
+                    _logger.LogInformation("   🔍 Validating question ID exists...");
+                    var targetQuestionId = dto.DefaultNext.NextQuestionId!.Value;
+                    var targetQuestion = await _questionRepository.GetByIdAsync(targetQuestionId);
+
+                    if (targetQuestion == null)
+                    {
+                        _logger.LogError("   ❌ Target question {TargetId} NOT FOUND", targetQuestionId);
+                        throw new QuestionNotFoundException(targetQuestionId);
+                    }
+
+                    _logger.LogInformation("   ✅ Target question found: '{Text}' (ID: {TargetId})",
+                        targetQuestion.QuestionText, targetQuestion.Id);
+
+                    if (targetQuestionId == id)
+                    {
+                        _logger.LogError("   ❌ SELF-REFERENCE detected!");
+                        throw new InvalidOperationException($"Question {id} cannot reference itself");
+                    }
+
+                    question.DefaultNext = NextQuestionDeterminant.ToQuestion(targetQuestionId);
+                    _logger.LogInformation("   ✅ NEW Value: {Value}", question.DefaultNext);
+                }
+            }
+            else
+            {
+                // null = clear flow configuration (sequential flow)
+                _logger.LogInformation("📌 DefaultNext is NULL → Sequential flow");
+                question.DefaultNext = null;
+                _logger.LogInformation("   NEW Value: NULL");
+            }
+
+            // Update option-specific flows (for branching questions)
+            if (dto.OptionNextDeterminants != null && dto.OptionNextDeterminants.Any())
+            {
+                _logger.LogInformation("───────────────────────────────────────────────────");
+                _logger.LogInformation("📌 Processing OptionNextDeterminants: {Count} mappings",
+                    dto.OptionNextDeterminants.Count);
+
+                foreach (var optionFlow in dto.OptionNextDeterminants)
+                {
+                    var optionId = optionFlow.Key;
+                    var determinant = optionFlow.Value;
+
+                    _logger.LogInformation("  🔹 Option {OptionId} → {Determinant}:", optionId, determinant);
+
+                    // Find the option by ID
+                    var option = question.Options.FirstOrDefault(o => o.Id == optionId);
+                    if (option == null)
+                    {
+                        _logger.LogError("    ❌ OPTION NOT FOUND!");
+                        _logger.LogError("       Requested Option ID: {OptionId}", optionId);
+                        _logger.LogError("       Available Option IDs: {AvailableIds}",
+                            string.Join(", ", question.Options.Select(o => o.Id)));
+                        throw new InvalidOperationException($"Option {optionId} does not exist for question {id}");
+                    }
+
+                    _logger.LogInformation("    ✅ Option found: '{Text}' (ID: {OptionId})", option.Text, option.Id);
+                    _logger.LogInformation("       CURRENT Next: {Current}",
+                        option.Next?.ToString() ?? "NULL");
+
+                    // Validate next question determinant and create value object
+                    if (determinant.Type == Core.Enums.NextStepType.EndSurvey)
+                    {
+                        // End of survey marker
+                        _logger.LogInformation("       ✅ END SURVEY type → Creating EndSurvey determinant");
+                        option.Next = NextQuestionDeterminant.End();
+                        _logger.LogInformation("       NEW Next: {Value}", option.Next);
+                    }
+                    else if (determinant.Type == Core.Enums.NextStepType.GoToQuestion)
+                    {
+                        var targetQuestionId = determinant.NextQuestionId!.Value;
+
+                        // Validate target question exists
+                        _logger.LogInformation("       🔍 Validating next question {NextId} exists...", targetQuestionId);
+                        var targetQuestion = await _questionRepository.GetByIdAsync(targetQuestionId);
+
+                        if (targetQuestion == null)
+                        {
+                            _logger.LogError("       ❌ Target question {TargetId} NOT FOUND", targetQuestionId);
+                            throw new QuestionNotFoundException(targetQuestionId);
+                        }
+
+                        _logger.LogInformation("       ✅ Target found: '{Text}' (ID: {TargetId})",
+                            targetQuestion.QuestionText, targetQuestion.Id);
+
+                        // Prevent self-reference
+                        if (targetQuestionId == id)
+                        {
+                            _logger.LogError("       ❌ SELF-REFERENCE detected!");
+                            throw new InvalidOperationException($"Option {optionId} cannot reference question {id}");
+                        }
+
+                        option.Next = NextQuestionDeterminant.ToQuestion(targetQuestionId);
+                        _logger.LogInformation("       ✅ NEW Next: {Value}", option.Next);
+                    }
+                }
+            }
+
+            _logger.LogInformation("───────────────────────────────────────────────────");
+            _logger.LogInformation("💾 Saving changes to database...");
+
+            try
+            {
+                await _questionRepository.UpdateAsync(question);
+                _logger.LogInformation("✅ Database update SUCCESSFUL");
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+            {
+                _logger.LogError(ex, "❌ DATABASE UPDATE FAILED");
+                _logger.LogError("   Question ID: {QuestionId}", question.Id);
+                _logger.LogError("   DefaultNext (entity value): {Value}", question.DefaultNext?.ToString() ?? "NULL");
+                _logger.LogError("   Inner Exception: {InnerException}", ex.InnerException?.Message);
+                throw;
+            }
+
+            _logger.LogInformation("═══════════════════════════════════════════════════");
+
+            return question;
+        }
+        catch (Exception ex) when (ex is not QuestionNotFoundException && ex is not InvalidOperationException)
+        {
+            // Log and re-throw unexpected exceptions
+            _logger.LogError(ex, "❌ Failed to update flow for question {QuestionId}: {ErrorMessage}", id, ex.Message);
+            throw;
+        }
     }
 
     #endregion

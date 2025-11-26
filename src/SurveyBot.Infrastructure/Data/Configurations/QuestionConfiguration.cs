@@ -106,6 +106,26 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
             .HasColumnType("timestamp with time zone")
             .IsRequired();
 
+        // NEW: Conditional flow configuration using Owned Type (Value Object)
+
+        // Configure DefaultNext as owned type (NextQuestionDeterminant value object)
+        builder.OwnsOne(q => q.DefaultNext, nb =>
+        {
+            // Type property: Maps NextStepType enum to string column
+            nb.Property(n => n.Type)
+                .HasColumnName("default_next_step_type")
+                .HasConversion<string>()  // Store enum as string ("GoToQuestion" or "EndSurvey")
+                .IsRequired();
+
+            // NextQuestionId property: Nullable int for the target question ID
+            nb.Property(n => n.NextQuestionId)
+                .HasColumnName("default_next_question_id")
+                .IsRequired(false);  // Nullable (null when Type = EndSurvey)
+        });
+
+        // SupportsBranching - computed property, not mapped to database
+        builder.Ignore(q => q.SupportsBranching);
+
         // Relationships
         builder.HasOne(q => q.Survey)
             .WithMany(s => s.Questions)
@@ -118,5 +138,12 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
             .HasForeignKey(a => a.QuestionId)
             .OnDelete(DeleteBehavior.Cascade)
             .HasConstraintName("fk_answers_question");
+
+        // Options relationship
+        builder.HasMany(q => q.Options)
+            .WithOne(o => o.Question)
+            .HasForeignKey(o => o.QuestionId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("fk_question_options_question");
     }
 }

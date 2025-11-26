@@ -49,7 +49,7 @@ public class ConversationStateManagerTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(TestUserId, result.UserId);
+        Assert.Equal(TestUserId, result.User.Id);
         Assert.Equal(ConversationStateType.Idle, result.CurrentState);
     }
 

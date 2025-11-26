@@ -61,6 +61,23 @@ public class ResponseConfiguration : IEntityTypeConfiguration<Response>
             .HasDatabaseName("idx_responses_submitted_at")
             .HasFilter("submitted_at IS NOT NULL");
 
+        // NEW: Conditional flow tracking
+
+        // VisitedQuestionIds - JSON array of visited question IDs for cycle prevention
+        builder.Property(r => r.VisitedQuestionIds)
+            .HasColumnName("visited_question_ids")
+            .HasColumnType("jsonb")
+            .IsRequired()
+            .HasDefaultValueSql("'[]'::jsonb")
+            .HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v => System.Text.Json.JsonSerializer.Deserialize<List<int>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new List<int>());
+
+        // GIN index for JSON querying
+        builder.HasIndex(r => r.VisitedQuestionIds)
+            .HasDatabaseName("idx_responses_visited_question_ids")
+            .HasMethod("gin");
+
         // Relationships
         builder.HasOne(r => r.Survey)
             .WithMany(s => s.Responses)

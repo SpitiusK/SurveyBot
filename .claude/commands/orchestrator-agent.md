@@ -76,6 +76,8 @@ WHILE tasks_remaining:
 | Database migrations | ❌ NO | Sequential by nature |
 | API + Frontend | ✅ YES | Separate codebases |
 | Feature + Its tests | ✅ YES | Testing completed work |
+| Unit tests + Frontend verification | ✅ YES | Independent validation approaches |
+| Frontend implementation + Verification prep | ✅ YES | Can prepare verification while implementing |
 
 ### Execution Patterns
 
@@ -88,8 +90,8 @@ Finally: Integration + Testing (all parallel streams)
 
 #### Pattern 2: Feature Pipeline
 ```
-Feature X: Database → API → Bot/UI → Test
-Feature Y: Database → API → Bot/UI → Test
+Feature X: Database → API → Bot/UI → Test + Frontend Verification (parallel)
+Feature Y: Database → API → Bot/UI → Test + Frontend Verification (parallel)
 (Run Feature X and Y in parallel)
 ```
 
@@ -98,7 +100,17 @@ Feature Y: Database → API → Bot/UI → Test
 Layer 1: All database tasks (sequential within layer)
 Layer 2: All API tasks (parallel where possible)
 Layer 3: All UI + Bot tasks (fully parallel)
-Layer 4: All testing (parallel per component)
+Layer 4: All testing + Frontend verification (parallel per component)
+```
+
+#### Pattern 4: Verification Pipeline
+```
+Implementation Complete →
+  Parallel Execution:
+    - @dotnet-testing-agent: Unit/Integration tests
+    - @frontend-story-verifier: User story verification
+  →
+  Both must pass before marking complete
 ```
 
 ## Task States
@@ -196,6 +208,7 @@ All streams execute independently
 
 ### Testing & Quality
 - **@dotnet-testing-agent**: Writes xUnit tests with Moq mocking and EF Core in-memory database
+- **@frontend-story-verifier**: Verifies user-facing functionality works end-to-end from user perspective (MANDATORY for UI/UX changes)
 
 ### Environment & Setup
 - **@dotnet-environment-setup-agent**: Configures .NET 8.0 development environment, dependencies, project structure
@@ -235,6 +248,35 @@ auto_execute:
     - Unit tests for services with Moq
     - Integration tests for API endpoints
     - Validation tests for DTOs
+
+auto_execute_parallel:
+  agent: "frontend-story-verifier"
+  condition: "if change affects user-facing functionality"
+  tasks:
+    - Verify user story for API consumption
+    - Test complete user workflow end-to-end
+    - Validate UI/UX behavior matches requirements
+```
+
+### Frontend Verification Handoff (MANDATORY)
+When user-facing changes complete, trigger frontend verification:
+```yaml
+frontend_verification_triggers:
+  - api_endpoint_created_or_modified
+  - database_schema_changed_affecting_ui
+  - bot_command_modified
+  - frontend_component_implemented
+  - bug_fix_affecting_ui_behavior
+
+verification_workflow:
+  1. Complete backend/API/bot implementation
+  2. Run @dotnet-testing-agent for unit/integration tests
+  3. MANDATORY: Run @frontend-story-verifier with user story
+  4. If verification fails:
+     - Identify issue (API, frontend, bot, database)
+     - Coordinate fix with appropriate agent
+     - Re-verify until passing
+  5. Mark task complete only when both tests AND verification pass
 ```
 
 ## Execution Decision Logic
@@ -256,6 +298,14 @@ IF blocker detected:
   3. Assign resolution to @codebase-analyzer for diagnosis
   4. Assign fix to most qualified agent
   5. Resume upon resolution
+
+IF frontend verification fails:
+  1. Treat as blocker for task completion
+  2. Identify failure type (API, frontend, bot, database)
+  3. Coordinate fix with appropriate agent
+  4. Re-run @frontend-story-verifier after fix
+  5. Continue parallel work on unrelated tasks
+  6. Mark task complete only when verification passes
 ```
 
 ## Task Queue Management
@@ -313,6 +363,8 @@ def get_agent_for_task(task):
         return "frontend-admin-agent"
     elif task.involves_testing:
         return "dotnet-testing-agent"
+    elif task.involves_frontend_verification:
+        return "frontend-story-verifier"
     elif task.involves_environment:
         return "dotnet-environment-setup-agent"
     elif task.involves_analysis:
@@ -326,15 +378,18 @@ When task completes:
 1. Mark task as complete
 2. Check if testing needed
 3. If yes: Create test task for @dotnet-testing-agent
-4. Identify newly ready tasks
-5. Execute ready tasks immediately
+4. Check if frontend verification needed (MANDATORY for user-facing changes)
+5. If yes: Create verification task for @frontend-story-verifier (can run parallel with unit tests)
+6. Identify newly ready tasks
+7. Execute ready tasks immediately
 
 ### Integration Points
 Critical handoffs that require coordination:
 - **Database → API**: Schema and entities must exist before API endpoints (@ef-core-agent → @aspnet-api-agent)
 - **API → Bot/Frontend**: Endpoints must be ready (@aspnet-api-agent → @telegram-bot-handler-agent / @frontend-admin-agent)
 - **Features → Testing**: Code complete triggers tests (any agent → @dotnet-testing-agent)
-- **All → Deployment**: Everything tested and ready
+- **User-Facing Changes → Frontend Verification**: MANDATORY verification (any agent → @frontend-story-verifier)
+- **All → Deployment**: Everything tested, verified, and ready
 
 ## Execution Optimization
 
@@ -429,13 +484,20 @@ SEQUENTIAL CHAIN:
 Each task triggers next upon completion
 ```
 
-### Integration Execution
+### Integration Execution with Verification
 ```
 INTEGRATION REQUIRED:
-@aspnet-api-agent: Complete API endpoints
-@telegram-bot-handler-agent + @frontend-admin-agent: Begin integration
+Step 1: @aspnet-api-agent: Complete API endpoints
+Step 2 (Parallel):
+- @telegram-bot-handler-agent: Integrate with API
+- @frontend-admin-agent: Integrate with API
 Both can use API simultaneously
-@dotnet-testing-agent: Test integrations as completed
+Step 3 (Parallel - MANDATORY):
+- @dotnet-testing-agent: Test integrations (unit + integration tests)
+- @frontend-story-verifier: Verify end-to-end user workflows
+  For bot integration: Test complete bot survey flow
+  For frontend integration: Test complete admin panel workflows
+Step 4: Mark complete only when all verification passes
 ```
 
 ## Execution Examples
@@ -464,7 +526,12 @@ Step 2 (Parallel):
 - @aspnet-api-agent: Survey API endpoints (4h)
 - @frontend-admin-agent: Survey form UI (4h)
 Step 3: @telegram-bot-handler-agent: Survey bot commands (3h)
-Step 4: @dotnet-testing-agent: Feature tests with xUnit (2h)
+Step 4 (Parallel - MANDATORY):
+- @dotnet-testing-agent: Feature tests with xUnit (2h)
+- @frontend-story-verifier: Verify survey creation workflow (1h)
+  User Story: "As an admin, I want to create surveys so I can collect responses"
+  Test: Login → Create survey → Add questions → Activate → Verify in list
+Step 5: Only mark complete when both testing AND verification pass
 ```
 
 ### Example 3: Critical Path Execution
@@ -491,7 +558,7 @@ DEBUGGING EXECUTION:
 3. @dotnet-testing-agent: Verify fixes (1h)
 ```
 
-### Example 5: Full Feature Stack
+### Example 5: Full Feature Stack with Frontend Verification
 ```
 COMPLETE FEATURE - Survey Sharing:
 Phase 1: Design & Schema
@@ -506,9 +573,17 @@ Phase 3: Client Implementation (Parallel)
 - @telegram-bot-handler-agent: Sharing commands (2h)
 - @frontend-admin-agent: Sharing UI components (3h)
 
-Phase 4: Testing & Integration
+Phase 4: Testing & Verification (Parallel - MANDATORY)
 - @dotnet-testing-agent: All layers testing (2h)
+- @frontend-story-verifier: Verify sharing workflow (1.5h)
+  User Story: "As an admin, I want to share surveys via code so users can access them"
+  Test: Create survey → Activate → Copy share code → Share with user → User accesses via code → Verify response collection
 - @codebase-analyzer: Final code quality check (1h)
+
+Phase 5: Completion Gate
+- Verify all tests pass
+- Verify frontend verification passes
+- Only then mark feature complete
 ```
 
 ## Blocker Handling

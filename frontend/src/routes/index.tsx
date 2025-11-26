@@ -13,6 +13,7 @@ import SurveyList from '@/pages/SurveyList';
 import SurveyBuilder from '@/pages/SurveyBuilder';
 import SurveyEdit from '@/pages/SurveyEdit';
 import SurveyStatistics from '@/pages/SurveyStatistics';
+import SurveyFlowConfiguration from '@/pages/SurveyFlowConfiguration';
 import NotFound from '@/pages/NotFound';
 
 // Public route wrapper (redirects to dashboard if already authenticated)
@@ -87,6 +88,10 @@ export const router = createBrowserRouter([
               {
                 path: ':id/statistics',
                 element: <SurveyStatistics />,
+              },
+              {
+                path: ':id/flow',
+                element: <SurveyFlowConfiguration />,
               },
             ],
           },

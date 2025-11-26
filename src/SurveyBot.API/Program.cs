@@ -9,8 +9,8 @@ using SurveyBot.API.Extensions;
 using SurveyBot.Bot.Extensions;
 using SurveyBot.Core.Configuration;
 using SurveyBot.Core.Interfaces;
+using SurveyBot.Infrastructure;
 using SurveyBot.Infrastructure.Data;
-using SurveyBot.Infrastructure.Repositories;
 using SurveyBot.Infrastructure.Services;
 
 // Configure Serilog early
@@ -157,22 +157,11 @@ try
     // Add Authorization
     builder.Services.AddAuthorization();
 
-    // Register Repository Implementations (Scoped)
-    builder.Services.AddScoped<ISurveyRepository, SurveyRepository>();
-    builder.Services.AddScoped<IQuestionRepository, QuestionRepository>();
-    builder.Services.AddScoped<IResponseRepository, ResponseRepository>();
-    builder.Services.AddScoped<IUserRepository, UserRepository>();
-    builder.Services.AddScoped<IAnswerRepository, AnswerRepository>();
+    // Register Infrastructure layer services (includes repositories and services)
+    // MUST be registered BEFORE bot handlers because handlers depend on infrastructure services
+    builder.Services.AddInfrastructure(builder.Configuration);
 
-    // Register Service Implementations (Scoped)
-    builder.Services.AddScoped<IAuthService, AuthService>();
-    builder.Services.AddScoped<ISurveyService, SurveyService>();
-    builder.Services.AddScoped<IQuestionService, QuestionService>();
-    builder.Services.AddScoped<IResponseService, ResponseService>();
-    builder.Services.AddScoped<IUserService, UserService>();
-
-    // Register Media Services
-    builder.Services.AddScoped<IMediaValidationService, MediaValidationService>();
+    // Register Media Storage Service (requires IWebHostEnvironment from ASP.NET Core)
     builder.Services.AddScoped<IMediaStorageService>(sp =>
     {
         var env = sp.GetRequiredService<IWebHostEnvironment>();
@@ -259,7 +248,7 @@ try
         return new FileSystemMediaStorageService(webRootPath, logger, validationService);
     });
 
-    // Register Telegram Bot Services
+    // Register Telegram Bot Services (AFTER infrastructure because it has handlers that depend on infrastructure)
     builder.Services.AddTelegramBot(builder.Configuration);
     builder.Services.AddBotHandlers();
 

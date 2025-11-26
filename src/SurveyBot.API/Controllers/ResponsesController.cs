@@ -21,6 +21,7 @@ public class ResponsesController : ControllerBase
 {
     private readonly IResponseService _responseService;
     private readonly ISurveyRepository _surveyRepository;
+    private readonly IQuestionService _questionService;
     private readonly ILogger<ResponsesController> _logger;
 
     /// <summary>
@@ -32,10 +33,12 @@ public class ResponsesController : ControllerBase
     public ResponsesController(
         IResponseService responseService,
         ISurveyRepository surveyRepository,
+        IQuestionService questionService,
         ILogger<ResponsesController> logger)
     {
         _responseService = responseService;
         _surveyRepository = surveyRepository;
+        _questionService = questionService;
         _logger = logger;
     }
 
@@ -469,6 +472,81 @@ public class ResponsesController : ControllerBase
             {
                 Success = false,
                 Message = "An error occurred while completing the response"
+            });
+        }
+    }
+
+    /// <summary>
+    /// Gets the next question in the survey flow for a response.
+    /// </summary>
+    /// <param name="id">Response ID.</param>
+    /// <returns>Next question to be answered, or 204 No Content if survey is complete.</returns>
+    /// <response code="200">Next question retrieved successfully.</response>
+    /// <response code="204">No more questions - survey is complete.</response>
+    /// <response code="404">Response or next question not found.</response>
+    [HttpGet("responses/{id}/next-question")]
+    [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Get next question",
+        Description = "Returns the next question to show in the survey flow based on previous answers and conditional flow logic. Returns 204 No Content if survey is complete. Public endpoint used by the Telegram bot.",
+        Tags = new[] { "Responses" }
+    )]
+    [ProducesResponseType(typeof(ApiResponse<Core.DTOs.Question.QuestionDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<Core.DTOs.Question.QuestionDto>>> GetNextQuestion(int id)
+    {
+        try
+        {
+            _logger.LogInformation("Getting next question for response {ResponseId}", id);
+
+            // Get response
+            var response = await _responseService.GetResponseAsync(id);
+            if (response == null)
+            {
+                _logger.LogWarning("Response {ResponseId} not found", id);
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = $"Response with ID {id} not found"
+                });
+            }
+
+            // Get next question ID
+            var nextQuestionId = await _responseService.GetNextQuestionAsync(id);
+
+            if (nextQuestionId == null)
+            {
+                // Survey complete - return 204 No Content
+                _logger.LogInformation("No more questions for response {ResponseId} - survey complete", id);
+                return NoContent();
+            }
+
+            // Get the question DTO
+            var questionDto = await _questionService.GetQuestionAsync(nextQuestionId.Value);
+
+            _logger.LogInformation(
+                "Retrieved next question {QuestionId} for response {ResponseId}",
+                nextQuestionId, id);
+
+            return Ok(ApiResponse<Core.DTOs.Question.QuestionDto>.Ok(questionDto, "Next question retrieved successfully"));
+        }
+        catch (ResponseNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Response {ResponseId} not found", id);
+            return NotFound(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting next question for response {ResponseId}", id);
+            return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "An error occurred while retrieving the next question"
             });
         }
     }

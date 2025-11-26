@@ -41,6 +41,21 @@ public class Answer
     [Required]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    // NEW: Conditional flow navigation
+
+    /// <summary>
+    /// Gets or sets the ID of the next question to show after this answer.
+    /// Set to 0 (special value) to end the survey.
+    /// Never null - always has a value.
+    /// </summary>
+    public int NextQuestionId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the navigation property to the next question.
+    /// Null when NextQuestionId equals 0 (end of survey marker).
+    /// </summary>
+    public Question? NextQuestion { get; set; }
+
     // Navigation properties
 
     /// <summary>

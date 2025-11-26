@@ -72,6 +72,18 @@ public class AnswerConfiguration : IEntityTypeConfiguration<Answer>
             .IsRequired()
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+        // NEW: Conditional flow configuration
+
+        // NextQuestionId - required, default 0 (end of survey marker)
+        // Note: 0 is a special value meaning "end of survey", not a FK to questions
+        builder.Property(a => a.NextQuestionId)
+            .HasColumnName("next_question_id")
+            .IsRequired()
+            .HasDefaultValue(0);
+
+        builder.HasIndex(a => a.NextQuestionId)
+            .HasDatabaseName("idx_answers_next_question_id");
+
         // Relationships
         builder.HasOne(a => a.Response)
             .WithMany(r => r.Answers)
@@ -84,5 +96,9 @@ public class AnswerConfiguration : IEntityTypeConfiguration<Answer>
             .HasForeignKey(a => a.QuestionId)
             .OnDelete(DeleteBehavior.Cascade)
             .HasConstraintName("fk_answers_question");
+
+        // NextQuestion relationship - NO FK constraint (0 is valid end-of-survey marker)
+        // Navigation property for convenience, but no database constraint
+        builder.Ignore(a => a.NextQuestion);
     }
 }

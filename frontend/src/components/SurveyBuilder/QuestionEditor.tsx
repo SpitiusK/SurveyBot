@@ -15,7 +15,11 @@ import {
   Box,
   Typography,
   Alert,
+  AlertTitle,
   Divider,
+  Select,
+  MenuItem,
+  CircularProgress,
 } from '@mui/material';
 import {
   TextFields as TextIcon,
@@ -41,6 +45,7 @@ interface QuestionEditorProps {
   onSave: (question: QuestionDraft) => void;
   question?: QuestionDraft | null; // For editing existing question
   orderIndex: number; // For new questions
+  allQuestions: QuestionDraft[]; // All questions in the survey
 }
 
 const QuestionEditor: React.FC<QuestionEditorProps> = ({
@@ -49,9 +54,11 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
   onSave,
   question,
   orderIndex,
+  allQuestions,
 }) => {
   const isEditMode = !!question;
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [mediaContent, setMediaContent] = useState<MediaContentDto | undefined>(
     question?.mediaContent || undefined
   );
@@ -62,20 +69,53 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
     watch,
     setValue,
     reset,
-    formState: { errors, isDirty },
+    formState: { errors, isDirty, isValid },
   } = useForm({
     resolver: zodResolver(questionEditorFormSchema),
+    mode: 'onChange', // Enable real-time validation
     defaultValues: {
       questionText: question?.questionText || '',
       questionType: question?.questionType ?? QuestionType.Text,
       isRequired: question?.isRequired ?? true,
       options: question?.options || [],
+      defaultNextQuestionId: question?.defaultNextQuestionId || null,
+      optionNextQuestions: question?.optionNextQuestions || {},
     },
   });
+
+  // Helper function to strip HTML tags and get actual text content
+  const stripHtml = (html: string): string => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return (tmp.textContent || tmp.innerText || '').trim();
+  };
 
   const questionType = watch('questionType');
   const questionText = watch('questionText');
   const options = watch('options');
+
+  // Debug logging for form state
+  useEffect(() => {
+    if (open) {
+      const optionNextQuestions = watch('optionNextQuestions');
+      console.log('Form validation state:', {
+        isValid,
+        isDirty,
+        isSubmitting,
+        errorCount: Object.keys(errors).length,
+        errors,
+        questionTextLength: questionText?.length || 0,
+        actualTextLength: stripHtml(questionText || '').length,
+        optionNextQuestions: {
+          value: optionNextQuestions,
+          type: typeof optionNextQuestions,
+          isEmptyObject: optionNextQuestions &&
+            typeof optionNextQuestions === 'object' &&
+            Object.keys(optionNextQuestions).length === 0,
+        },
+      });
+    }
+  }, [errors, isValid, isDirty, isSubmitting, questionText, open, watch]);
 
   useEffect(() => {
     setHasUnsavedChanges(isDirty);
@@ -88,6 +128,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         questionType: question.questionType,
         isRequired: question.isRequired,
         options: question.options,
+        defaultNextQuestionId: question.defaultNextQuestionId || null,
+        optionNextQuestions: question.optionNextQuestions || {},
       });
       setMediaContent(question.mediaContent || undefined);
     } else if (open && !question) {
@@ -96,6 +138,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         questionType: QuestionType.Text,
         isRequired: true,
         options: [],
+        defaultNextQuestionId: null,
+        optionNextQuestions: {},
       });
       setMediaContent(undefined);
     }
@@ -145,24 +189,49 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
     setHasUnsavedChanges(true);
   };
 
-  const onSubmit = (data: any) => {
-    const questionDraft: QuestionDraft = {
-      id: question?.id || crypto.randomUUID(),
-      questionText: data.questionText,
-      questionType: data.questionType,
-      isRequired: data.isRequired ?? true,
-      options:
-        data.questionType === QuestionType.SingleChoice ||
-        data.questionType === QuestionType.MultipleChoice
-          ? data.options || []
-          : [],
-      orderIndex: question?.orderIndex ?? orderIndex,
-      mediaContent: mediaContent || null,
-    };
+  const onSubmit = async (data: any) => {
+    console.log('Form submitted with data:', data);
+    console.log('Current validation errors:', errors);
 
-    onSave(questionDraft);
-    setHasUnsavedChanges(false);
-    onClose();
+    try {
+      setIsSubmitting(true);
+
+      // Validate that question text has actual content (not just HTML tags)
+      const actualText = stripHtml(data.questionText || '');
+      if (actualText.length < 5) {
+        console.error('Question text validation failed: actual text too short', {
+          html: data.questionText,
+          actualText,
+          actualLength: actualText.length,
+        });
+        return; // Validation will show error
+      }
+
+      const questionDraft: QuestionDraft = {
+        id: question?.id || crypto.randomUUID(),
+        questionText: data.questionText,
+        questionType: data.questionType,
+        isRequired: data.isRequired ?? true,
+        options:
+          data.questionType === QuestionType.SingleChoice ||
+          data.questionType === QuestionType.MultipleChoice
+            ? data.options || []
+            : [],
+        orderIndex: question?.orderIndex ?? orderIndex,
+        mediaContent: mediaContent || null,
+        defaultNextQuestionId: data.defaultNextQuestionId || null,
+        optionNextQuestions: data.optionNextQuestions || {},
+      };
+
+      console.log('Saving question draft:', questionDraft);
+      onSave(questionDraft);
+      setHasUnsavedChanges(false);
+      onClose();
+    } catch (error) {
+      console.error('Error saving question:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleQuestionTypeChange = (newType: QuestionType) => {
@@ -178,6 +247,22 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
       }
     } else {
       setValue('options', [], { shouldDirty: true });
+    }
+
+    // Clear conditional flow fields for question types that don't use option-based flow
+    if (newType === QuestionType.Text || newType === QuestionType.MultipleChoice) {
+      // Text and MultipleChoice only use defaultNextQuestionId
+      setValue('optionNextQuestions', {}, { shouldDirty: true });
+    } else if (newType === QuestionType.SingleChoice) {
+      // SingleChoice uses optionNextQuestions
+      // Keep existing or initialize to empty object
+      const currentValue = watch('optionNextQuestions');
+      if (!currentValue || typeof currentValue !== 'object') {
+        setValue('optionNextQuestions', {}, { shouldDirty: true });
+      }
+    } else if (newType === QuestionType.Rating) {
+      // Rating uses defaultNextQuestionId
+      setValue('optionNextQuestions', {}, { shouldDirty: true });
     }
   };
 
@@ -211,6 +296,14 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
     questionType === QuestionType.SingleChoice ||
     questionType === QuestionType.MultipleChoice;
 
+  // Get list of questions that can be selected as "next question"
+  // Exclude current question to prevent self-reference
+  const getAvailableNextQuestions = (): QuestionDraft[] => {
+    return allQuestions.filter(q => q.id !== question?.id);
+  };
+
+  const availableQuestions = getAvailableNextQuestions();
+
   return (
     <Dialog
       open={open}
@@ -225,6 +318,55 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
       <form onSubmit={handleSubmit(onSubmit)}>
         <DialogContent dividers>
           <Stack spacing={3}>
+            {/* Validation Error Display */}
+            {Object.keys(errors).length > 0 && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                <AlertTitle>Please fix the following errors:</AlertTitle>
+                <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                  {errors.questionText && (
+                    <li>
+                      <strong>Question Text:</strong> {errors.questionText.message}
+                    </li>
+                  )}
+                  {errors.options && (
+                    <li>
+                      <strong>Options:</strong>{' '}
+                      {typeof errors.options === 'object' && 'message' in errors.options
+                        ? errors.options.message
+                        : 'Invalid options configuration'}
+                    </li>
+                  )}
+                  {errors.questionType && (
+                    <li>
+                      <strong>Question Type:</strong> {errors.questionType.message}
+                    </li>
+                  )}
+                  {Object.entries(errors).map(([field, error]) => {
+                    // Skip already displayed errors
+                    if (['questionText', 'options', 'questionType'].includes(field)) {
+                      return null;
+                    }
+
+                    // Provide better field names for display
+                    const fieldDisplayName = field === 'optionNextQuestions'
+                      ? 'Conditional Flow'
+                      : field === 'defaultNextQuestionId'
+                      ? 'Next Question'
+                      : field;
+
+                    return (
+                      <li key={field}>
+                        <strong>{fieldDisplayName}:</strong>{' '}
+                        {error && typeof error === 'object' && 'message' in error
+                          ? String(error.message)
+                          : 'Invalid value'}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Alert>
+            )}
+
             {/* Question Type Selector */}
             <FormControl component="fieldset">
               <FormLabel component="legend">Question Type</FormLabel>
@@ -303,41 +445,60 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
               <Controller
                 name="questionText"
                 control={control}
-                render={({ field }) => (
-                  <Box>
-                    <RichTextEditor
-                      value={field.value}
-                      onChange={(content, media) => {
-                        field.onChange(content);
-                        setMediaContent(media);
-                        setHasUnsavedChanges(true);
-                      }}
-                      placeholder="Enter your question with optional media..."
-                      mediaType="image"
-                      acceptedTypes={['image', 'video', 'audio', 'document', 'archive']}
-                      initialMedia={mediaContent?.items || []}
-                      readOnly={false}
-                    />
-                    {errors.questionText && (
-                      <Typography
-                        variant="caption"
-                        color="error"
-                        sx={{ mt: 1, display: 'block' }}
-                      >
-                        {errors.questionText.message}
-                      </Typography>
-                    )}
-                    {!errors.questionText && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ mt: 1, display: 'block' }}
-                      >
-                        {questionText.length}/500 characters
-                      </Typography>
-                    )}
-                  </Box>
-                )}
+                render={({ field }) => {
+                  const actualTextLength = stripHtml(field.value || '').length;
+                  const hasError = !!errors.questionText || (field.value && actualTextLength < 5);
+
+                  return (
+                    <Box>
+                      <RichTextEditor
+                        value={field.value}
+                        onChange={(content, media) => {
+                          console.log('RichTextEditor onChange:', {
+                            html: content,
+                            actualText: stripHtml(content),
+                            actualLength: stripHtml(content).length,
+                          });
+                          field.onChange(content);
+                          setMediaContent(media);
+                          setHasUnsavedChanges(true);
+                        }}
+                        placeholder="Enter your question with optional media..."
+                        mediaType="image"
+                        acceptedTypes={['image', 'video', 'audio', 'document', 'archive']}
+                        initialMedia={mediaContent?.items || []}
+                        readOnly={false}
+                      />
+                      {errors.questionText && (
+                        <Typography
+                          variant="caption"
+                          color="error"
+                          sx={{ mt: 1, display: 'block' }}
+                        >
+                          {errors.questionText.message}
+                        </Typography>
+                      )}
+                      {!errors.questionText && actualTextLength > 0 && actualTextLength < 5 && (
+                        <Typography
+                          variant="caption"
+                          color="error"
+                          sx={{ mt: 1, display: 'block' }}
+                        >
+                          Question text must be at least 5 characters (currently {actualTextLength})
+                        </Typography>
+                      )}
+                      {!hasError && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ mt: 1, display: 'block' }}
+                        >
+                          {actualTextLength}/500 characters (actual text content)
+                        </Typography>
+                      )}
+                    </Box>
+                  );
+                }}
               />
             </Box>
 
@@ -394,6 +555,155 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
               </>
             )}
 
+            {/* Conditional Flow Configuration for SingleChoice and Rating */}
+            {(questionType === QuestionType.SingleChoice || questionType === QuestionType.Rating) && (
+              <>
+                <Divider />
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    Conditional Flow
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Configure which question to show next based on the respondent's answer.
+                  </Typography>
+
+                  {questionType === QuestionType.SingleChoice && options && options.length > 0 ? (
+                    <Stack spacing={2} sx={{ mt: 2 }}>
+                      {options.map((option, index) => {
+                        // Create a safe field name for the nested field
+                        const fieldName = `optionNextQuestions.${index}` as const;
+
+                        return (
+                          <FormControl key={index} fullWidth>
+                            <FormLabel sx={{ mb: 0.5, fontSize: '0.875rem' }}>
+                              Next question after "{option || `Option ${index + 1}`}"
+                            </FormLabel>
+                            <Controller
+                              name={fieldName}
+                              control={control}
+                              render={({ field }) => (
+                                <Select
+                                  {...field}
+                                  value={field.value || ''}
+                                  onChange={(e) => field.onChange(e.target.value || null)}
+                                  displayEmpty
+                                >
+                                  <MenuItem value="">
+                                    <em>End Survey</em>
+                                  </MenuItem>
+                                  {availableQuestions.map((q) => (
+                                    <MenuItem key={q.id} value={q.id}>
+                                      Q{q.orderIndex + 1}: {q.questionText.replace(/<[^>]*>/g, '').substring(0, 50)}
+                                      {q.questionText.length > 50 ? '...' : ''}
+                                    </MenuItem>
+                                  ))}
+                                  {availableQuestions.length === 0 && (
+                                    <MenuItem disabled>
+                                      <em>No other questions available</em>
+                                    </MenuItem>
+                                  )}
+                                </Select>
+                              )}
+                            />
+                          </FormControl>
+                        );
+                      })}
+                    </Stack>
+                  ) : questionType === QuestionType.Rating ? (
+                    <FormControl fullWidth sx={{ mt: 2 }}>
+                      <FormLabel sx={{ mb: 0.5, fontSize: '0.875rem' }}>
+                        Next question after any rating
+                      </FormLabel>
+                      <Controller
+                        name="defaultNextQuestionId"
+                        control={control}
+                        render={({ field }) => (
+                          <Select
+                            {...field}
+                            value={field.value || ''}
+                            onChange={(e) => field.onChange(e.target.value || null)}
+                            displayEmpty
+                          >
+                            <MenuItem value="">
+                              <em>End Survey</em>
+                            </MenuItem>
+                            {availableQuestions.map((q) => (
+                              <MenuItem key={q.id} value={q.id}>
+                                Q{q.orderIndex + 1}: {q.questionText.replace(/<[^>]*>/g, '').substring(0, 50)}
+                                {q.questionText.length > 50 ? '...' : ''}
+                              </MenuItem>
+                            ))}
+                            {availableQuestions.length === 0 && (
+                              <MenuItem disabled>
+                                <em>No other questions available</em>
+                              </MenuItem>
+                            )}
+                          </Select>
+                        )}
+                      />
+                    </FormControl>
+                  ) : null}
+
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    <Typography variant="caption">
+                      <strong>Conditional Flow:</strong> Select "End Survey" to complete the survey after this question, or choose the next question to continue the flow.
+                      At least one option must lead to "End Survey" for the survey to be valid.
+                    </Typography>
+                  </Alert>
+                </Box>
+              </>
+            )}
+
+            {/* Conditional Flow for Text and MultipleChoice */}
+            {(questionType === QuestionType.Text || questionType === QuestionType.MultipleChoice) && (
+              <>
+                <Divider />
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    Next Question
+                  </Typography>
+                  <FormControl fullWidth>
+                    <FormLabel sx={{ mb: 0.5, fontSize: '0.875rem' }}>
+                      Which question should appear next?
+                    </FormLabel>
+                    <Controller
+                      name="defaultNextQuestionId"
+                      control={control}
+                      render={({ field }) => (
+                        <Select
+                          {...field}
+                          value={field.value || ''}
+                          onChange={(e) => field.onChange(e.target.value || null)}
+                          displayEmpty
+                        >
+                          <MenuItem value="">
+                            <em>End Survey</em>
+                          </MenuItem>
+                          {availableQuestions.map((q) => (
+                            <MenuItem key={q.id} value={q.id}>
+                              Q{q.orderIndex + 1}: {q.questionText.replace(/<[^>]*>/g, '').substring(0, 50)}
+                              {q.questionText.length > 50 ? '...' : ''}
+                            </MenuItem>
+                          ))}
+                          {availableQuestions.length === 0 && (
+                            <MenuItem disabled>
+                              <em>No other questions available</em>
+                            </MenuItem>
+                          )}
+                        </Select>
+                      )}
+                    />
+                  </FormControl>
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    <Typography variant="caption">
+                      <strong>Linear Flow:</strong> All answers to this question will navigate to the selected question or end the survey.
+                      Select "End Survey" if this is the last question in your survey.
+                    </Typography>
+                  </Alert>
+                </Box>
+              </>
+            )}
+
             {/* Rating Info */}
             {questionType === QuestionType.Rating && (
               <Alert severity="info">
@@ -405,11 +715,21 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         </DialogContent>
 
         <DialogActions>
-          <Button onClick={handleClose} color="inherit">
+          <Button onClick={handleClose} color="inherit" disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" color="primary">
-            {isEditMode ? 'Update Question' : 'Add Question'}
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            disabled={isSubmitting || Object.keys(errors).length > 0}
+            startIcon={isSubmitting ? <CircularProgress size={20} /> : null}
+          >
+            {isSubmitting
+              ? 'Saving...'
+              : isEditMode
+              ? 'Update Question'
+              : 'Add Question'}
           </Button>
         </DialogActions>
       </form>

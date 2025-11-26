@@ -4,6 +4,7 @@ using SurveyBot.Bot.Handlers.Commands;
 using SurveyBot.Bot.Handlers.Questions;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
+using SurveyBot.Bot.Utilities;
 using SurveyBot.Bot.Validators;
 using System.Net.Http;
 
@@ -23,6 +24,17 @@ public static class BotServiceExtensions
     {
         // Register HttpClient for handlers that need it
         services.AddScoped<HttpClient>();
+
+        // Register named HttpClient for SurveyNavigationHelper with bot configuration
+        services.AddHttpClient("SurveyBotApi", (sp, client) =>
+        {
+            var config = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Configuration.BotConfiguration>>().Value;
+            client.BaseAddress = new Uri(config.ApiBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(config.RequestTimeout);
+        });
+
+        // Register SurveyNavigationHelper (for conditional question flows)
+        services.AddScoped<SurveyNavigationHelper>();
 
         // Register QuestionMediaHelper (needed by all question handlers)
         services.AddScoped<QuestionMediaHelper>();

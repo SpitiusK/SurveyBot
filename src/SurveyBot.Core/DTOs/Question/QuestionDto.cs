@@ -39,10 +39,18 @@ public class QuestionDto
     public bool IsRequired { get; set; }
 
     /// <summary>
-    /// Gets or sets the options for choice-based questions.
+    /// Gets or sets the options for choice-based questions (legacy format).
     /// Null for text and rating questions.
+    /// For questions with conditional flow, use OptionDetails instead.
     /// </summary>
     public List<string>? Options { get; set; }
+
+    /// <summary>
+    /// Gets or sets the detailed option information for choice-based questions.
+    /// Includes option IDs and conditional flow configuration.
+    /// Populated for questions with QuestionOption entities.
+    /// </summary>
+    public List<QuestionOptionDto>? OptionDetails { get; set; }
 
     /// <summary>
     /// Gets or sets the media content associated with this question.
@@ -50,6 +58,22 @@ public class QuestionDto
     /// Null if no media is attached or if the question was created before multimedia support.
     /// </summary>
     public MediaContentDto? MediaContent { get; set; }
+
+    // NEW: Conditional flow configuration
+
+    /// <summary>
+    /// Gets or sets the default navigation behavior for non-branching questions.
+    /// For Text and MultipleChoice questions, all answers navigate according to this determinant.
+    /// Null means sequential flow (next question by OrderIndex).
+    /// For branching questions (SingleChoice, Rating), this is ignored as navigation is per-option.
+    /// </summary>
+    public NextQuestionDeterminantDto? DefaultNext { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this question type supports conditional branching.
+    /// True for SingleChoice and Rating questions.
+    /// </summary>
+    public bool SupportsBranching { get; set; }
 
     /// <summary>
     /// Gets or sets the timestamp when the question was created.

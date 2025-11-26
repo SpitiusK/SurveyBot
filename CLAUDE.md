@@ -1,6 +1,6 @@
 # SurveyBot - Project Documentation
 
-**Version**: 1.3.0 | **Framework**: .NET 8.0 | **Status**: Active Development
+**Version**: 1.4.1 | **Framework**: .NET 8.0 | **Status**: Active Development
 
 ---
 
@@ -20,13 +20,15 @@
 **SurveyBot** is a comprehensive Telegram-based survey management system built with .NET 8.0 following Clean Architecture principles. Users create surveys via Telegram bot or web interface, distribute with shareable codes, collect responses, and analyze results.
 
 ### Key Features
-- Telegram Bot Interface - Create and take surveys
-- REST API - Full-featured programmatic access
-- Survey Code Sharing - 6-character alphanumeric codes
-- Multimedia Support - Images, videos, audio, documents in questions
-- Real-time Analytics - Statistics, charts, CSV export
-- JWT Authentication - Secure token-based auth
-- Clean Architecture - Maintainable, testable, scalable
+- **Conditional Question Flow** - Dynamic branching with cycle detection and validation (v1.4.0)
+- **Telegram Bot Interface** - Create and take surveys with conditional navigation
+- **REST API** - Full-featured programmatic access with flow configuration
+- **Survey Code Sharing** - 6-character alphanumeric codes (Base36)
+- **Multimedia Support** - Images (JPG, PNG), videos (MP4), audio (MP3, OGG), documents (PDF)
+- **Real-time Analytics** - Statistics, charts, CSV export
+- **JWT Authentication** - Secure token-based auth
+- **Value Object Pattern** - Type-safe domain modeling with DDD principles (v1.4.0)
+- **Clean Architecture** - Maintainable, testable, scalable with zero-dependency core
 
 ### Technology Stack
 - .NET 8.0, ASP.NET Core Web API
@@ -96,56 +98,113 @@ dotnet run
 
 ```
 ┌─────────────────────────────────────────────┐
-│           SurveyBot.API                     │
-│   (REST API, Controllers, Middleware)       │
+│           SurveyBot.API (v1.4.0)            │
+│   REST API, 10 Controllers, Middleware      │
+│   NEW: QuestionFlowController               │
 └───────────────┬─────────────────────────────┘
                 │ depends on
                 ▼
 ┌─────────────────────────────────────────────┐
-│       SurveyBot.Infrastructure              │
-│  (Database, Repositories, Services)         │
+│   SurveyBot.Infrastructure (v1.4.1)         │
+│   Database, Repositories, Services          │
+│   NEW: Owned Types, Cycle Detection (DFS)   │
 └───────────────┬─────────────────────────────┘
                 │ depends on
                 ▼
 ┌─────────────────────────────────────────────┐
-│           SurveyBot.Core                    │
-│  (Entities, Interfaces, DTOs, Exceptions)   │
+│       SurveyBot.Core (v1.4.0)               │
+│   7 Entities, 16 Interfaces, 42+ DTOs       │
+│   NEW: QuestionOption, Value Objects        │
+│   ZERO DEPENDENCIES ✓                       │
 └───────────────▲─────────────────────────────┘
                 │ depends on
 ┌───────────────┴─────────────────────────────┐
-│           SurveyBot.Bot                     │
-│  (Telegram Bot, Handlers, State Mgmt)      │
+│       SurveyBot.Bot (v1.4.0)                │
+│   Telegram Bot, Handlers, State Mgmt        │
+│   NEW: Conditional Flow, Navigation Helper  │
 └─────────────────────────────────────────────┘
 ```
 
 **Core Principle**: Core has ZERO dependencies. All layers depend on Core.
 
+**NEW in v1.4.0**: Conditional question flow spans all layers with type-safe value objects, DFS-based cycle detection, and comprehensive validation.
+
 ### Layer Descriptions
 
-**[SurveyBot.Core](src/SurveyBot.Core/CLAUDE.md)** - Domain Layer (NO dependencies)
-- Entities: User, Survey, Question, Response, Answer
-- Interfaces: Repository and service contracts
-- DTOs: Data transfer objects
-- Exceptions: Domain-specific exceptions
-- Utilities: SurveyCodeGenerator
+**[SurveyBot.Core](src/SurveyBot.Core/CLAUDE.md) v1.4.0** - Domain Layer (ZERO dependencies)
+- **Entities**: User, Survey, Question (with DefaultNext), QuestionOption (NEW), Response (with VisitedQuestionIds), Answer, MediaFile
+- **Value Objects**: NextQuestionDeterminant (type-safe conditional logic - NEW)
+- **Interfaces**: 16 repository/service contracts including ISurveyValidationService (NEW)
+- **DTOs**: 42+ data transfer objects with nested structures
+- **Exceptions**: Domain-specific exceptions + SurveyCycleException (NEW)
+- **Utilities**: SurveyCodeGenerator, QuestionType/MediaType enums
 
-**[SurveyBot.Infrastructure](src/SurveyBot.Infrastructure/CLAUDE.md)** - Data Access
-- DbContext with PostgreSQL
-- Repository implementations
-- Business logic services
-- Database migrations
+**[SurveyBot.Infrastructure](src/SurveyBot.Infrastructure/CLAUDE.md) v1.4.1** - Data Access & Business Logic
+- **DbContext**: PostgreSQL with EF Core 9.0, owned type configurations (NextQuestionDeterminant)
+- **Repositories**: Generic + specialized (Question, Response, Survey, User)
+- **Services**: QuestionService, ResponseService (with conditional flow), SurveyValidationService (DFS cycle detection - NEW)
+- **Migrations**: Clean slate approach for complex value objects
+- **Validation**: Graph-based cycle detection, FK constraint validation
 
-**[SurveyBot.Bot](src/SurveyBot.Bot/CLAUDE.md)** - Telegram Integration
-- Bot service and update handler
-- Command handlers (start, help, surveys, stats)
-- Question handlers (text, choice, rating)
-- Conversation state management
+**[SurveyBot.Bot](src/SurveyBot.Bot/CLAUDE.md) v1.4.0** - Telegram Integration
+- **Bot Service**: TelegramBotService with polling/webhook modes
+- **Update Handler**: Message routing and error handling
+- **Command Handlers**: /start, /help, /surveys, /stats with inline keyboards
+- **Question Handlers**: Text, choice, rating with multimedia support
+- **Conversation State**: ConversationState with VisitedQuestions tracking (NEW)
+- **Navigation**: SurveyNavigationHelper for conditional flow (NEW)
 
-**[SurveyBot.API](src/SurveyBot.API/CLAUDE.md)** - REST API
-- Controllers (Auth, Surveys, Questions, Responses)
-- JWT authentication
-- Global exception handling
-- Swagger documentation
+**[SurveyBot.API](src/SurveyBot.API/CLAUDE.md) v1.4.0** - REST API
+- **Controllers**: 10 controllers (Auth, Surveys, Questions, Responses, Media, QuestionFlow - NEW)
+- **AutoMapper**: Value object mappings (NextQuestionDeterminant ↔ NextQuestionDeterminantDto)
+- **Middleware**: Authentication, global exception handling, request logging
+- **JWT Authentication**: Token-based security with role support
+- **Swagger**: OpenAPI documentation with auth UI
+
+### Architectural Patterns (v1.4.0+)
+
+SurveyBot implements 8 core design patterns for maintainability and scalability:
+
+1. **Clean Architecture** - Zero-dependency core, onion-style layers
+2. **Repository Pattern** - Generic + specialized repositories with Include support
+3. **Service Layer Pattern** - Business logic encapsulation (QuestionService, ResponseService, SurveyValidationService)
+4. **DTO Pattern** - 42+ DTOs for API contracts and data transfer
+5. **Value Object Pattern** - NextQuestionDeterminant (type-safe, immutable, equality-based)
+6. **Owned Entity Types** - EF Core owned types for value objects (prevents magic values)
+7. **Graph Algorithms** - DFS-based cycle detection for survey flow validation
+8. **Strategy Pattern** - Polymorphic question handling (Text, SingleChoice, MultipleChoice, Rating)
+
+**Key DDD Principles**:
+- Aggregates: Survey is aggregate root containing Questions/QuestionOptions
+- Value Objects: NextQuestionDeterminant eliminates primitive obsession
+- Domain Services: SurveyValidationService for complex validation logic
+- Domain Exceptions: SurveyCycleException for business rule violations
+
+**See**: [Architecture Documentation](documentation/architecture/ARCHITECTURE.md) for detailed pattern descriptions.
+
+### Recent Changes (v1.4.x)
+
+**v1.4.1 (Infrastructure Refactoring)**:
+- Implemented EF Core owned types for NextQuestionDeterminant
+- Added clean slate migration approach for complex value object changes
+- Enhanced FK constraint validation and error handling
+- Improved DFS cycle detection algorithm
+
+**v1.4.0 (Conditional Question Flow)**:
+- Added QuestionOption entity with NextQuestionId for branching
+- Implemented NextQuestionDeterminant value object (replaces magic values)
+- Added Question.DefaultNextQuestionId for fallback navigation
+- Enhanced Response with VisitedQuestionIds tracking
+- Created QuestionFlowController for flow configuration
+- Added SurveyValidationService with DFS-based cycle prevention
+- Updated bot handlers for conditional navigation
+- Implemented SurveyNavigationHelper utility
+
+**Breaking Changes v1.4.0**:
+- QuestionOption now uses NextQuestionDeterminant value object instead of nullable int
+- Response requires VisitedQuestionIds (List<int>) for cycle tracking
+- Question.Options collection is now required for choice questions
+- AutoMapper profiles updated for value object mapping
 
 ---
 
@@ -407,18 +466,37 @@ curl https://api.telegram.org/bot<TOKEN>/deleteWebhook
 ## Entity Relationship Overview
 
 ```
-User (1) ──creates──> Surveys (*)
-  │
-  └─> Survey ──contains──> Questions (*)
-        │
-        └──receives──> Responses (*)
-              │
-              └──contains──> Answers (*)
+User (1) ──creates──> Survey (*) ──contains──> Question (*)
+                        │                        │
+                        │                        ├──> DefaultNext (0..1) ─────┐
+                        │                        │                           │
+                        │                        └──> QuestionOption (*) ────┤
+                        │                             (for choice questions) │
+                        │                             ├──> NextQuestion (0..1)┘
+                        │                             └──> Value Objects:
+                        │                                  NextQuestionDeterminant
+                        │
+                        └──receives──> Response (*)
+                                        │
+                                        ├──> VisitedQuestionIds (List<int>) - NEW v1.4.0
+                                        │
+                                        └──contains──> Answer (*)
+                                                        │
+                                                        ├──> QuestionId (FK)
+                                                        └──> SelectedOptions (for choice)
 ```
+
+**NEW in v1.4.0**:
+- **QuestionOption**: Represents individual options in choice questions with conditional flow logic
+- **DefaultNext**: Question.DefaultNextQuestionId for fallback navigation
+- **NextQuestion**: QuestionOption.NextQuestionId for conditional branching
+- **VisitedQuestionIds**: Response tracking for cycle prevention and navigation history
 
 **See** [Core Layer Documentation](src/SurveyBot.Core/CLAUDE.md) for detailed entity descriptions.
 
 **Question Types**: Text, SingleChoice, MultipleChoice, Rating
+
+**Media Types**: Image (JPG, PNG), Video (MP4), Audio (MP3, OGG), Document (PDF)
 
 ---
 
@@ -450,9 +528,13 @@ User (1) ──creates──> Surveys (*)
 - DELETE `/{id}` - Delete (auth)
 - POST `/reorder` - Reorder (auth)
 
+**Question Flow** (`/api/questionflow`) - NEW v1.4.0
+- GET `/{surveyId}` - Get conditional flow configuration (auth)
+- PUT `/{surveyId}` - Update flow with validation (auth, prevents cycles)
+
 **Responses** (`/api/responses`)
 - POST `/surveys/{id}/responses` - Start (PUBLIC)
-- POST `/{id}/answers` - Save answer (PUBLIC)
+- POST `/{id}/answers` - Save answer (PUBLIC, respects conditional flow)
 - POST `/{id}/complete` - Complete (PUBLIC)
 - GET `/surveys/{id}/responses` - List (auth)
 
@@ -577,33 +659,62 @@ documentation/
 
 ## Summary for AI Assistants
 
-**SurveyBot** is a .NET 8.0 Telegram bot with React admin panel following Clean Architecture.
+**SurveyBot v1.4.1** is a .NET 8.0 Telegram bot with React admin panel following Clean Architecture and DDD principles.
 
 **Key Points**:
-1. **Two config files**: Base + Development (overrides)
-2. **Bot modes**: Polling (local) vs Webhook (prod, needs HTTPS)
-3. **Architecture**: Clean Architecture - Core has zero dependencies
-4. **Database**: PostgreSQL via Docker, EF Core migrations
-5. **Auth**: JWT Bearer with Telegram-based login
-6. **Survey codes**: 6-char alphanumeric (Base36)
-7. **File paths**: Always use absolute paths
-8. **Documentation**: Centralized in `documentation/` folder - see [INDEX.md](documentation/INDEX.md)
+1. **Version**: v1.4.1 (Infrastructure), v1.4.0 (Core/API/Bot) - Conditional question flow enabled
+2. **Architecture**: Clean Architecture with 8 design patterns, ZERO-dependency core
+3. **NEW Features**: Conditional branching, cycle detection (DFS), value objects, owned types
+4. **Config files**: Base (appsettings.json) + Development (appsettings.Development.json) overrides
+5. **Bot modes**: Polling (local dev) vs Webhook (prod with HTTPS)
+6. **Database**: PostgreSQL via Docker, EF Core 9.0 with owned type migrations
+7. **Auth**: JWT Bearer with Telegram-based login
+8. **Survey codes**: 6-char alphanumeric (Base36 via SurveyCodeGenerator)
+9. **File paths**: Always use absolute paths (e.g., C:\Users\User\Desktop\SurveyBot\...)
+10. **Documentation**: Centralized in `documentation/` + layer-specific CLAUDE.md files
+
+**Architectural Highlights v1.4.0+**:
+- **7 Entities**: User, Survey, Question, QuestionOption (NEW), Response, Answer, MediaFile
+- **Value Objects**: NextQuestionDeterminant (immutable, type-safe, owned type)
+- **Graph Validation**: DFS-based cycle detection in SurveyValidationService
+- **Conditional Flow**: DefaultNextQuestionId + per-option NextQuestionId
+- **Response Tracking**: VisitedQuestionIds (List<int>) for cycle prevention
+- **10 Controllers**: Including new QuestionFlowController for flow configuration
+- **42+ DTOs**: Nested structures with AutoMapper value object support
+
+**Breaking Changes v1.4.0** (IMPORTANT):
+- QuestionOption uses NextQuestionDeterminant value object (not nullable int)
+- Response requires VisitedQuestionIds property
+- Question.Options collection required for choice questions
+- AutoMapper profiles need value object mappings
 
 **Quick Setup**: Docker PostgreSQL → Configure bot token → Apply migrations → Run API → Access Swagger
 
 **Documentation Hub**:
 - **Start Here**: [Documentation Index](documentation/INDEX.md) | [Navigation Guide](documentation/NAVIGATION.md)
-- **Layer Documentation**: [Core](src/SurveyBot.Core/CLAUDE.md) | [Infrastructure](src/SurveyBot.Infrastructure/CLAUDE.md) | [Bot](src/SurveyBot.Bot/CLAUDE.md) | [API](src/SurveyBot.API/CLAUDE.md)
+- **Layer Documentation**: [Core v1.4.0](src/SurveyBot.Core/CLAUDE.md) | [Infrastructure v1.4.1](src/SurveyBot.Infrastructure/CLAUDE.md) | [Bot v1.4.0](src/SurveyBot.Bot/CLAUDE.md) | [API v1.4.0](src/SurveyBot.API/CLAUDE.md)
+- **Architecture**: [Architecture Overview](documentation/architecture/ARCHITECTURE.md) - Design patterns and principles
 - **Quick References**: [API](documentation/api/QUICK-REFERENCE.md) | [Bot Commands](documentation/bot/BOT_COMMAND_REFERENCE.md) | [Database](documentation/database/QUICK-START-DATABASE.md)
 
 **Common Tasks**:
-- Add migration: `dotnet ef migrations add Name`
+- Add migration: `cd src/SurveyBot.API && dotnet ef migrations add MigrationName`
 - Apply migrations: `dotnet ef database update`
-- Run API: `cd src/SurveyBot.API && dotnet run`
+- Run API: `dotnet run` (from SurveyBot.API directory)
 - Access Swagger: http://localhost:5000/swagger
 - Check bot: `curl https://api.telegram.org/bot<TOKEN>/getMe`
+- Validate survey flow: POST `/api/questionflow/{surveyId}` (auto-detects cycles)
 - Find documentation: Check [documentation/INDEX.md](documentation/INDEX.md)
+
+**Design Pattern References**:
+1. Clean Architecture - Layers and dependencies
+2. Repository Pattern - [Infrastructure CLAUDE.md](src/SurveyBot.Infrastructure/CLAUDE.md#repositories)
+3. Value Objects - [Core CLAUDE.md](src/SurveyBot.Core/CLAUDE.md#value-objects)
+4. Owned Types - [Infrastructure CLAUDE.md](src/SurveyBot.Infrastructure/CLAUDE.md#owned-types)
+5. DFS Cycle Detection - [SurveyValidationService](src/SurveyBot.Infrastructure/CLAUDE.md#survey-validation)
+6. Conditional Flow - All layer documentation sections
+7. AutoMapper - [API CLAUDE.md](src/SurveyBot.API/CLAUDE.md#automapper)
+8. Strategy Pattern - Question type handling across layers
 
 ---
 
-**Last Updated**: 2025-11-21 | **Version**: 1.3.0 | **Target Framework**: .NET 8.0
+**Last Updated**: 2025-11-25 | **Version**: 1.4.1 | **Target Framework**: .NET 8.0

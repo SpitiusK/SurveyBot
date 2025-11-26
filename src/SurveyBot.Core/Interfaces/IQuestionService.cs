@@ -56,6 +56,30 @@ public interface IQuestionService
     Task<QuestionDto> GetQuestionAsync(int id);
 
     /// <summary>
+    /// Gets a question entity by ID (for internal use).
+    /// </summary>
+    /// <param name="id">The question ID.</param>
+    /// <returns>The question entity if found, null otherwise.</returns>
+    Task<Entities.Question?> GetByIdAsync(int id);
+
+    /// <summary>
+    /// Gets a question entity by ID with Options collection eagerly loaded (for flow validation).
+    /// </summary>
+    /// <param name="id">The question ID.</param>
+    /// <returns>The question entity with Options if found, null otherwise.</returns>
+    Task<Entities.Question?> GetByIdWithOptionsAsync(int id);
+
+    /// <summary>
+    /// Updates the conditional flow configuration for a question.
+    /// </summary>
+    /// <param name="id">The ID of the question to update.</param>
+    /// <param name="dto">The flow configuration update data.</param>
+    /// <returns>The updated question entity.</returns>
+    /// <exception cref="Exceptions.QuestionNotFoundException">Thrown when the question is not found.</exception>
+    /// <exception cref="Exceptions.QuestionValidationException">Thrown when validation fails.</exception>
+    Task<Entities.Question> UpdateQuestionFlowAsync(int id, DTOs.UpdateQuestionFlowDto dto);
+
+    /// <summary>
     /// Gets all questions for a survey ordered by OrderIndex.
     /// </summary>
     /// <param name="surveyId">The survey ID.</param>
