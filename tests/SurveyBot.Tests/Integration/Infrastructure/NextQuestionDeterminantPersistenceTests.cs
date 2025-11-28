@@ -36,38 +36,20 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task SaveAndRetrieve_QuestionWithDefaultNextGoToQuestion_PersistsCorrectly()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var targetQuestion = new Question
-        {
-            Survey = survey,
-            QuestionText = "Target Question",
-            Type = QuestionType.Text,
-            OrderIndex = 1,
-            IsRequired = true
-        };
+        var targetQuestion = Question.CreateTextQuestion(survey.Id, "Target Question", 1, true);
         await _context.Questions.AddAsync(targetQuestion);
         await _context.SaveChangesAsync();
 
-        var sourceQuestion = new Question
-        {
-            Survey = survey,
-            QuestionText = "Source Question",
-            Type = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            DefaultNext = NextQuestionDeterminant.ToQuestion(targetQuestion.Id)
-        };
+        var sourceQuestion = Question.CreateTextQuestion(survey.Id, "Source Question", 0, true);
+        sourceQuestion.SetDefaultNext(NextQuestionDeterminant.ToQuestion(targetQuestion.Id));
         await _context.Questions.AddAsync(sourceQuestion);
         await _context.SaveChangesAsync();
 
@@ -89,27 +71,16 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task SaveAndRetrieve_QuestionWithDefaultNextEnd_PersistsCorrectly()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var question = new Question
-        {
-            Survey = survey,
-            QuestionText = "Final Question",
-            Type = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            DefaultNext = NextQuestionDeterminant.End()
-        };
+        var question = Question.CreateTextQuestion(survey.Id, "Final Question", 0, true);
+        question.SetDefaultNext(NextQuestionDeterminant.End());
         await _context.Questions.AddAsync(question);
         await _context.SaveChangesAsync();
 
@@ -131,27 +102,16 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task SaveAndRetrieve_QuestionWithNullDefaultNext_PersistsCorrectly()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var question = new Question
-        {
-            Survey = survey,
-            QuestionText = "Question without flow",
-            Type = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            DefaultNext = null // No flow configured
-        };
+        var question = Question.CreateTextQuestion(survey.Id, "Question without flow", 0, true);
+        question.SetDefaultNext(null);
         await _context.Questions.AddAsync(question);
         await _context.SaveChangesAsync();
 
@@ -171,43 +131,25 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task Update_QuestionDefaultNext_UpdatesPersistence()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var question = new Question
-        {
-            Survey = survey,
-            QuestionText = "Question",
-            Type = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            DefaultNext = NextQuestionDeterminant.End()
-        };
+        var question = Question.CreateTextQuestion(survey.Id, "Question", 0, true);
+        question.SetDefaultNext(NextQuestionDeterminant.End());
         await _context.Questions.AddAsync(question);
         await _context.SaveChangesAsync();
 
-        var targetQuestion = new Question
-        {
-            Survey = survey,
-            QuestionText = "Target",
-            Type = QuestionType.Text,
-            OrderIndex = 1,
-            IsRequired = true
-        };
+        var targetQuestion = Question.CreateTextQuestion(survey.Id, "Target", 1, true);
         await _context.Questions.AddAsync(targetQuestion);
         await _context.SaveChangesAsync();
 
         // Act - Update DefaultNext
-        question.DefaultNext = NextQuestionDeterminant.ToQuestion(targetQuestion.Id);
+        question.SetDefaultNext(NextQuestionDeterminant.ToQuestion(targetQuestion.Id));
         await _context.SaveChangesAsync();
 
         // Clear tracking
@@ -231,46 +173,23 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task SaveAndRetrieve_QuestionOptionWithNextGoToQuestion_PersistsCorrectly()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var question = new Question
-        {
-            Survey = survey,
-            QuestionText = "Choice Question",
-            Type = QuestionType.SingleChoice,
-            OrderIndex = 0,
-            IsRequired = true
-        };
+        var question = Question.CreateSingleChoiceQuestion(survey.Id, "Choice Question", 0, "[]", true);
         await _context.Questions.AddAsync(question);
+        await _context.SaveChangesAsync();
 
-        var targetQuestion = new Question
-        {
-            Survey = survey,
-            QuestionText = "Target Question",
-            Type = QuestionType.Text,
-            OrderIndex = 1,
-            IsRequired = true
-        };
+        var targetQuestion = Question.CreateTextQuestion(survey.Id, "Target Question", 1, true);
         await _context.Questions.AddAsync(targetQuestion);
         await _context.SaveChangesAsync();
 
-        var option = new QuestionOption
-        {
-            Question = question,
-            Text = "Option A",
-            OrderIndex = 0,
-            Next = NextQuestionDeterminant.ToQuestion(targetQuestion.Id)
-        };
+        var option = QuestionOption.Create(question.Id, "Option A", 0, NextQuestionDeterminant.ToQuestion(targetQuestion.Id));
         await _context.QuestionOptions.AddAsync(option);
         await _context.SaveChangesAsync();
 
@@ -292,36 +211,19 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task SaveAndRetrieve_QuestionOptionWithNextEnd_PersistsCorrectly()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var question = new Question
-        {
-            Survey = survey,
-            QuestionText = "Choice Question",
-            Type = QuestionType.SingleChoice,
-            OrderIndex = 0,
-            IsRequired = true
-        };
+        var question = Question.CreateSingleChoiceQuestion(survey.Id, "Choice Question", 0, "[]", true);
         await _context.Questions.AddAsync(question);
         await _context.SaveChangesAsync();
 
-        var option = new QuestionOption
-        {
-            Question = question,
-            Text = "End Survey Option",
-            OrderIndex = 0,
-            Next = NextQuestionDeterminant.End()
-        };
+        var option = QuestionOption.Create(question.Id, "End Survey Option", 0, NextQuestionDeterminant.End());
         await _context.QuestionOptions.AddAsync(option);
         await _context.SaveChangesAsync();
 
@@ -343,72 +245,27 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task SaveAndRetrieve_MultipleOptionsWithDifferentNext_PersistsCorrectly()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var question = new Question
-        {
-            Survey = survey,
-            QuestionText = "Branching Question",
-            Type = QuestionType.SingleChoice,
-            OrderIndex = 0,
-            IsRequired = true
-        };
+        var question = Question.CreateSingleChoiceQuestion(survey.Id, "Branching Question", 0, "[]", true);
         await _context.Questions.AddAsync(question);
+        await _context.SaveChangesAsync();
 
-        var targetQuestion1 = new Question
-        {
-            Survey = survey,
-            QuestionText = "Path A",
-            Type = QuestionType.Text,
-            OrderIndex = 1,
-            IsRequired = true
-        };
-
-        var targetQuestion2 = new Question
-        {
-            Survey = survey,
-            QuestionText = "Path B",
-            Type = QuestionType.Text,
-            OrderIndex = 2,
-            IsRequired = true
-        };
+        var targetQuestion1 = Question.CreateTextQuestion(survey.Id, "Path A", 1, true);
+        var targetQuestion2 = Question.CreateTextQuestion(survey.Id, "Path B", 2, true);
 
         await _context.Questions.AddRangeAsync(targetQuestion1, targetQuestion2);
         await _context.SaveChangesAsync();
 
-        var option1 = new QuestionOption
-        {
-            Question = question,
-            Text = "Go to Path A",
-            OrderIndex = 0,
-            Next = NextQuestionDeterminant.ToQuestion(targetQuestion1.Id)
-        };
-
-        var option2 = new QuestionOption
-        {
-            Question = question,
-            Text = "Go to Path B",
-            OrderIndex = 1,
-            Next = NextQuestionDeterminant.ToQuestion(targetQuestion2.Id)
-        };
-
-        var option3 = new QuestionOption
-        {
-            Question = question,
-            Text = "End Survey",
-            OrderIndex = 2,
-            Next = NextQuestionDeterminant.End()
-        };
+        var option1 = QuestionOption.Create(question.Id, "Go to Path A", 0, NextQuestionDeterminant.ToQuestion(targetQuestion1.Id));
+        var option2 = QuestionOption.Create(question.Id, "Go to Path B", 1, NextQuestionDeterminant.ToQuestion(targetQuestion2.Id));
+        var option3 = QuestionOption.Create(question.Id, "End Survey", 2, NextQuestionDeterminant.End());
 
         await _context.QuestionOptions.AddRangeAsync(option1, option2, option3);
         await _context.SaveChangesAsync();
@@ -446,48 +303,23 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task Query_QuestionsByNextQuestionId_WorksCorrectly()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var targetQuestion = new Question
-        {
-            Survey = survey,
-            QuestionText = "Target",
-            Type = QuestionType.Text,
-            OrderIndex = 2,
-            IsRequired = true
-        };
+        var targetQuestion = Question.CreateTextQuestion(survey.Id, "Target", 2, true);
         await _context.Questions.AddAsync(targetQuestion);
         await _context.SaveChangesAsync();
 
-        var question1 = new Question
-        {
-            Survey = survey,
-            QuestionText = "Q1",
-            Type = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            DefaultNext = NextQuestionDeterminant.ToQuestion(targetQuestion.Id)
-        };
+        var question1 = Question.CreateTextQuestion(survey.Id, "Q1", 0, true);
+        question1.SetDefaultNext(NextQuestionDeterminant.ToQuestion(targetQuestion.Id));
 
-        var question2 = new Question
-        {
-            Survey = survey,
-            QuestionText = "Q2",
-            Type = QuestionType.Text,
-            OrderIndex = 1,
-            IsRequired = true,
-            DefaultNext = NextQuestionDeterminant.End()
-        };
+        var question2 = Question.CreateTextQuestion(survey.Id, "Q2", 1, true);
+        question2.SetDefaultNext(NextQuestionDeterminant.End());
 
         await _context.Questions.AddRangeAsync(question1, question2);
         await _context.SaveChangesAsync();
@@ -510,47 +342,22 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task Query_QuestionsWithEndSurvey_WorksCorrectly()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var question1 = new Question
-        {
-            Survey = survey,
-            QuestionText = "Q1",
-            Type = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            DefaultNext = NextQuestionDeterminant.End()
-        };
+        var question1 = Question.CreateTextQuestion(survey.Id, "Q1", 0, true);
+        question1.SetDefaultNext(NextQuestionDeterminant.End());
 
-        var question2 = new Question
-        {
-            Survey = survey,
-            QuestionText = "Q2",
-            Type = QuestionType.Text,
-            OrderIndex = 1,
-            IsRequired = true,
-            DefaultNext = NextQuestionDeterminant.End()
-        };
+        var question2 = Question.CreateTextQuestion(survey.Id, "Q2", 1, true);
+        question2.SetDefaultNext(NextQuestionDeterminant.End());
 
-        var question3 = new Question
-        {
-            Survey = survey,
-            QuestionText = "Q3",
-            Type = QuestionType.Text,
-            OrderIndex = 2,
-            IsRequired = true,
-            DefaultNext = null
-        };
+        var question3 = Question.CreateTextQuestion(survey.Id, "Q3", 2, true);
+        question3.SetDefaultNext(null);
 
         await _context.Questions.AddRangeAsync(question1, question2, question3);
         await _context.SaveChangesAsync();
@@ -574,54 +381,22 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task Query_OptionsPointingToQuestion_WorksCorrectly()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var question = new Question
-        {
-            Survey = survey,
-            QuestionText = "Choice Question",
-            Type = QuestionType.SingleChoice,
-            OrderIndex = 0,
-            IsRequired = true
-        };
-
-        var targetQuestion = new Question
-        {
-            Survey = survey,
-            QuestionText = "Target",
-            Type = QuestionType.Text,
-            OrderIndex = 1,
-            IsRequired = true
-        };
+        var question = Question.CreateSingleChoiceQuestion(survey.Id, "Choice Question", 0, "[]", true);
+        var targetQuestion = Question.CreateTextQuestion(survey.Id, "Target", 1, true);
 
         await _context.Questions.AddRangeAsync(question, targetQuestion);
         await _context.SaveChangesAsync();
 
-        var option1 = new QuestionOption
-        {
-            Question = question,
-            Text = "Option A",
-            OrderIndex = 0,
-            Next = NextQuestionDeterminant.ToQuestion(targetQuestion.Id)
-        };
-
-        var option2 = new QuestionOption
-        {
-            Question = question,
-            Text = "Option B",
-            OrderIndex = 1,
-            Next = NextQuestionDeterminant.End()
-        };
+        var option1 = QuestionOption.Create(question.Id, "Option A", 0, NextQuestionDeterminant.ToQuestion(targetQuestion.Id));
+        var option2 = QuestionOption.Create(question.Id, "Option B", 1, NextQuestionDeterminant.End());
 
         await _context.QuestionOptions.AddRangeAsync(option1, option2);
         await _context.SaveChangesAsync();
@@ -648,27 +423,20 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task JsonStorage_ValueObjectStoredAsJson_NotSeparateTable()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var question = new Question
-        {
-            Survey = survey,
-            QuestionText = "Question",
-            Type = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            DefaultNext = NextQuestionDeterminant.ToQuestion(99)
-        };
+        var question = Question.CreateTextQuestion(
+            surveyId: survey.Id,
+            questionText: "Question",
+            orderIndex: 0,
+            isRequired: true);
+        question.SetDefaultNext(NextQuestionDeterminant.ToQuestion(99));
         await _context.Questions.AddAsync(question);
         await _context.SaveChangesAsync();
 
@@ -689,27 +457,16 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task Delete_QuestionWithDefaultNext_DeletesSuccessfully()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var question = new Question
-        {
-            Survey = survey,
-            QuestionText = "Question",
-            Type = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            DefaultNext = NextQuestionDeterminant.End()
-        };
+        var question = Question.CreateTextQuestion(survey.Id, "Question", 0, true);
+        question.SetDefaultNext(NextQuestionDeterminant.End());
         await _context.Questions.AddAsync(question);
         await _context.SaveChangesAsync();
 
@@ -726,42 +483,23 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
     public async Task Update_ChangeNextFromGoToQuestionToEnd_WorksCorrectly()
     {
         // Arrange
-        var user = new User { TelegramId = 123456, Username = "testuser" };
+        var user = User.Create(123456, "testuser", null, null);
         await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
 
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "ABC123",
-            Creator = user,
-            IsActive = false
-        };
+        var survey = Survey.Create("Test Survey", user.Id, null, "ABC123", false, false, true);
         await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
 
-        var targetQuestion = new Question
-        {
-            Survey = survey,
-            QuestionText = "Target",
-            Type = QuestionType.Text,
-            OrderIndex = 1,
-            IsRequired = true
-        };
-
-        var question = new Question
-        {
-            Survey = survey,
-            QuestionText = "Question",
-            Type = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            DefaultNext = NextQuestionDeterminant.ToQuestion(targetQuestion.Id)
-        };
+        var targetQuestion = Question.CreateTextQuestion(survey.Id, "Target", 1, true);
+        var question = Question.CreateTextQuestion(survey.Id, "Question", 0, true);
+        question.SetDefaultNext(NextQuestionDeterminant.ToQuestion(targetQuestion.Id));
 
         await _context.Questions.AddRangeAsync(targetQuestion, question);
         await _context.SaveChangesAsync();
 
         // Act - Change to End
-        question.DefaultNext = NextQuestionDeterminant.End();
+        question.SetDefaultNext(NextQuestionDeterminant.End());
         await _context.SaveChangesAsync();
 
         _context.ChangeTracker.Clear();

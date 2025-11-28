@@ -72,7 +72,15 @@ public class SurveyRepository : GenericRepository<Survey>, ISurveyRepository
             return false;
         }
 
-        survey.IsActive = !survey.IsActive;
+        if (survey.IsActive)
+        {
+            survey.Deactivate();
+        }
+        else
+        {
+            survey.Activate();
+        }
+
         await _context.SaveChangesAsync();
 
         return true;

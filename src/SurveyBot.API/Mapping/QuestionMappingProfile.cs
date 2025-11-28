@@ -64,11 +64,8 @@ public class QuestionMappingProfile : Profile
                 opt => opt.MapFrom<QuestionOptionsJsonResolver>())
             .ForMember(dest => dest.MediaContent,
                 opt => opt.MapFrom<QuestionMediaContentJsonResolver>())
-            // TEMPORARY: Commented for migration generation (INFRA-002)
-            // .ForMember(dest => dest.DefaultNextQuestionId, opt => opt.Ignore()) // Handled by service
             .ForMember(dest => dest.Options, opt => opt.Ignore()) // Handled by service
-            // TEMPORARY: Commented for migration generation (INFRA-002)
-            // .ForMember(dest => dest.DefaultNextQuestion, opt => opt.Ignore())
+            .ForMember(dest => dest.DefaultNext, opt => opt.Ignore()) // Set by QuestionFlowController
             .ForMember(dest => dest.Survey, opt => opt.Ignore())
             .ForMember(dest => dest.Answers, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
@@ -85,6 +82,8 @@ public class QuestionMappingProfile : Profile
                 opt => opt.MapFrom<UpdateQuestionMediaContentJsonResolver>())
             .ForMember(dest => dest.Survey, opt => opt.Ignore())
             .ForMember(dest => dest.Answers, opt => opt.Ignore())
+            .ForMember(dest => dest.Options, opt => opt.Ignore()) // Handled by service
+            .ForMember(dest => dest.DefaultNext, opt => opt.Ignore()) // Set by QuestionFlowController
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
             .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
 

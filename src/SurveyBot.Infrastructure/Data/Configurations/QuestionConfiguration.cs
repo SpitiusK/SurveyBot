@@ -43,10 +43,10 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
         builder.HasIndex(q => q.QuestionType)
             .HasDatabaseName("idx_questions_type");
 
-        // Check constraint for question type (0=Text, 1=SingleChoice, 2=MultipleChoice, 3=Rating)
+        // Check constraint for question type (0=Text, 1=SingleChoice, 2=MultipleChoice, 3=Rating, 4=Location)
         builder.ToTable(t => t.HasCheckConstraint(
             "chk_question_type",
-            "question_type IN (0, 1, 2, 3)"));
+            "question_type IN (0, 1, 2, 3, 4)"));
 
         // OrderIndex
         builder.Property(q => q.OrderIndex)
@@ -125,6 +125,12 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
 
         // SupportsBranching - computed property, not mapped to database
         builder.Ignore(q => q.SupportsBranching);
+
+        // Configure backing fields for collections
+        builder.Navigation(q => q.Answers)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(q => q.Options)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // Relationships
         builder.HasOne(q => q.Survey)

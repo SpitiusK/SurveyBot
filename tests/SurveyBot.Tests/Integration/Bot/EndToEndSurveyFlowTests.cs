@@ -47,17 +47,22 @@ public class EndToEndSurveyFlowTests : IClassFixture<BotTestFixture>
         // Create question handlers
         var validator = new AnswerValidator(Mock.Of<ILogger<AnswerValidator>>());
         var errorHandler = new QuestionErrorHandler(_fixture.MockBotService.Object, Mock.Of<ILogger<QuestionErrorHandler>>());
+        var mockMediaService = new Mock<SurveyBot.Core.Interfaces.ITelegramMediaService>();
+        var mockBotConfig = Microsoft.Extensions.Options.Options.Create(new SurveyBot.Bot.Configuration.BotConfiguration());
+        var mediaHelper = new QuestionMediaHelper(mockMediaService.Object, mockBotConfig, Mock.Of<ILogger<QuestionMediaHelper>>());
 
         _textHandler = new TextQuestionHandler(
             _fixture.MockBotService.Object,
             validator,
             errorHandler,
+            mediaHelper,
             Mock.Of<ILogger<TextQuestionHandler>>());
 
         _singleChoiceHandler = new SingleChoiceQuestionHandler(
             _fixture.MockBotService.Object,
             validator,
             errorHandler,
+            mediaHelper,
             Mock.Of<ILogger<SingleChoiceQuestionHandler>>());
 
         _multipleChoiceHandler = new MultipleChoiceQuestionHandler(
@@ -65,12 +70,14 @@ public class EndToEndSurveyFlowTests : IClassFixture<BotTestFixture>
             _fixture.StateManager,
             validator,
             errorHandler,
+            mediaHelper,
             Mock.Of<ILogger<MultipleChoiceQuestionHandler>>());
 
         _ratingHandler = new RatingQuestionHandler(
             _fixture.MockBotService.Object,
             validator,
             errorHandler,
+            mediaHelper,
             Mock.Of<ILogger<RatingQuestionHandler>>());
 
         _questionHandlers = new List<IQuestionHandler>
@@ -139,12 +146,11 @@ public class EndToEndSurveyFlowTests : IClassFixture<BotTestFixture>
         await _fixture.StateManager.NextQuestionAsync(TestUserId);
 
         // Submit answer to repository
-        await _fixture.AnswerRepository.CreateAsync(new Answer
-        {
-            ResponseId = state.CurrentResponseId!.Value,
-            QuestionId = _fixture.TestQuestions[0].Id,
-            AnswerJson = textResult
-        });
+        var answer1 = EntityBuilder.CreateAnswer(
+            responseId: state.CurrentResponseId!.Value,
+            questionId: _fixture.TestQuestions[0].Id);
+        answer1.SetAnswerJson(textResult);
+        await _fixture.AnswerRepository.CreateAsync(answer1);
 
         // Answer Question 2: Single Choice
         var singleChoiceCallback = _fixture.CreateTestCallbackQuery(TestUserId, TestChatId, "option_1_Blue");
@@ -155,12 +161,11 @@ public class EndToEndSurveyFlowTests : IClassFixture<BotTestFixture>
         await _fixture.StateManager.AnswerQuestionAsync(TestUserId, 1, singleChoiceResult!);
         await _fixture.StateManager.NextQuestionAsync(TestUserId);
 
-        await _fixture.AnswerRepository.CreateAsync(new Answer
-        {
-            ResponseId = state.CurrentResponseId!.Value,
-            QuestionId = _fixture.TestQuestions[1].Id,
-            AnswerJson = singleChoiceResult
-        });
+        var answer2 = EntityBuilder.CreateAnswer(
+            responseId: state.CurrentResponseId!.Value,
+            questionId: _fixture.TestQuestions[1].Id);
+        answer2.SetAnswerJson(singleChoiceResult);
+        await _fixture.AnswerRepository.CreateAsync(answer2);
 
         // Answer Question 3: Multiple Choice (optional - skip it)
         await _fixture.StateManager.SkipQuestionAsync(TestUserId, false);
@@ -174,12 +179,11 @@ public class EndToEndSurveyFlowTests : IClassFixture<BotTestFixture>
         ratingResult.Should().NotBeNull();
         await _fixture.StateManager.AnswerQuestionAsync(TestUserId, 3, ratingResult!);
 
-        await _fixture.AnswerRepository.CreateAsync(new Answer
-        {
-            ResponseId = state.CurrentResponseId!.Value,
-            QuestionId = _fixture.TestQuestions[3].Id,
-            AnswerJson = ratingResult
-        });
+        var answer3 = EntityBuilder.CreateAnswer(
+            responseId: state.CurrentResponseId!.Value,
+            questionId: _fixture.TestQuestions[3].Id);
+        answer3.SetAnswerJson(ratingResult);
+        await _fixture.AnswerRepository.CreateAsync(answer3);
 
         // Complete survey
         var isComplete = await _fixture.StateManager.IsAllAnsweredAsync(TestUserId);

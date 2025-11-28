@@ -127,14 +127,10 @@ public class SurveyCommandHandler : ICommandHandler
                 }
             }
 
-            // Create new response record
-            var response = await _responseRepository.CreateAsync(new Core.Entities.Response
-            {
-                SurveyId = survey.Id,
-                RespondentTelegramId = userId,
-                IsComplete = false,
-                StartedAt = DateTime.UtcNow
-            });
+            // Create new response record using factory method
+            var response = Core.Entities.Response.Start(survey.Id, userId);
+
+            response = await _responseRepository.CreateAsync(response);
 
             _logger.LogInformation(
                 "Created response {ResponseId} for user {TelegramId} on survey {SurveyId}",

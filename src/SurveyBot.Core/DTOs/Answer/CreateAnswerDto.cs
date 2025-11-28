@@ -34,4 +34,10 @@ public class CreateAnswerDto
     /// </summary>
     [Range(1, 5, ErrorMessage = "Rating must be between 1 and 5")]
     public int? RatingValue { get; set; }
+
+    /// <summary>
+    /// Gets or sets the JSON answer for questions requiring structured data.
+    /// Used for Location questions (latitude, longitude) and other types with complex answer formats.
+    /// </summary>
+    public string? AnswerJson { get; set; }
 }

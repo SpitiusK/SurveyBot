@@ -10,6 +10,13 @@ namespace SurveyBot.Infrastructure.Data;
 /// </summary>
 public class SurveyBotDbContext : DbContext
 {
+    /// <summary>
+    /// Protected parameterless constructor for mocking in unit tests.
+    /// </summary>
+    protected SurveyBotDbContext()
+    {
+    }
+
     public SurveyBotDbContext(DbContextOptions<SurveyBotDbContext> options)
         : base(options)
     {
@@ -75,22 +82,28 @@ public class SurveyBotDbContext : DbContext
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        // Update timestamps for entities that have UpdatedAt property
+        // Update timestamps for entities that inherit from BaseEntity
         var entries = ChangeTracker.Entries()
             .Where(e => e.Entity is BaseEntity && (e.State == EntityState.Added || e.State == EntityState.Modified));
 
         foreach (var entry in entries)
         {
             var entity = (BaseEntity)entry.Entity;
+            var entityType = entity.GetType();
 
             if (entry.State == EntityState.Added)
             {
-                entity.CreatedAt = DateTime.UtcNow;
-                entity.UpdatedAt = DateTime.UtcNow;
+                // Use reflection to call protected InitializeTimestamps() method
+                var initMethod = typeof(BaseEntity).GetMethod("InitializeTimestamps",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                initMethod?.Invoke(entity, null);
             }
             else if (entry.State == EntityState.Modified)
             {
-                entity.UpdatedAt = DateTime.UtcNow;
+                // Use reflection to call protected MarkAsModified() method
+                var markMethod = typeof(BaseEntity).GetMethod("MarkAsModified",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                markMethod?.Invoke(entity, null);
             }
         }
 

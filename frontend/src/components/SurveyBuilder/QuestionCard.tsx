@@ -19,6 +19,7 @@ import {
   RadioButtonChecked as SingleChoiceIcon,
   CheckBox as MultipleChoiceIcon,
   Star as RatingIcon,
+  LocationOn as LocationIcon,
 } from '@mui/icons-material';
 import { QuestionType } from '../../types';
 import type { QuestionDraft } from '../../schemas/questionSchemas';
@@ -63,6 +64,8 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
         return <MultipleChoiceIcon fontSize="small" />;
       case QuestionType.Rating:
         return <RatingIcon fontSize="small" />;
+      case QuestionType.Location:
+        return <LocationIcon fontSize="small" />;
       default:
         return <TextIcon fontSize="small" />;
     }
@@ -78,6 +81,8 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
         return 'Multiple Choice';
       case QuestionType.Rating:
         return 'Rating';
+      case QuestionType.Location:
+        return 'Location';
       default:
         return 'Unknown';
     }
@@ -93,6 +98,8 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
         return 'info';
       case QuestionType.Rating:
         return 'warning';
+      case QuestionType.Location:
+        return 'secondary';
       default:
         return 'default';
     }
@@ -216,6 +223,13 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
             {question.questionType === QuestionType.Rating && (
               <Typography variant="body2" color="text.secondary" sx={{ pl: 2 }}>
                 Rating scale: 1-5 stars
+              </Typography>
+            )}
+
+            {/* Location Info */}
+            {question.questionType === QuestionType.Location && (
+              <Typography variant="body2" color="text.secondary" sx={{ pl: 2 }}>
+                GPS location sharing
               </Typography>
             )}
           </Box>

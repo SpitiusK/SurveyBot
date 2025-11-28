@@ -23,5 +23,11 @@ public enum QuestionType
     /// <summary>
     /// Numeric rating (1-5 scale).
     /// </summary>
-    Rating = 3
+    Rating = 3,
+
+    /// <summary>
+    /// Geographic location question requesting latitude/longitude coordinates.
+    /// Displayed via Telegram's location sharing functionality.
+    /// </summary>
+    Location = 4
 }

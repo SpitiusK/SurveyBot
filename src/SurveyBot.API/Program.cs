@@ -159,7 +159,8 @@ try
 
     // Register Infrastructure layer services (includes repositories and services)
     // MUST be registered BEFORE bot handlers because handlers depend on infrastructure services
-    builder.Services.AddInfrastructure(builder.Configuration);
+    // Pass environment name to prevent dual database provider registration in Testing environment
+    builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.EnvironmentName);
 
     // Register Media Storage Service (requires IWebHostEnvironment from ASP.NET Core)
     builder.Services.AddScoped<IMediaStorageService>(sp =>
@@ -315,17 +316,19 @@ try
 
     var app = builder.Build();
 
-    // Apply database migrations automatically
-    try
+    // Apply database migrations automatically (skip in Testing environment)
+    if (!app.Environment.IsEnvironment("Testing"))
     {
-        Log.Information("Applying database migrations...");
-        using (var scope = app.Services.CreateScope())
+        try
         {
-            var dbContext = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
+            Log.Information("Applying database migrations...");
+            using (var scope = app.Services.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
 
-            // Check if database can connect
-            var canConnect = await dbContext.Database.CanConnectAsync();
-            if (!canConnect)
+                // Check if database can connect
+                var canConnect = await dbContext.Database.CanConnectAsync();
+                if (!canConnect)
             {
                 Log.Warning("Cannot connect to database. Waiting for database to be ready...");
                 // Retry logic for database connection (useful for Docker startup)
@@ -366,9 +369,10 @@ try
         }
     }
     catch (Exception ex)
-    {
-        Log.Error(ex, "Error applying database migrations");
-        throw; // Don't continue if migrations fail
+        {
+            Log.Error(ex, "Error applying database migrations");
+            throw; // Don't continue if migrations fail
+        }
     }
 
     // Initialize Telegram Bot

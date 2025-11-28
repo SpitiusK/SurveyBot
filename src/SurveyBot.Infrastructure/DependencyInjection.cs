@@ -18,14 +18,18 @@ public static class DependencyInjection
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configuration">The application configuration.</param>
+    /// <param name="environment">The application environment name (used to skip DbContext registration in Testing).</param>
     /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration, string environment = "Production")
     {
-        // Add DbContext
-        services.AddDbContext<SurveyBotDbContext>(options =>
-            options.UseNpgsql(
-                configuration.GetConnectionString("DefaultConnection"),
-                npgsqlOptions => npgsqlOptions.MigrationsAssembly(typeof(SurveyBotDbContext).Assembly.FullName)));
+        // Skip DbContext registration in Testing environment (integration tests register their own InMemory provider)
+        if (environment != "Testing")
+        {
+            services.AddDbContext<SurveyBotDbContext>(options =>
+                options.UseNpgsql(
+                    configuration.GetConnectionString("DefaultConnection"),
+                    npgsqlOptions => npgsqlOptions.MigrationsAssembly(typeof(SurveyBotDbContext).Assembly.FullName)));
+        }
 
         // Register Repositories
         services.AddScoped(typeof(IRepository<>), typeof(GenericRepository<>));

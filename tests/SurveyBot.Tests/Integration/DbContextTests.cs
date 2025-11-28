@@ -73,7 +73,7 @@ public class DbContextTests : IDisposable
         await Task.Delay(10);
 
         // Act
-        user.Username = "updated";
+        user.SetUsername("updated");
         await _context.SaveChangesAsync();
 
         // Assert
@@ -291,11 +291,11 @@ public class DbContextTests : IDisposable
         await _context.Users.AddAsync(user);
         await _context.SaveChangesAsync();
 
-        survey.CreatorId = user.Id;
+        survey.SetCreatorId(user.Id);
         await _context.Surveys.AddAsync(survey);
         await _context.SaveChangesAsync();
 
-        question.SurveyId = survey.Id;
+        question.SetSurveyId(survey.Id);
         await _context.Questions.AddAsync(question);
         await _context.SaveChangesAsync();
 

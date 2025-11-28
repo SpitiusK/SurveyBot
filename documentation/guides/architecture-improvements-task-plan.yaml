@@ -1,0 +1,1124 @@
+project:
+  name: SurveyBot Architecture Improvements
+  version: "1.0"
+  created: 2025-11-27
+  status: ready_for_implementation
+  description: |
+    Comprehensive architecture improvements implementing DDD patterns, value objects,
+    and encapsulation across the SurveyBot domain layer. These tasks eliminate anemic
+    domain models, primitive obsession, and scattered business logic.
+
+  phases:
+    - id: phase-1
+      name: Value Objects & Encapsulation
+      tasks: [ARCH-001, ARCH-002, ARCH-003]
+      estimated_total_hours: 16-20
+      dependencies: []
+
+    - id: phase-2
+      name: Rich Domain Model
+      tasks: [ARCH-006]
+      estimated_total_hours: 8-12
+      dependencies: [phase-1]
+
+tasks:
+  - id: ARCH-001
+    name: Add Private Setters to Entities
+    priority: HIGH
+    status: pending
+    estimated_hours: 4-6
+    risk_level: medium
+    phase: phase-1
+    dependencies: []
+    parallel_safe: true
+
+    description: |
+      Refactor all domain entities to use private setters and expose collections as
+      IReadOnlyCollection<T>, enforcing proper encapsulation and preventing direct
+      property modification outside the entity itself. This is a foundational DDD
+      improvement that enables controlled state changes through entity methods.
+
+    business_value:
+      - Encapsulation: Prevents external code from bypassing entity validation logic
+      - Maintainability: Changes to entity state centralized in entity methods
+      - Consistency: All property modifications go through validated pathways
+      - Foundation: Enables rich domain model (ARCH-006) and factory methods (ARCH-002)
+
+    files_to_modify:
+      - path: src/SurveyBot.Core/Entities/BaseEntity.cs
+        changes: |
+          - Add private setters to Id, CreatedAt, UpdatedAt
+          - Add MarkAsModified() and InitializeTimestamps() helper methods
+        estimated_impact: LOW
+
+      - path: src/SurveyBot.Core/Entities/User.cs
+        changes: |
+          - Add private setters to all properties (TelegramId, Username, FirstName, LastName, LastLoginAt)
+          - Convert Surveys collection to IReadOnlyCollection with backing field
+          - Add temporary setter methods (SetTelegramId, SetUsername, etc.)
+        estimated_impact: MEDIUM
+
+      - path: src/SurveyBot.Core/Entities/Survey.cs
+        changes: |
+          - Add private setters to all properties
+          - Convert Questions and Responses to IReadOnlyCollection with backing fields
+          - Add setter methods (SetTitle, SetDescription, SetIsActive, etc.)
+          - Add internal methods (AddQuestionInternal, AddResponseInternal)
+        estimated_impact: HIGH
+
+      - path: src/SurveyBot.Core/Entities/Question.cs
+        changes: |
+          - Add private setters to all properties
+          - Convert Answers and Options to IReadOnlyCollection with backing fields
+          - Add setter methods for all properties
+          - Add internal collection management methods
+        estimated_impact: HIGH
+
+      - path: src/SurveyBot.Core/Entities/QuestionOption.cs
+        changes: |
+          - Add private setters to QuestionId, Text, OrderIndex, Next
+          - Add temporary setter methods
+        estimated_impact: LOW
+
+      - path: src/SurveyBot.Core/Entities/Response.cs
+        changes: |
+          - Add private setters to all properties
+          - Convert Answers to IReadOnlyCollection with backing field
+          - Add setter methods
+          - Keep helper methods (HasVisitedQuestion, RecordVisitedQuestion)
+          - Add internal AddAnswerInternal method
+        estimated_impact: MEDIUM
+
+      - path: src/SurveyBot.Core/Entities/Answer.cs
+        changes: |
+          - Add private setters to all properties
+          - Add temporary setter methods
+        estimated_impact: LOW
+
+      - path: src/SurveyBot.Infrastructure/Services/SurveyService.cs
+        changes: Replace ~15 property assignments with setter method calls
+        estimated_impact: HIGH
+
+      - path: src/SurveyBot.Infrastructure/Services/QuestionService.cs
+        changes: Replace ~8 property assignments with setter method calls
+        estimated_impact: MEDIUM
+
+      - path: src/SurveyBot.Infrastructure/Services/ResponseService.cs
+        changes: Replace ~5 property assignments with setter method calls
+        estimated_impact: LOW
+
+      - path: src/SurveyBot.Infrastructure/Services/UserService.cs
+        changes: Replace ~3 property assignments with setter method calls
+        estimated_impact: LOW
+
+      - path: src/SurveyBot.Infrastructure/Data/Configurations/*.cs
+        changes: |
+          Add PropertyAccessMode.Field for collection navigation properties
+          to ensure EF Core uses backing fields
+        estimated_impact: LOW
+
+    steps:
+      - id: ARCH-001.1
+        name: Update BaseEntity
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/Entities/BaseEntity.cs
+        actions:
+          - Add private setters to Id, CreatedAt, UpdatedAt
+          - Add MarkAsModified() helper method
+          - Add InitializeTimestamps() helper method
+          - Add XML documentation
+        acceptance_criteria:
+          - All properties have private setters
+          - Helper methods are protected
+          - EF Core can still set properties via reflection
+
+      - id: ARCH-001.2
+        name: Update User Entity
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/Entities/User.cs
+          - src/SurveyBot.Infrastructure/Services/UserService.cs
+        actions:
+          - Add private setters to all User properties
+          - Convert Surveys collection to IReadOnlyCollection with backing field
+          - Add temporary setter methods
+          - Update UserService to use setter methods
+        acceptance_criteria:
+          - All properties have private setters
+          - Surveys is IReadOnlyCollection
+          - UserService compiles and tests pass
+
+      - id: ARCH-001.3
+        name: Update Survey Entity
+        status: pending
+        estimated_hours: 1.5
+        files:
+          - src/SurveyBot.Core/Entities/Survey.cs
+          - src/SurveyBot.Infrastructure/Services/SurveyService.cs
+        actions:
+          - Add private setters to all Survey properties
+          - Convert Questions and Responses to IReadOnlyCollection
+          - Add setter methods (SetTitle, SetDescription, etc.)
+          - Add internal collection methods
+          - Update SurveyService to use setter methods
+        acceptance_criteria:
+          - All properties have private setters
+          - Collections are IReadOnlyCollection
+          - Internal methods can modify collections
+          - SurveyService compiles and tests pass
+
+      - id: ARCH-001.4
+        name: Update Question Entity
+        status: pending
+        estimated_hours: 1.0
+        files:
+          - src/SurveyBot.Core/Entities/Question.cs
+          - src/SurveyBot.Infrastructure/Services/QuestionService.cs
+        actions:
+          - Add private setters to all Question properties
+          - Convert Answers and Options to IReadOnlyCollection
+          - Add setter methods
+          - Add internal collection methods
+          - Update QuestionService
+        acceptance_criteria:
+          - All properties have private setters
+          - Collections are IReadOnlyCollection
+          - QuestionService compiles and tests pass
+
+      - id: ARCH-001.5
+        name: Update QuestionOption Entity
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/Entities/QuestionOption.cs
+        actions:
+          - Add private setters to all properties
+          - Add temporary setter methods
+        acceptance_criteria:
+          - All properties have private setters
+          - Setter methods work correctly
+
+      - id: ARCH-001.6
+        name: Update Response Entity
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/Entities/Response.cs
+          - src/SurveyBot.Infrastructure/Services/ResponseService.cs
+        actions:
+          - Add private setters to all Response properties
+          - Convert Answers to IReadOnlyCollection
+          - Add setter methods
+          - Update ResponseService
+        acceptance_criteria:
+          - All properties have private setters
+          - Answers is IReadOnlyCollection
+          - ResponseService compiles and tests pass
+
+      - id: ARCH-001.7
+        name: Update Answer Entity
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/Entities/Answer.cs
+        actions:
+          - Add private setters to all properties
+          - Add temporary setter methods
+        acceptance_criteria:
+          - All properties have private setters
+          - Setter methods work correctly
+
+      - id: ARCH-001.8
+        name: Update EF Core Configurations
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Infrastructure/Data/Configurations/UserConfiguration.cs
+          - src/SurveyBot.Infrastructure/Data/Configurations/SurveyConfiguration.cs
+          - src/SurveyBot.Infrastructure/Data/Configurations/QuestionConfiguration.cs
+          - src/SurveyBot.Infrastructure/Data/Configurations/QuestionOptionConfiguration.cs
+          - src/SurveyBot.Infrastructure/Data/Configurations/ResponseConfiguration.cs
+          - src/SurveyBot.Infrastructure/Data/Configurations/AnswerConfiguration.cs
+        actions:
+          - Add SetPropertyAccessMode(PropertyAccessMode.Field) for collections
+          - Verify backing field naming convention (_camelCase)
+          - Test entity loading with navigation properties
+        acceptance_criteria:
+          - All collection configurations use Field access mode
+          - Database migrations apply successfully
+          - Navigation properties load correctly
+
+      - id: ARCH-001.9
+        name: Compile and Fix Service Layer
+        status: pending
+        estimated_hours: 1.0
+        files:
+          - src/SurveyBot.Infrastructure/Services/*.cs
+        actions:
+          - Run dotnet build to find compilation errors
+          - Replace direct property assignments with setter method calls
+          - Update collection access patterns
+          - Verify AutoMapper configurations still work
+        acceptance_criteria:
+          - Solution compiles without errors
+          - All services use setter methods
+          - No direct property assignments in service layer
+
+      - id: ARCH-001.10
+        name: Run Full Test Suite
+        status: pending
+        estimated_hours: 0.5
+        actions:
+          - Run dotnet clean && dotnet build
+          - Run all unit tests
+          - Run all integration tests
+          - Verify EF Core queries work
+          - Check test coverage
+        acceptance_criteria:
+          - All existing tests pass
+          - No new test failures
+          - EF Core can load entities with navigation properties
+          - Collections are read-only where expected
+
+    testing:
+      unit_tests:
+        - Test that entity properties have private setters via reflection
+        - Test that collections are IReadOnlyCollection
+        - Test that attempting to modify read-only collection throws exception
+        - Test that setter methods update properties correctly
+        - Test that MarkAsModified() updates UpdatedAt timestamp
+
+      integration_tests:
+        - Test entity CRUD operations work with private setters
+        - Test EF Core can load entities with navigation properties
+        - Test Include() statements work with backing fields
+        - Test SaveChanges() persists changes correctly
+        - Test repository operations work as expected
+
+      regression_tests:
+        - Survey creation/update/delete
+        - Question creation with conditional flow
+        - Response submission
+        - API endpoint integration tests
+        - AutoMapper mappings
+
+    rollback_strategy: |
+      If critical issues arise:
+      1. Git revert commit: git revert <commit-hash>
+      2. Rebuild: dotnet clean && dotnet build
+      3. Run tests: dotnet test
+      4. Partial rollback option: Revert individual entity files if needed
+      5. Recovery time: < 30 minutes
+
+    technical_notes: |
+      - EF Core supports private setters via reflection (confirmed since EF Core 1.0)
+      - Backing field naming: use _camelCase pattern (e.g., _questions for Questions)
+      - Collections need PropertyAccessMode.Field in EF Core configurations
+      - Temporary setter methods will be removed in ARCH-002 and ARCH-006
+      - No database migration needed (schema unchanged)
+      - AutoMapper can map to private setters automatically
+
+  - id: ARCH-002
+    name: Add Factory Methods to Entities
+    priority: HIGH
+    status: pending
+    estimated_hours: 4-6
+    risk_level: medium
+    phase: phase-1
+    dependencies: [ARCH-001]
+    parallel_safe: true
+
+    description: |
+      Add static factory methods to all domain entities to centralize object creation
+      and validation logic. Replace direct constructor calls and property assignments
+      with validated factory methods following the Factory Method design pattern.
+      This enforces invariants at creation time and provides clear, intention-revealing APIs.
+
+    business_value:
+      - Validation at Creation: Invalid entities cannot be constructed
+      - Clear Intent: Survey.Create(...) is more expressive than new Survey { ... }
+      - Centralized Logic: All creation validation in one place
+      - Immutability Support: Private constructors prevent bypassing validation
+      - Foundation for DDD: Enables rich domain model with guaranteed valid state
+
+    files_to_modify:
+      - path: src/SurveyBot.Core/Entities/User.cs
+        changes: |
+          - Add private parameterless constructor
+          - Add Create() factory method with validation
+          - Add UpdateFromTelegram() method
+          - Remove temporary setter methods
+        factories: [CreateUser, UpdateFromTelegram]
+        complexity: LOW
+
+      - path: src/SurveyBot.Core/Entities/Survey.cs
+        changes: |
+          - Add private parameterless constructor
+          - Add Create() factory method with full validation
+          - Add CreateDraft() factory method for UI workflows
+          - Add UpdateMetadata() method
+          - Remove temporary setter methods
+        factories: [Create, CreateDraft]
+        complexity: MEDIUM
+
+      - path: src/SurveyBot.Core/Entities/Question.cs
+        changes: |
+          - Add private parameterless constructor
+          - Add type-specific factories (CreateText, CreateSingleChoice, CreateMultipleChoice, CreateRating)
+          - Add validation helpers (ValidateCommonParameters, ValidateChoiceOptions)
+          - Add SetDefaultNext() method
+          - Remove temporary setter methods
+        factories: [CreateText, CreateSingleChoice, CreateMultipleChoice, CreateRating]
+        complexity: HIGH
+
+      - path: src/SurveyBot.Core/Entities/QuestionOption.cs
+        changes: |
+          - Add private parameterless constructor
+          - Add Create() factory method
+          - Add UpdateNext() method
+          - Remove temporary setter methods
+        factories: [Create]
+        complexity: LOW
+
+      - path: src/SurveyBot.Core/Entities/Response.cs
+        changes: |
+          - Add private parameterless constructor
+          - Add Start() factory method
+          - Add Resume() factory method
+          - Add Complete() method
+          - Remove temporary setter methods
+        factories: [Start, Resume]
+        complexity: LOW
+
+      - path: src/SurveyBot.Core/Entities/Answer.cs
+        changes: |
+          - Add private parameterless constructor
+          - Add Create() factory method (replaces type-specific factories)
+          - Remove old CreateText, CreateChoice, CreateRating methods
+          - Remove temporary setter methods
+        factories: [Create]
+        complexity: MEDIUM
+
+      - path: src/SurveyBot.Infrastructure/Services/SurveyService.cs
+        changes: Replace new Survey() + setters with Survey.Create(...)
+        estimated_impact: HIGH
+
+      - path: src/SurveyBot.Infrastructure/Services/QuestionService.cs
+        changes: Replace new Question() + setters with Question.CreateXXX(...)
+        estimated_impact: HIGH
+
+      - path: src/SurveyBot.Infrastructure/Services/ResponseService.cs
+        changes: Replace new Response()/Answer() with factory methods
+        estimated_impact: MEDIUM
+
+      - path: src/SurveyBot.Infrastructure/Services/UserService.cs
+        changes: Replace new User() + setters with User.Create(...)
+        estimated_impact: LOW
+
+    steps:
+      - id: ARCH-002.1
+        name: Add Factory to User Entity
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/Entities/User.cs
+          - src/SurveyBot.Infrastructure/Services/UserService.cs
+        actions:
+          - Add private constructor
+          - Add User.Create(telegramId, username, firstName, lastName) factory
+          - Add UpdateFromTelegram(username, firstName, lastName) method
+          - Validate telegramId > 0
+          - Normalize username (remove @ prefix)
+          - Update UserService to use factory
+        acceptance_criteria:
+          - User.Create() validates telegramId
+          - Constructor is private
+          - UserService uses factory method
+          - Tests pass
+
+      - id: ARCH-002.2
+        name: Add Factory to Survey Entity
+        status: pending
+        estimated_hours: 1.0
+        files:
+          - src/SurveyBot.Core/Entities/Survey.cs
+          - src/SurveyBot.Infrastructure/Services/SurveyService.cs
+        actions:
+          - Add private constructor
+          - Add Survey.Create(title, description, creatorId, surveyCode) factory
+          - Add Survey.CreateDraft(title, creatorId) factory
+          - Add UpdateMetadata(title, description, allowMultiple, showResults) method
+          - Validate title length (3-500 chars)
+          - Validate description length (max 2000)
+          - Validate survey code (6 alphanumeric chars)
+          - Normalize survey code to uppercase
+          - Update SurveyService
+        acceptance_criteria:
+          - Survey.Create() validates all parameters
+          - Survey code normalized to uppercase
+          - CreateDraft() allows minimal validation
+          - UpdateMetadata() prevents changes if active with responses
+          - SurveyService uses factories
+          - Tests pass
+
+      - id: ARCH-002.3
+        name: Add Factories to Question Entity
+        status: pending
+        estimated_hours: 1.5
+        files:
+          - src/SurveyBot.Core/Entities/Question.cs
+          - src/SurveyBot.Infrastructure/Services/QuestionService.cs
+        actions:
+          - Add private constructor
+          - Add Question.CreateText(surveyId, text, orderIndex, isRequired, media)
+          - Add Question.CreateSingleChoice(surveyId, text, options, orderIndex, isRequired, media)
+          - Add Question.CreateMultipleChoice(surveyId, text, options, orderIndex, isRequired, media)
+          - Add Question.CreateRating(surveyId, text, orderIndex, isRequired, media)
+          - Add ValidateCommonParameters() helper
+          - Add ValidateChoiceOptions() helper (2-10 options, no duplicates)
+          - Add SetDefaultNext(NextQuestionDeterminant) method
+          - Update QuestionService to use type-specific factories
+        acceptance_criteria:
+          - Each question type has dedicated factory
+          - Common validation extracted to helper
+          - Choice options validated (2-10 items, no duplicates, no empty)
+          - QuestionService uses correct factory based on type
+          - Tests pass for all question types
+
+      - id: ARCH-002.4
+        name: Add Factory to QuestionOption Entity
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/Entities/QuestionOption.cs
+          - src/SurveyBot.Infrastructure/Services/QuestionService.cs
+        actions:
+          - Add private constructor
+          - Add QuestionOption.Create(questionId, text, orderIndex, next) factory
+          - Add UpdateNext(NextQuestionDeterminant) method
+          - Validate questionId > 0
+          - Validate text not empty and <= 200 chars
+          - Validate orderIndex >= 0
+          - Update QuestionService option creation
+        acceptance_criteria:
+          - QuestionOption.Create() validates all parameters
+          - UpdateNext() allows conditional flow updates
+          - Tests pass
+
+      - id: ARCH-002.5
+        name: Add Factories to Response Entity
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/Entities/Response.cs
+          - src/SurveyBot.Infrastructure/Services/ResponseService.cs
+        actions:
+          - Add private constructor
+          - Add Response.Start(surveyId, respondentTelegramId) factory
+          - Add Response.Resume(responseId, surveyId, respondentId, startedAt, visitedIds) factory
+          - Add Complete() method (sets IsComplete and SubmittedAt)
+          - Validate surveyId > 0 and respondentId > 0
+          - Update ResponseService
+        acceptance_criteria:
+          - Response.Start() creates new response
+          - Response.Resume() restores incomplete response
+          - Complete() can only be called once
+          - ResponseService uses factories
+          - Tests pass
+
+      - id: ARCH-002.6
+        name: Add Factory to Answer Entity
+        status: pending
+        estimated_hours: 1.0
+        files:
+          - src/SurveyBot.Core/Entities/Answer.cs
+          - src/SurveyBot.Infrastructure/Services/ResponseService.cs
+        actions:
+          - Add private constructor
+          - Add Answer.Create(responseId, questionId, value, next) factory
+          - Validate responseId > 0 and questionId > 0
+          - Remove old CreateText, CreateChoice, CreateRating methods
+          - Update ResponseService to use single Create() method with AnswerValue
+        acceptance_criteria:
+          - Answer.Create() validates parameters
+          - Accepts AnswerValue (from ARCH-003) or temporary solution
+          - Old type-specific factories removed
+          - ResponseService uses new factory
+          - Tests pass
+
+      - id: ARCH-002.7
+        name: Update EF Core Configurations
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Infrastructure/Data/Configurations/*.cs
+        actions:
+          - Verify EF Core can invoke private constructors
+          - Test entity loading and persistence
+          - No configuration changes needed (EF Core uses reflection)
+        acceptance_criteria:
+          - EF Core can create entities via private constructors
+          - All entity configurations work correctly
+          - Migration applies successfully
+
+      - id: ARCH-002.8
+        name: Compile and Fix Remaining Usages
+        status: pending
+        estimated_hours: 1.0
+        files:
+          - src/SurveyBot.Infrastructure/Services/*.cs
+          - tests/SurveyBot.Tests/**/*.cs
+        actions:
+          - Run dotnet build to find all 'new Entity()' calls
+          - Replace with appropriate factory method calls
+          - Update test setup methods to use factories
+          - Search codebase for anti-patterns (grep 'new Survey()', etc.)
+        acceptance_criteria:
+          - Solution compiles without errors
+          - No direct 'new Entity()' calls in application code
+          - Tests updated to use factories
+          - No anti-patterns remain
+
+      - id: ARCH-002.9
+        name: Run Full Test Suite
+        status: pending
+        estimated_hours: 0.5
+        actions:
+          - Run dotnet clean && dotnet build
+          - Run all unit tests
+          - Run all integration tests
+          - Verify factory validation works
+          - Verify EF Core persistence works
+        acceptance_criteria:
+          - All tests pass
+          - Factories validate correctly
+          - Invalid parameters throw appropriate exceptions
+          - EF Core can persist entities created via factories
+
+    testing:
+      unit_tests:
+        - Test each factory method with valid parameters
+        - Test factory validation (invalid parameters throw exceptions)
+        - Test factory methods normalize input (trim strings, uppercase codes)
+        - Test private constructors cannot be called from outside
+        - Test UpdateMetadata prevents changes to active surveys with responses
+        - Test Complete() can only be called once on Response
+        - Test choice option validation (duplicates, empty, count)
+
+      integration_tests:
+        - Test entity creation via factories persists correctly
+        - Test EF Core can load entities created via factories
+        - Test factory-created entities can be updated and saved
+        - Test navigation properties work with factory-created entities
+
+      regression_tests:
+        - Survey CRUD operations
+        - Question creation for all types
+        - Response submission workflow
+        - API endpoint tests
+        - Bot command handlers
+
+    rollback_strategy: |
+      If issues arise:
+      1. Revert ARCH-002 commit: git revert <commit>
+      2. Keep ARCH-001 (private setters still in place)
+      3. Restore temporary setter methods if needed
+      4. Recovery time: < 30 minutes
+
+    technical_notes: |
+      - EF Core can invoke private parameterless constructors via reflection
+      - Factory methods provide named constructors (Survey.Create vs new Survey)
+      - Type-specific factories for Question improve API clarity
+      - Validation centralized in factories (not scattered in services)
+      - Temporary setter methods from ARCH-001 can be removed
+      - No database migration needed (schema unchanged)
+
+  - id: ARCH-003
+    name: Create AnswerValue Value Object (Polymorphic)
+    priority: HIGH
+    status: pending
+    estimated_hours: 6-8
+    risk_level: high
+    phase: phase-1
+    dependencies: [ARCH-001, ARCH-002]
+    parallel_safe: false
+
+    description: |
+      Replace primitive string-based answer storage (AnswerText, AnswerJson) with a
+      polymorphic value object hierarchy that provides type-safe answer handling.
+      This eliminates string parsing throughout the codebase and centralizes answer
+      validation logic in dedicated value object types.
+
+    business_value:
+      - Type Safety: Compiler prevents invalid answer types for questions
+      - Validation: Answer format validation at creation time, not at parse time
+      - Maintainability: All answer logic centralized in value objects
+      - Extensibility: Adding new question types doesn't require changing Answer entity
+      - Eliminate Magic Strings: No more JSON parsing scattered across services
+
+    breaking_changes:
+      database_schema:
+        - New column: answer_value_json (JSONB)
+        - Old columns: answer_text and answer_json (deprecated but kept for rollback)
+        - New index: GIN index on answer_value_json for performance
+
+      code:
+        - Answer.Create() signature changed to accept AnswerValue parameter
+        - Services must use AnswerValue factories instead of raw strings
+        - AutoMapper profiles need updates for value object mapping
+
+    files_to_create:
+      - path: src/SurveyBot.Core/ValueObjects/Answers/AnswerValue.cs
+        description: Abstract base class for polymorphic answer values
+        type: abstract_class
+
+      - path: src/SurveyBot.Core/ValueObjects/Answers/TextAnswerValue.cs
+        description: Value object for text question answers
+        type: sealed_class
+
+      - path: src/SurveyBot.Core/ValueObjects/Answers/SingleChoiceAnswerValue.cs
+        description: Value object for single-choice answers
+        type: sealed_class
+
+      - path: src/SurveyBot.Core/ValueObjects/Answers/MultipleChoiceAnswerValue.cs
+        description: Value object for multiple-choice answers
+        type: sealed_class
+
+      - path: src/SurveyBot.Core/ValueObjects/Answers/RatingAnswerValue.cs
+        description: Value object for rating answers (1-5 scale)
+        type: sealed_class
+
+      - path: src/SurveyBot.Core/ValueObjects/Answers/AnswerValueFactory.cs
+        description: Factory for parsing JSON to appropriate AnswerValue subtype
+        type: static_class
+
+      - path: tests/SurveyBot.Tests/Unit/ValueObjects/TextAnswerValueTests.cs
+        description: Unit tests for TextAnswerValue
+        type: test_class
+
+      - path: tests/SurveyBot.Tests/Unit/ValueObjects/SingleChoiceAnswerValueTests.cs
+        description: Unit tests for SingleChoiceAnswerValue
+        type: test_class
+
+      - path: tests/SurveyBot.Tests/Unit/ValueObjects/MultipleChoiceAnswerValueTests.cs
+        description: Unit tests for MultipleChoiceAnswerValue
+        type: test_class
+
+      - path: tests/SurveyBot.Tests/Unit/ValueObjects/RatingAnswerValueTests.cs
+        description: Unit tests for RatingAnswerValue
+        type: test_class
+
+      - path: tests/SurveyBot.Tests/Unit/ValueObjects/AnswerValueFactoryTests.cs
+        description: Unit tests for AnswerValueFactory parsing
+        type: test_class
+
+    files_to_modify:
+      - path: src/SurveyBot.Core/Entities/Answer.cs
+        changes: |
+          - Replace AnswerText and AnswerJson properties with single Value property (AnswerValue)
+          - Update Answer.Create() to accept AnswerValue parameter
+          - Remove type-specific factory methods
+        estimated_impact: HIGH
+
+      - path: src/SurveyBot.Infrastructure/Data/Configurations/AnswerConfiguration.cs
+        changes: |
+          - Add value converter for AnswerValue (serialize/deserialize)
+          - Configure answer_value_json column (JSONB)
+          - Keep old columns for migration safety
+          - Add type discriminator wrapper for polymorphic deserialization
+        estimated_impact: HIGH
+
+      - path: src/SurveyBot.Infrastructure/Services/ResponseService.cs
+        changes: |
+          - Replace answer creation with AnswerValue factories
+          - Remove JSON parsing logic from MapToAnswerDtoAsync
+          - Use pattern matching on AnswerValue subtypes
+          - Remove CreateAnswerJson helper method
+        estimated_impact: HIGH
+        lines_removed: ~50
+
+      - path: src/SurveyBot.Infrastructure/Services/SurveyService.cs
+        changes: |
+          - Update FormatAnswerForCSV to use AnswerValue.DisplayValue
+          - Remove duplicate JSON parsing logic
+          - Use pattern matching instead of try-catch
+        estimated_impact: MEDIUM
+        lines_removed: ~30
+
+    steps:
+      - id: ARCH-003.1
+        name: Create Base AnswerValue Class
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/ValueObjects/Answers/AnswerValue.cs
+        actions:
+          - Create abstract AnswerValue base class
+          - Add QuestionType property (abstract)
+          - Add ToJson() method (abstract)
+          - Add IsValidFor(Question) method (abstract)
+          - Add DisplayValue property (abstract)
+          - Implement IEquatable<AnswerValue> with abstract Equals/GetHashCode
+          - Add static FromJson(json, questionType) factory method
+        acceptance_criteria:
+          - Abstract base class compiles
+          - Equality interface implemented
+          - Factory method delegates to AnswerValueFactory
+          - XML documentation complete
+
+      - id: ARCH-003.2
+        name: Create TextAnswerValue
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/ValueObjects/Answers/TextAnswerValue.cs
+          - tests/SurveyBot.Tests/Unit/ValueObjects/TextAnswerValueTests.cs
+        actions:
+          - Create sealed TextAnswerValue class
+          - Add Text property (string, max 5000 chars)
+          - Add private constructor
+          - Add Create(text) factory with validation
+          - Add FromJson(json) static method
+          - Implement ToJson(), IsValidFor(), DisplayValue
+          - Implement equality (compare Text)
+          - Write unit tests (create, validate, serialize, equality)
+        acceptance_criteria:
+          - Create() validates text (not empty, max 5000 chars)
+          - ToJson/FromJson round-trip works correctly
+          - Equality compares Text property
+          - Tests pass (10+ test cases)
+
+      - id: ARCH-003.3
+        name: Create SingleChoiceAnswerValue
+        status: pending
+        estimated_hours: 1.0
+        files:
+          - src/SurveyBot.Core/ValueObjects/Answers/SingleChoiceAnswerValue.cs
+          - tests/SurveyBot.Tests/Unit/ValueObjects/SingleChoiceAnswerValueTests.cs
+        actions:
+          - Create sealed SingleChoiceAnswerValue class
+          - Add SelectedOption property (string)
+          - Add SelectedOptionIndex property (int)
+          - Add private constructor
+          - Add Create(selectedOption, validOptions) factory
+          - Add CreateByIndex(index, validOptions) factory
+          - Add FromJson(json) static method
+          - Validate option exists in validOptions collection
+          - Implement ToJson(), IsValidFor(), DisplayValue
+          - Implement equality
+          - Write unit tests
+        acceptance_criteria:
+          - Create() validates option against valid options
+          - CreateByIndex() validates index range
+          - SelectedOptionIndex stored for ordering
+          - Tests pass (15+ test cases)
+
+      - id: ARCH-003.4
+        name: Create MultipleChoiceAnswerValue
+        status: pending
+        estimated_hours: 1.0
+        files:
+          - src/SurveyBot.Core/ValueObjects/Answers/MultipleChoiceAnswerValue.cs
+          - tests/SurveyBot.Tests/Unit/ValueObjects/MultipleChoiceAnswerValueTests.cs
+        actions:
+          - Create sealed MultipleChoiceAnswerValue class
+          - Add SelectedOptions property (IReadOnlyList<string>)
+          - Add SelectedOptionIndices property (IReadOnlyList<int>)
+          - Add private constructor
+          - Add Create(selectedOptions, validOptions) factory
+          - Validate at least one option selected
+          - Validate all options exist in validOptions
+          - Implement ToJson(), FromJson(), IsValidFor(), DisplayValue
+          - Implement equality (compare collections)
+          - Write unit tests
+        acceptance_criteria:
+          - Create() validates all selected options
+          - At least one option must be selected
+          - SelectedOptions is immutable
+          - DisplayValue joins options with comma
+          - Tests pass (15+ test cases)
+
+      - id: ARCH-003.5
+        name: Create RatingAnswerValue
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/ValueObjects/Answers/RatingAnswerValue.cs
+          - tests/SurveyBot.Tests/Unit/ValueObjects/RatingAnswerValueTests.cs
+        actions:
+          - Create sealed RatingAnswerValue class
+          - Add Rating property (int, 1-5)
+          - Add private constructor
+          - Add Create(rating) factory with validation
+          - Add FromJson(json) static method
+          - Validate rating in range 1-5
+          - Implement ToJson(), IsValidFor(), DisplayValue
+          - Implement equality
+          - Write unit tests
+        acceptance_criteria:
+          - Create() validates rating range (1-5)
+          - DisplayValue shows "X/5" format
+          - Tests pass (10+ test cases)
+
+      - id: ARCH-003.6
+        name: Create AnswerValueFactory
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Core/ValueObjects/Answers/AnswerValueFactory.cs
+          - tests/SurveyBot.Tests/Unit/ValueObjects/AnswerValueFactoryTests.cs
+        actions:
+          - Create static AnswerValueFactory class
+          - Add Parse(json, questionType) method
+          - Add TryParse(json, questionType) method (returns null on failure)
+          - Delegate to appropriate value object FromJson method
+          - Write unit tests for all question types
+        acceptance_criteria:
+          - Parse() returns correct AnswerValue subtype
+          - TryParse() returns null on invalid JSON
+          - Factory handles all QuestionType values
+          - Tests pass (8+ test cases)
+
+      - id: ARCH-003.7
+        name: Update Answer Entity
+        status: pending
+        estimated_hours: 1.0
+        files:
+          - src/SurveyBot.Core/Entities/Answer.cs
+        actions:
+          - Add Value property (AnswerValue type)
+          - Remove AnswerText and AnswerJson properties
+          - Update Answer.Create() to accept AnswerValue parameter
+          - Remove old type-specific factory methods
+          - Update XML documentation
+        acceptance_criteria:
+          - Answer has single Value property
+          - Answer.Create() accepts AnswerValue
+          - Old properties removed
+          - Compiles successfully
+
+      - id: ARCH-003.8
+        name: Update EF Core Configuration
+        status: pending
+        estimated_hours: 1.5
+        files:
+          - src/SurveyBot.Infrastructure/Data/Configurations/AnswerConfiguration.cs
+        actions:
+          - Add value converter for AnswerValue property
+          - Configure answer_value_json column (JSONB type)
+          - Implement SerializeAnswerValue() helper (with type discriminator)
+          - Implement DeserializeAnswerValue() helper (uses AnswerValueFactory)
+          - Keep old columns (answer_text, answer_json) for migration
+          - Add type discriminator wrapper class
+        acceptance_criteria:
+          - Value converter serializes AnswerValue to JSON with type info
+          - Value converter deserializes JSON back to correct subtype
+          - EF Core can persist and load Answer with AnswerValue
+          - Old columns remain in schema
+
+      - id: ARCH-003.9
+        name: Create Database Migration
+        status: pending
+        estimated_hours: 1.0
+        files:
+          - src/SurveyBot.Infrastructure/Migrations/20251127_AnswerValuePolymorphic.cs
+        actions:
+          - Run dotnet ef migrations add AnswerValuePolymorphic
+          - Review migration SQL
+          - Add answer_value_json column (JSONB, nullable initially)
+          - Migrate data from answer_text to answer_value_json (text answers)
+          - Migrate data from answer_json to answer_value_json (other types)
+          - Make answer_value_json NOT NULL
+          - Add GIN index on answer_value_json
+          - Keep old columns for rollback safety
+          - Write down migration SQL for production review
+        acceptance_criteria:
+          - Migration creates answer_value_json column
+          - All existing data migrated successfully
+          - GIN index created for performance
+          - Old columns preserved
+          - Down migration can restore old format
+          - Test migration on copy of production data
+
+      - id: ARCH-003.10
+        name: Update ResponseService
+        status: pending
+        estimated_hours: 1.5
+        files:
+          - src/SurveyBot.Infrastructure/Services/ResponseService.cs
+        actions:
+          - Update SaveAnswerAsync to create AnswerValue objects
+          - Use TextAnswerValue.Create() for text questions
+          - Use SingleChoiceAnswerValue.Create() for single-choice
+          - Use MultipleChoiceAnswerValue.Create() for multiple-choice
+          - Use RatingAnswerValue.Create() for rating questions
+          - Update MapToAnswerDtoAsync to use pattern matching
+          - Remove CreateAnswerJson helper method
+          - Remove JSON parsing try-catch blocks
+        acceptance_criteria:
+          - SaveAnswerAsync uses AnswerValue factories
+          - MapToAnswerDtoAsync uses pattern matching (no JSON parsing)
+          - CreateAnswerJson method removed
+          - ~50 lines of code deleted
+          - Tests pass
+
+      - id: ARCH-003.11
+        name: Update SurveyService CSV Export
+        status: pending
+        estimated_hours: 0.5
+        files:
+          - src/SurveyBot.Infrastructure/Services/SurveyService.cs
+        actions:
+          - Update FormatAnswerForCSV method
+          - Use pattern matching on answer.Value
+          - Use AnswerValue.DisplayValue property
+          - Remove JSON parsing logic
+          - Remove try-catch blocks
+        acceptance_criteria:
+          - FormatAnswerForCSV uses pattern matching
+          - No JSON deserialization in method
+          - ~30 lines of code deleted
+          - CSV export works correctly
+
+      - id: ARCH-003.12
+        name: Run Full Test Suite
+        status: pending
+        estimated_hours: 0.5
+        actions:
+          - Apply migration to test database
+          - Run dotnet clean && dotnet build
+          - Run all unit tests (50+ new tests added)
+          - Run all integration tests
+          - Test answer creation for all question types
+          - Test answer retrieval and mapping
+          - Test CSV export
+          - Verify no JSON parsing errors
+        acceptance_criteria:
+          - All tests pass
+          - Value object tests pass (50+ tests)
+          - Integration tests pass
+          - No JSON parsing errors in logs
+          - Answer CRUD operations work for all types
+
+    testing:
+      unit_tests:
+        - TextAnswerValue: Create, validate length, serialize, equality
+        - SingleChoiceAnswerValue: Create, validate option, serialize, equality
+        - MultipleChoiceAnswerValue: Create, validate options, serialize, equality
+        - RatingAnswerValue: Create, validate range, serialize, equality
+        - AnswerValueFactory: Parse all types, TryParse, error handling
+        - Value object equality semantics (same value = equal)
+        - ToJson/FromJson round-trip for all types
+
+      integration_tests:
+        - Answer entity CRUD with AnswerValue
+        - EF Core value converter serialization/deserialization
+        - ResponseService.SaveAnswerAsync with all question types
+        - SurveyService CSV export with all answer types
+        - Migration script execution
+        - Data migration validation
+
+      performance_tests:
+        - Benchmark serialization overhead (target <1ms per answer)
+        - Benchmark deserialization overhead (target <1ms per answer)
+        - Query performance with GIN index
+        - Compare before/after migration performance
+
+    rollback_strategy: |
+      If critical issues arise during migration:
+
+      1. BEFORE PRODUCTION:
+         - Test migration on copy of production database
+         - Verify all data migrates correctly
+         - Test rollback migration
+
+      2. PRODUCTION ROLLBACK:
+         - Run down migration to restore old columns
+         - Revert code changes: git revert <commit>
+         - Rebuild: dotnet clean && dotnet build
+         - Deploy previous version
+         - Recovery time: ~1 hour
+
+      3. PARTIAL ROLLBACK:
+         - Keep new column and old columns
+         - Revert code to use old columns
+         - Remove migration later after verification
+
+      4. DATA SAFETY:
+         - Old columns (answer_text, answer_json) preserved during migration
+         - Can restore from old columns if new format fails
+         - Database backup before migration (mandatory)
+
+    technical_notes: |
+      Polymorphic Value Object Pattern:
+      - Base class: AnswerValue (abstract)
+      - Subtypes: TextAnswerValue, SingleChoiceAnswerValue, etc. (sealed)
+      - Each subtype is immutable with value semantics
+      - Equality based on value, not reference
+
+      EF Core Integration:
+      - EF Core doesn't natively support polymorphic owned types
+      - Solution: Store as JSON with type discriminator
+      - Value converter handles serialization/deserialization
+      - Type discriminator allows parsing to correct subtype
+
+      Database Storage:
+      - JSONB column in PostgreSQL (efficient, indexable)
+      - GIN index for fast JSON queries
+      - Format: {"Type": "Text", "Json": "{\"Text\": \"answer\"}"}
+
+      Performance:
+      - Serialization: ~1ms per answer (negligible)
+      - Deserialization: ~1ms per answer (negligible)
+      - GIN index: Fast JSON queries in PostgreSQL
+      - Overall impact: Minimal (<5% overhead)
+
+      Extensibility:
+      - Adding new question types: Create new AnswerValue subtype
+      - No changes to Answer entity required
+      - Update AnswerValueFactory.Parse() only
+
+completion_criteria:
+  all_tasks:
+    - All steps completed for each task
+    - All acceptance criteria met
+    - All tests passing (unit, integration, regression)
+    - Documentation updated
+    - Completion report created for each task
+
+  code_quality:
+    - No compilation errors or warnings
+    - Code follows naming conventions
+    - XML documentation complete
+    - Test coverage >80%
+    - No code smells or anti-patterns
+
+  architecture:
+    - Clean Architecture principles maintained
+    - DDD patterns correctly implemented
+    - Value objects immutable with value semantics
+    - Entities encapsulated with private setters
+    - Factory methods enforce invariants
+    - No primitive obsession
+    - No anemic domain model
+
+documentation_to_update:
+  - src/SurveyBot.Core/CLAUDE.md
+  - src/SurveyBot.Infrastructure/CLAUDE.md
+  - documentation/architecture/ARCHITECTURE.md
+  - CLAUDE.md (main project file)
+
+reports_to_create:
+  - documentation/guides/ARCH-001_COMPLETION_REPORT.md
+  - documentation/guides/ARCH-002_COMPLETION_REPORT.md
+  - documentation/guides/ARCH-003_COMPLETION_REPORT.md
+
+next_steps:
+  after_phase_1:
+    - ARCH-006: Rich Domain Model (add behavior methods to entities)
+    - ARCH-007: JSON-based Question Configuration
+    - ARCH-004: Specification Pattern for Complex Queries
+    - ARCH-005: Domain Events

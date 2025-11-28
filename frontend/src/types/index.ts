@@ -35,6 +35,7 @@ export const QuestionType = {
   SingleChoice: 1,
   MultipleChoice: 2,
   Rating: 3,
+  Location: 4,
 } as const;
 
 export type QuestionType = (typeof QuestionType)[keyof typeof QuestionType];

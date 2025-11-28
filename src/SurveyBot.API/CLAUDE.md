@@ -1,6 +1,6 @@
 # SurveyBot.API - REST API Presentation Layer
 
-**Version**: 1.4.0 | **Framework**: .NET 8.0 | **ASP.NET Core** 8.0
+**Version**: 1.5.0 | **Framework**: .NET 8.0 | **ASP.NET Core** 8.0
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [Infrastructure Layer](../SurveyBot.Infrastructure/CLAUDE.md) | [Bot Layer](../SurveyBot.Bot/CLAUDE.md)
@@ -471,6 +471,16 @@ form-data:
 - Documents: pdf, doc, docx, xls, xlsx, ppt, pptx, txt, csv (max 25 MB)
 - Archives: zip, rar, 7z, tar, gz, bz2 (max 100 MB)
 
+**Location Answer Format** (NEW v1.5.0):
+```json
+{
+  "latitude": 40.7128,
+  "longitude": -74.0060
+}
+```
+- Validation: Latitude -90 to 90, Longitude -180 to 180
+- Privacy-preserving logging (coordinate ranges, not exact values)
+
 ---
 
 ## Middleware
@@ -717,14 +727,19 @@ public class UpdateQuestionFlowDto
 - `SurveyMappingProfile` - Survey mappings
 - `QuestionMappingProfile` - Question mappings (enhanced v1.4.0)
 - `ResponseMappingProfile` - Response mappings
-- `AnswerMappingProfile` - Answer mappings
+- `AnswerMappingProfile` - Answer mappings (simplified v1.5.0 with AnswerValue pattern matching)
 - `UserMappingProfile` - User mappings
 
-**Value Resolvers**:
+**Value Resolvers** (legacy, mostly deprecated in v1.5.0):
 - `QuestionOptionsResolver` - Deserialize JSON to List<string>
-- `AnswerJsonResolver` - Parse answer JSON by type
+- `AnswerJsonResolver` - DEPRECATED: Parse answer JSON by type (replaced by AnswerValue pattern matching)
 - `SurveyTotalResponsesResolver` - Count total responses
 - `SurveyCompletedResponsesResolver` - Count completed
+- **NEW v1.5.0 Location Resolvers**:
+  - `AnswerLocationLatitudeResolver` - Extract latitude from LocationAnswerValue
+  - `AnswerLocationLongitudeResolver` - Extract longitude from LocationAnswerValue
+  - `AnswerLocationAccuracyResolver` - Extract accuracy from LocationAnswerValue
+  - `AnswerLocationTimestampResolver` - Extract timestamp from LocationAnswerValue
 
 ### Enhanced Value Object Mappings (v1.4.0)
 
@@ -864,6 +879,153 @@ public void Should_Map_QuestionId_To_NextDeterminant()
     Assert.NotNull(dto.DefaultNextDeterminant);
     Assert.Equal(NextStepType.GoToQuestion, dto.DefaultNextDeterminant.Type);
     Assert.Equal(5, dto.DefaultNextDeterminant.NextQuestionId);
+}
+```
+
+### Answer Value Object Mappings (v1.5.0)
+
+**Simplified AnswerMappingProfile with Pattern Matching**:
+
+The ARCH-003 migration eliminates complex JSON parsing logic in AutoMapper by using pattern matching on the `answer.Value` property. This provides type safety and clarity.
+
+**Before (v1.4.x)** - Complex JSON parsing with separate resolvers:
+```csharp
+// OLD: Required custom value resolvers for each answer type
+CreateMap<Answer, AnswerDto>()
+    .ForMember(dest => dest.AnswerText, opt => opt.MapFrom<AnswerTextResolver>())
+    .ForMember(dest => dest.SelectedOptions, opt => opt.MapFrom<AnswerSelectedOptionsResolver>())
+    .ForMember(dest => dest.RatingValue, opt => opt.MapFrom<AnswerRatingResolver>());
+
+// Each resolver had to parse JSON manually
+public class AnswerTextResolver : IValueResolver<Answer, AnswerDto, string?>
+{
+    public string? Resolve(Answer source, AnswerDto destination, string? destMember, ResolutionContext context)
+    {
+        if (source.QuestionType == QuestionType.Text)
+            return source.AnswerText;
+        // Complex JSON parsing logic...
+    }
+}
+```
+
+**After (v1.5.0)** - Simple pattern matching:
+```csharp
+// NEW: Clean AfterMap with pattern matching on Value property
+CreateMap<Answer, AnswerDto>()
+    .ForMember(dest => dest.AnswerText, opt => opt.Ignore())
+    .ForMember(dest => dest.SelectedOptions, opt => opt.Ignore())
+    .ForMember(dest => dest.RatingValue, opt => opt.Ignore())
+    .ForMember(dest => dest.Latitude, opt => opt.Ignore())
+    .ForMember(dest => dest.Longitude, opt => opt.Ignore())
+    .AfterMap((src, dest) =>
+    {
+        // Type-safe pattern matching - no JSON parsing!
+        switch (src.Value)
+        {
+            case TextAnswerValue textValue:
+                dest.AnswerText = textValue.Text;
+                break;
+
+            case SingleChoiceAnswerValue singleChoice:
+                dest.SelectedOptions = new List<string> { singleChoice.SelectedOption };
+                break;
+
+            case MultipleChoiceAnswerValue multipleChoice:
+                dest.SelectedOptions = multipleChoice.SelectedOptions.ToList();
+                break;
+
+            case RatingAnswerValue ratingValue:
+                dest.RatingValue = ratingValue.Rating;
+                break;
+
+            case LocationAnswerValue locationValue:
+                dest.Latitude = locationValue.Latitude;
+                dest.Longitude = locationValue.Longitude;
+                dest.LocationAccuracy = locationValue.Accuracy;
+                dest.LocationTimestamp = locationValue.Timestamp;
+                break;
+
+            case null:
+                // Legacy fallback for backward compatibility
+                var legacyValue = AnswerValueFactory.ConvertFromLegacy(
+                    src.AnswerText, src.AnswerJson, src.Question.QuestionType);
+                // ... handle legacy data
+                break;
+        }
+    });
+```
+
+**Benefits of New Pattern**:
+1. **No JSON Parsing**: Value objects are already deserialized by EF Core
+2. **Type Safety**: Compiler catches missing cases
+3. **Readability**: Clear intent, single AfterMap block
+4. **Backward Compatible**: Fallback to legacy AnswerText/AnswerJson when Value is null
+5. **Easier Testing**: Mock AnswerValue, not JSON strings
+
+**Location Answer Mapping Example**:
+```csharp
+// Mapping a location answer with full metadata
+var answer = new Answer
+{
+    Id = 1,
+    QuestionId = 5,
+    Value = LocationAnswerValue.Create(
+        latitude: 40.7128,
+        longitude: -74.0060,
+        accuracy: 10.5,
+        timestamp: DateTime.UtcNow)
+};
+
+var dto = _mapper.Map<AnswerDto>(answer);
+// dto.Latitude = 40.7128
+// dto.Longitude = -74.0060
+// dto.LocationAccuracy = 10.5
+// dto.LocationTimestamp = [timestamp]
+```
+
+**Deprecated Resolvers** (removed in v1.5.0):
+- `AnswerJsonResolver` - No longer needed, replaced by pattern matching
+- Custom answer type resolvers - All consolidated into single AfterMap
+
+**Remaining Resolvers**:
+- Location resolvers still used as value resolvers for extracting specific properties from LocationAnswerValue in scenarios where AfterMap isn't suitable
+
+**Testing Answer Mappings**:
+```csharp
+[Fact]
+public void Should_Map_TextAnswerValue_To_AnswerDto()
+{
+    // Arrange
+    var answer = Answer.CreateWithValue(
+        responseId: 1,
+        questionId: 1,
+        value: TextAnswerValue.Create("Sample answer"));
+
+    // Act
+    var dto = _mapper.Map<AnswerDto>(answer);
+
+    // Assert
+    Assert.Equal("Sample answer", dto.AnswerText);
+    Assert.Null(dto.SelectedOptions);
+    Assert.Null(dto.RatingValue);
+}
+
+[Fact]
+public void Should_Map_LocationAnswerValue_To_AnswerDto()
+{
+    // Arrange
+    var answer = Answer.CreateWithValue(
+        responseId: 1,
+        questionId: 1,
+        value: LocationAnswerValue.Create(40.7128, -74.0060, 10.5));
+
+    // Act
+    var dto = _mapper.Map<AnswerDto>(answer);
+
+    // Assert
+    Assert.Equal(40.7128, dto.Latitude);
+    Assert.Equal(-74.0060, dto.Longitude);
+    Assert.Equal(10.5, dto.LocationAccuracy);
 }
 ```
 
@@ -1767,4 +1929,4 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 ---
 
-**Last Updated**: 2025-11-25 | **Version**: 1.4.0 (Conditional Question Flow - API Layer Documentation Enhanced)
+**Last Updated**: 2025-11-27 | **Version**: 1.5.0 (Location Question Type Support Added)

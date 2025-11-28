@@ -67,6 +67,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired()
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+        // Configure backing field for Surveys collection
+        builder.Navigation(u => u.Surveys)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
         // Relationships
         builder.HasMany(u => u.Surveys)
             .WithOne(s => s.Creator)

@@ -1,6 +1,6 @@
 # SurveyBot.Infrastructure - Data Access Layer
 
-**Version**: 1.4.1 | **Target Framework**: .NET 8.0 | **EF Core**: 9.0.10 | **Database**: PostgreSQL 15+
+**Version**: 1.5.0 | **Target Framework**: .NET 8.0 | **EF Core**: 9.0.10 | **Database**: PostgreSQL 15+
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [API Layer](../SurveyBot.API/CLAUDE.md)
@@ -92,7 +92,7 @@ public override Task<int> SaveChangesAsync(CancellationToken cancellationToken =
 - MediaContent: JSONB with GIN index for multimedia metadata (NEW in v1.3.0)
 - Composite unique index: `(SurveyId, OrderIndex)` prevents duplicates
 - Check constraint: `order_index >= 0`
-- Check constraint: `question_type IN ('text', 'multiple_choice', 'single_choice', 'rating', 'yes_no')`
+- Check constraint: `question_type IN ('text', 'multiple_choice', 'single_choice', 'rating', 'yes_no', 'location')`
 - **NEW in v1.4.0 - Conditional Flow**:
   - DefaultNextQuestionId: Optional FK to next question (for non-branching)
   - Relationship to Options collection (one-to-many)
@@ -140,13 +140,23 @@ builder.OwnsOne(qo => qo.Next, nb =>
   - Conversion: List<int> ↔ JSON serialization
 
 **AnswerConfiguration** - `Data/Configurations/AnswerConfiguration.cs`:
-- AnswerJson: JSONB with GIN index
+- AnswerText: TEXT column (legacy, for Text question answers)
+- AnswerJson: JSONB with GIN index (legacy, for structured answers)
+- **NEW v1.5.0 - AnswerValue Polymorphic Value Object**:
+  - Value: AnswerValue? stored as JSONB in `answer_value_json` column
+  - Uses System.Text.Json polymorphic serialization with type discriminators
+  - HasConversion: Serialize/deserialize with automatic type detection
+  - GIN index on `answer_value_json` for efficient JSON queries
+  - **Polymorphic Mapping**: Automatic routing to TextAnswerValue, SingleChoiceAnswerValue, MultipleChoiceAnswerValue, RatingAnswerValue, LocationAnswerValue
+  - **Type Safety**: JSON discriminator ($type) ensures correct deserialization
 - Composite unique index: `(ResponseId, QuestionId)` (one answer per question)
-- Check constraint: `answer_text IS NOT NULL OR answer_json IS NOT NULL`
-- **NEW in v1.4.0 - Conditional Flow (REFACTORED in v1.4.1)**:
-  - NextQuestionId: int (deprecated, kept for legacy compatibility)
-  - Migrated to NextQuestionDeterminant value object for type-safe design
-  - See "Conditional Flow Architecture" section below
+- **Check constraint** (updated v1.5.0): `answer_text IS NOT NULL OR answer_json IS NOT NULL OR answer_value_json IS NOT NULL`
+- **COMPLETED v1.4.2 - Answer.Next Value Object**:
+  - Next: NextQuestionDeterminant (owned type) - FULLY MIGRATED
+  - Maps to columns: `next_step_type` (TEXT), `next_step_question_id` (INT)
+  - CHECK constraint enforces invariants (GoToQuestion requires ID > 0, EndSurvey requires null)
+  - Migration 20251126180649_AnswerNextStepValueObject with data transformation
+  - **No more magic values**: All conditional flow entities now use value object pattern consistently
 
 ---
 
@@ -313,6 +323,48 @@ SELECT * FROM responses WHERE visited_question_ids @> '[3]'::jsonb;
 -- Add question to visited list (application level)
 UPDATE responses SET visited_question_ids = visited_question_ids || '[5]'::jsonb;
 ```
+
+**ADR-004: Why HasConversion for AnswerValue instead of Owned Type?** (NEW v1.5.0)
+
+**Decision**: Use EF Core `HasConversion` with polymorphic JSON serialization for AnswerValue instead of owned type pattern.
+
+**Rationale**:
+1. **Polymorphism**: AnswerValue is an abstract base class with 5 concrete implementations - owned types don't support polymorphism
+2. **Type Discriminator**: System.Text.Json [JsonDerivedType] provides automatic type resolution during deserialization
+3. **Flexibility**: Adding new answer types (e.g., DateAnswerValue) requires no database migration, just new value object class
+4. **Single Column**: All answer types stored in one `answer_value_json` JSONB column with type information embedded
+5. **Backward Compatibility**: Legacy `answer_text` and `answer_json` columns remain for migration period
+
+**Implementation**:
+```csharp
+builder.Property(a => a.Value)
+    .HasColumnName("answer_value_json")
+    .HasColumnType("jsonb")
+    .HasConversion(
+        v => v != null ? JsonSerializer.Serialize(v, options) : null,
+        json => !string.IsNullOrWhiteSpace(json)
+            ? JsonSerializer.Deserialize<AnswerValue>(json, options)
+            : null);
+```
+
+**Database Storage** (JSONB with type discriminator):
+```json
+{
+  "$type": "SingleChoice",
+  "selectedOption": "Option A",
+  "selectedOptionIndex": 0
+}
+```
+
+**Trade-offs**:
+- **Pro**: Polymorphic support, easy extensibility, single column, automatic type resolution
+- **Con**: Cannot query individual value object properties directly (need JSONB operators like `->`, `->>`)
+
+**Migration Strategy**:
+- `answer_value_json` column added alongside legacy columns
+- Migration 20251127104737_AddAnswerValueJsonColumn preserves existing data
+- Services gradually migrate to using Value property instead of AnswerText/AnswerJson
+- Legacy columns can be dropped in v2.0.0 after full migration
 
 ---
 
@@ -771,7 +823,7 @@ public string GenerateAccessToken(int userId, long telegramId, string? username)
 - No password validation (Telegram auth handled externally)
 - Returns JWT + refresh token
 
-### ResponseService (UPDATED in v1.4.0)
+### ResponseService (UPDATED in v1.4.2)
 
 **Location**: `Services/ResponseService.cs`
 
@@ -781,9 +833,14 @@ public string GenerateAccessToken(int userId, long telegramId, string? username)
 - `CompleteResponseAsync`: Finalize response
 - Answer validation methods for each question type
 
-**NEW Methods in v1.4.0**:
+**UPDATED Methods in v1.4.2** (Renamed for Value Object Consistency):
 
 ```csharp
+// NEW NAMES (v1.4.2) - Return value objects instead of primitive int
+public async Task<NextQuestionDeterminant> DetermineNextStepAsync(int responseId, int questionId, string answerValue)
+public async Task<NextQuestionDeterminant> DetermineBranchingNextStepAsync(Question question, string selectedOption)
+public async Task<NextQuestionDeterminant> DetermineNonBranchingNextStepAsync(Question question)
+
 // Record visited question to prevent re-answering
 public async Task RecordVisitedQuestionAsync(int responseId, int questionId)
 
@@ -792,17 +849,19 @@ public async Task<int?> GetNextQuestionAsync(int responseId)
 ```
 
 **Key Features**:
+- `DetermineNextStepAsync`: Returns NextQuestionDeterminant (not int) for type safety
 - `RecordVisitedQuestionAsync`: Adds question to response.VisitedQuestionIds (idempotent)
 - `GetNextQuestionAsync`:
   - Returns null if survey complete (is_completed = true)
-  - Checks last answer's NextQuestionId
-  - Sets IsComplete + SubmittedAt if answer indicates end
+  - Checks last answer's Next value object (not magic 0)
+  - Checks `answer.Next.Type == NextStepType.EndSurvey` to mark complete
   - Used by API/Bot to get next question after answer
 
 **Flow Integration**:
 - Called after each answer to determine next question
-- Marks survey complete when NextQuestionId = 0
+- Marks survey complete when `answer.Next.Type == NextStepType.EndSurvey`
 - Thread-safe with database transaction
+- **No more magic values**: Uses type-safe value object checks throughout
 
 ### Other Services
 
@@ -862,6 +921,20 @@ dotnet ef migrations script --project ../SurveyBot.Infrastructure
 5. **AddConditionalQuestionFlow** - Adds QuestionOption entity and flow columns (v1.4.0)
 6. **RemoveNextQuestionFKConstraints** - Removes problematic FK constraints (v1.4.0)
 7. **CleanSlateNextQuestionDeterminant** - **DESTRUCTIVE** clean slate migration to value objects (v1.4.1)
+8. **AnswerNextStepValueObject** - **DATA PRESERVING** Answer.Next value object migration (v1.4.2)
+
+**Migration v1.4.2 Details** (AnswerNextStepValueObject):
+- **Type**: DATA PRESERVING (transforms existing data)
+- **Purpose**: Complete Answer entity migration to value object pattern
+- **Transforms**: `NextQuestionId` (int with magic 0) → `Next` (NextQuestionDeterminant owned type)
+- **Data Migration**:
+  - `NextQuestionId = 0` → `Next { Type = EndSurvey, NextQuestionId = null }`
+  - `NextQuestionId > 0` → `Next { Type = GoToQuestion, NextQuestionId = value }`
+- **Schema Changes**:
+  - Drops column: `next_question_id`
+  - Adds columns: `next_step_type` (TEXT NOT NULL), `next_step_question_id` (INT NULLABLE)
+  - Adds CHECK constraint: Enforces value object invariants
+- **Impact**: Completes value object consistency across all conditional flow entities
 
 **Migration v1.4.1 Details** (CleanSlateNextQuestionDeterminant):
 - **Type**: DESTRUCTIVE (truncates all data)
@@ -999,7 +1072,7 @@ CREATE TABLE questions (
 
     -- CHECK constraints
     CONSTRAINT chk_question_order_index CHECK (order_index >= 0),
-    CONSTRAINT chk_question_type CHECK (question_type IN ('text', 'single_choice', 'multiple_choice', 'rating', 'yes_no')),
+    CONSTRAINT chk_question_type CHECK (question_type IN ('text', 'single_choice', 'multiple_choice', 'rating', 'yes_no', 'location')),
     CONSTRAINT chk_question_default_next_invariant CHECK (
         (default_next_step_type IS NULL AND default_next_question_id IS NULL) OR
         (default_next_step_type = 'GoToQuestion' AND default_next_question_id IS NOT NULL AND default_next_question_id > 0) OR
@@ -1503,4 +1576,4 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 ---
 
-**Last Updated**: 2025-11-23 | **Version**: 1.4.1 (Refactored Conditional Flow to Value Objects)
+**Last Updated**: 2025-11-26 | **Version**: 1.4.2 (Completed Answer.Next Value Object Migration)

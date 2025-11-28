@@ -6,7 +6,10 @@ using SurveyBot.Core.Entities;
 using SurveyBot.Core.Exceptions;
 using SurveyBot.Core.Interfaces;
 using SurveyBot.Core.Models;
+using SurveyBot.Core.ValueObjects;
+using SurveyBot.Infrastructure.Data;
 using SurveyBot.Infrastructure.Services;
+using SurveyBot.Tests.Fixtures;
 using System.Text.Json;
 using Xunit;
 
@@ -21,6 +24,7 @@ public class ResponseServiceTests
     private readonly Mock<IAnswerRepository> _answerRepositoryMock;
     private readonly Mock<ISurveyRepository> _surveyRepositoryMock;
     private readonly Mock<IQuestionRepository> _questionRepositoryMock;
+    private readonly Mock<SurveyBotDbContext> _contextMock;
     private readonly Mock<IMapper> _mapperMock;
     private readonly Mock<ILogger<ResponseService>> _loggerMock;
     private readonly ResponseService _sut;
@@ -31,6 +35,7 @@ public class ResponseServiceTests
         _answerRepositoryMock = new Mock<IAnswerRepository>();
         _surveyRepositoryMock = new Mock<ISurveyRepository>();
         _questionRepositoryMock = new Mock<IQuestionRepository>();
+        _contextMock = new Mock<SurveyBotDbContext>();
         _mapperMock = new Mock<IMapper>();
         _loggerMock = new Mock<ILogger<ResponseService>>();
 
@@ -39,6 +44,7 @@ public class ResponseServiceTests
             _answerRepositoryMock.Object,
             _surveyRepositoryMock.Object,
             _questionRepositoryMock.Object,
+            _contextMock.Object,
             _mapperMock.Object,
             _loggerMock.Object);
     }
@@ -54,24 +60,18 @@ public class ResponseServiceTests
         var username = "testuser";
         var firstName = "Test";
 
-        var survey = new Survey
-        {
-            Id = surveyId,
-            Title = "Test Survey",
-            IsActive = true,
-            AllowMultipleResponses = false,
-            CreatorId = 1
-        };
+        var survey = EntityBuilder.CreateSurvey(
+            title: "Test Survey",
+            creatorId: 1,
+            isActive: true);
+        survey.SetId(surveyId);
+        survey.SetAllowMultipleResponses(false);
 
-        var response = new Response
-        {
-            Id = 1,
-            SurveyId = surveyId,
-            RespondentTelegramId = telegramUserId,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow,
-            Answers = new List<Answer>()
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: surveyId,
+            respondentTelegramId: telegramUserId,
+            isComplete: false);
+        response.SetId(1);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdAsync(surveyId)).ReturnsAsync(survey);
         _responseRepositoryMock.Setup(r => r.HasUserCompletedSurveyAsync(surveyId, telegramUserId)).ReturnsAsync(false);
@@ -114,13 +114,11 @@ public class ResponseServiceTests
         var surveyId = 1;
         var telegramUserId = 123456789L;
 
-        var survey = new Survey
-        {
-            Id = surveyId,
-            Title = "Test Survey",
-            IsActive = false,
-            CreatorId = 1
-        };
+        var survey = EntityBuilder.CreateSurvey(
+            title: "Test Survey",
+            creatorId: 1,
+            isActive: false);
+        survey.SetId(surveyId);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdAsync(surveyId)).ReturnsAsync(survey);
 
@@ -136,14 +134,12 @@ public class ResponseServiceTests
         var surveyId = 1;
         var telegramUserId = 123456789L;
 
-        var survey = new Survey
-        {
-            Id = surveyId,
-            Title = "Test Survey",
-            IsActive = true,
-            AllowMultipleResponses = false,
-            CreatorId = 1
-        };
+        var survey = EntityBuilder.CreateSurvey(
+            title: "Test Survey",
+            creatorId: 1,
+            isActive: true);
+        survey.SetId(surveyId);
+        survey.SetAllowMultipleResponses(false);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdAsync(surveyId)).ReturnsAsync(survey);
         _responseRepositoryMock.Setup(r => r.HasUserCompletedSurveyAsync(surveyId, telegramUserId)).ReturnsAsync(true);
@@ -160,24 +156,18 @@ public class ResponseServiceTests
         var surveyId = 1;
         var telegramUserId = 123456789L;
 
-        var survey = new Survey
-        {
-            Id = surveyId,
-            Title = "Test Survey",
-            IsActive = true,
-            AllowMultipleResponses = true,
-            CreatorId = 1
-        };
+        var survey = EntityBuilder.CreateSurvey(
+            title: "Test Survey",
+            creatorId: 1,
+            isActive: true);
+        survey.SetId(surveyId);
+        survey.SetAllowMultipleResponses(true);
 
-        var response = new Response
-        {
-            Id = 1,
-            SurveyId = surveyId,
-            RespondentTelegramId = telegramUserId,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow,
-            Answers = new List<Answer>()
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: surveyId,
+            respondentTelegramId: telegramUserId,
+            isComplete: false);
+        response.SetId(1);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdAsync(surveyId)).ReturnsAsync(survey);
         _responseRepositoryMock.Setup(r => r.HasUserCompletedSurveyAsync(surveyId, telegramUserId)).ReturnsAsync(true);
@@ -205,26 +195,32 @@ public class ResponseServiceTests
         var questionId = 1;
         var answerText = "This is my answer";
 
-        var response = new Response
-        {
-            Id = responseId,
-            SurveyId = 1,
-            IsComplete = false,
-            Answers = new List<Answer>()
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: 1,
+            respondentTelegramId: 987654321,
+            isComplete: false);
+        response.SetId(responseId);
 
-        var question = new Question
-        {
-            Id = questionId,
-            SurveyId = 1,
-            QuestionType = QuestionType.Text,
-            IsRequired = true
-        };
+        var question = EntityBuilder.CreateTextQuestion(
+            surveyId: 1,
+            questionText: "Test Question?",
+            orderIndex: 0,
+            isRequired: true);
+        question.SetId(questionId);
+        // Set a dummy next question to avoid sequential lookup (which requires DbContext)
+        question.SetDefaultNext(NextQuestionDeterminant.ToQuestion(999));
+
+        var createdAnswer = EntityBuilder.CreateTextAnswer(
+            responseId: responseId,
+            questionId: questionId,
+            answerText: answerText);
+        createdAnswer.SetId(1);
 
         _responseRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(responseId)).ReturnsAsync(response);
-        _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
+        _questionRepositoryMock.Setup(r => r.GetByIdWithFlowConfigAsync(questionId, default)).ReturnsAsync(question);
+        _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);  // For validation
         _answerRepositoryMock.Setup(r => r.GetByResponseAndQuestionAsync(responseId, questionId)).ReturnsAsync((Answer?)null);
-        _answerRepositoryMock.Setup(r => r.CreateAsync(It.IsAny<Answer>())).ReturnsAsync(new Answer { Id = 1 });
+        _answerRepositoryMock.Setup(r => r.CreateAsync(It.IsAny<Answer>())).ReturnsAsync(createdAnswer);
         _questionRepositoryMock.Setup(r => r.GetBySurveyIdAsync(It.IsAny<int>())).ReturnsAsync(new List<Question>());
         _answerRepositoryMock.Setup(r => r.GetByResponseIdAsync(It.IsAny<int>())).ReturnsAsync(new List<Answer>());
 
@@ -236,7 +232,7 @@ public class ResponseServiceTests
         _answerRepositoryMock.Verify(r => r.CreateAsync(It.Is<Answer>(a =>
             a.ResponseId == responseId &&
             a.QuestionId == questionId &&
-            a.AnswerText == answerText
+            a.Value != null  // Check Value property is set (new AnswerValue pattern)
         )), Times.Once);
     }
 
@@ -261,12 +257,11 @@ public class ResponseServiceTests
         var responseId = 1;
         var questionId = 1;
 
-        var response = new Response
-        {
-            Id = responseId,
-            SurveyId = 1,
-            IsComplete = true
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: 1,
+            respondentTelegramId: 987654321,
+            isComplete: true);
+        response.SetId(responseId);
 
         _responseRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(responseId)).ReturnsAsync(response);
 
@@ -282,12 +277,11 @@ public class ResponseServiceTests
         var responseId = 1;
         var questionId = 999;
 
-        var response = new Response
-        {
-            Id = responseId,
-            SurveyId = 1,
-            IsComplete = false
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: 1,
+            respondentTelegramId: 987654321,
+            isComplete: false);
+        response.SetId(responseId);
 
         _responseRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(responseId)).ReturnsAsync(response);
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync((Question?)null);
@@ -304,22 +298,20 @@ public class ResponseServiceTests
         var responseId = 1;
         var questionId = 1;
 
-        var response = new Response
-        {
-            Id = responseId,
-            SurveyId = 1,
-            IsComplete = false
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: 1,
+            respondentTelegramId: 987654321,
+            isComplete: false);
+        response.SetId(responseId);
 
-        var question = new Question
-        {
-            Id = questionId,
-            SurveyId = 999, // Different survey
-            QuestionType = QuestionType.Text
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 999, // Different survey
+            questionText: "Test Question?",
+            questionType: QuestionType.Text);
+        question.SetId(questionId);
 
         _responseRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(responseId)).ReturnsAsync(response);
-        _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
+        _questionRepositoryMock.Setup(r => r.GetByIdWithFlowConfigAsync(questionId, default)).ReturnsAsync(question);
 
         // Act & Assert
         await Assert.ThrowsAsync<QuestionValidationException>(() =>
@@ -334,32 +326,30 @@ public class ResponseServiceTests
         var questionId = 1;
         var newAnswerText = "Updated answer";
 
-        var response = new Response
-        {
-            Id = responseId,
-            SurveyId = 1,
-            IsComplete = false,
-            Answers = new List<Answer>()
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: 1,
+            respondentTelegramId: 987654321,
+            isComplete: false);
+        response.SetId(responseId);
 
-        var question = new Question
-        {
-            Id = questionId,
-            SurveyId = 1,
-            QuestionType = QuestionType.Text,
-            IsRequired = true
-        };
+        var question = EntityBuilder.CreateTextQuestion(
+            surveyId: 1,
+            questionText: "Test Question?",
+            orderIndex: 0,
+            isRequired: true);
+        question.SetId(questionId);
+        // Set a dummy next question to avoid sequential lookup (which requires DbContext)
+        question.SetDefaultNext(NextQuestionDeterminant.ToQuestion(999));
 
-        var existingAnswer = new Answer
-        {
-            Id = 10,
-            ResponseId = responseId,
-            QuestionId = questionId,
-            AnswerText = "Old answer"
-        };
+        var existingAnswer = EntityBuilder.CreateTextAnswer(
+            responseId: responseId,
+            questionId: questionId,
+            answerText: "Old answer");
+        existingAnswer.SetId(10);
 
         _responseRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(responseId)).ReturnsAsync(response);
-        _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
+        _questionRepositoryMock.Setup(r => r.GetByIdWithFlowConfigAsync(questionId, default)).ReturnsAsync(question);
+        _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);  // For validation
         _answerRepositoryMock.Setup(r => r.GetByResponseAndQuestionAsync(responseId, questionId)).ReturnsAsync(existingAnswer);
         _answerRepositoryMock.Setup(r => r.UpdateAsync(It.IsAny<Answer>())).ReturnsAsync(existingAnswer);
         _questionRepositoryMock.Setup(r => r.GetBySurveyIdAsync(It.IsAny<int>())).ReturnsAsync(new List<Question>());
@@ -372,7 +362,7 @@ public class ResponseServiceTests
         Assert.NotNull(result);
         _answerRepositoryMock.Verify(r => r.UpdateAsync(It.Is<Answer>(a =>
             a.Id == 10 &&
-            a.AnswerText == newAnswerText
+            a.Value != null  // Check Value property is set (new AnswerValue pattern)
         )), Times.Once);
         _answerRepositoryMock.Verify(r => r.CreateAsync(It.IsAny<Answer>()), Times.Never);
     }
@@ -387,14 +377,12 @@ public class ResponseServiceTests
         // Arrange
         var responseId = 1;
 
-        var response = new Response
-        {
-            Id = responseId,
-            SurveyId = 1,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow.AddMinutes(-10),
-            Answers = new List<Answer>()
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: 1,
+            respondentTelegramId: 987654321,
+            isComplete: false);
+        response.SetId(responseId);
+        response.SetStartedAt(DateTime.UtcNow.AddMinutes(-10));
 
         _responseRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(responseId)).ReturnsAsync(response);
         _responseRepositoryMock.Setup(r => r.UpdateAsync(It.IsAny<Response>())).ReturnsAsync(response);
@@ -432,14 +420,12 @@ public class ResponseServiceTests
         var responseId = 1;
         var submittedAt = DateTime.UtcNow.AddMinutes(-5);
 
-        var response = new Response
-        {
-            Id = responseId,
-            SurveyId = 1,
-            IsComplete = true,
-            SubmittedAt = submittedAt,
-            Answers = new List<Answer>()
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: 1,
+            respondentTelegramId: 987654321,
+            isComplete: true);
+        response.SetId(responseId);
+        response.SetSubmittedAt(submittedAt);
 
         _responseRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(responseId)).ReturnsAsync(response);
         _questionRepositoryMock.Setup(r => r.GetBySurveyIdAsync(It.IsAny<int>())).ReturnsAsync(new List<Question>());
@@ -465,12 +451,12 @@ public class ResponseServiceTests
         var questionId = 1;
         var answerText = "This is a valid answer";
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.Text,
-            IsRequired = true
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Test Question?",
+            questionType: QuestionType.Text,
+            isRequired: true);
+        question.SetId(questionId);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -489,12 +475,12 @@ public class ResponseServiceTests
         // Arrange
         var questionId = 1;
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.Text,
-            IsRequired = true
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Test Question?",
+            questionType: QuestionType.Text,
+            isRequired: true);
+        question.SetId(questionId);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -514,12 +500,12 @@ public class ResponseServiceTests
         var questionId = 1;
         var answerText = new string('a', 5001); // Exceeds 5000 char limit
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.Text,
-            IsRequired = false
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Test Question?",
+            questionType: QuestionType.Text,
+            isRequired: false);
+        question.SetId(questionId);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -540,13 +526,13 @@ public class ResponseServiceTests
         var selectedOptions = new List<string> { "Option A" };
         var validOptions = new List<string> { "Option A", "Option B", "Option C" };
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.SingleChoice,
-            IsRequired = true,
-            OptionsJson = JsonSerializer.Serialize(validOptions)
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Choose one",
+            questionType: QuestionType.SingleChoice,
+            isRequired: true);
+        question.SetId(questionId);
+        question.SetOptionsJson(JsonSerializer.Serialize(validOptions));
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -565,13 +551,13 @@ public class ResponseServiceTests
         var questionId = 1;
         var selectedOptions = new List<string> { "Option A", "Option B" };
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.SingleChoice,
-            IsRequired = true,
-            OptionsJson = JsonSerializer.Serialize(new List<string> { "Option A", "Option B" })
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Choose one",
+            questionType: QuestionType.SingleChoice,
+            isRequired: true);
+        question.SetId(questionId);
+        question.SetOptionsJson(JsonSerializer.Serialize(new List<string> { "Option A", "Option B" }));
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -592,13 +578,13 @@ public class ResponseServiceTests
         var selectedOptions = new List<string> { "Invalid Option" };
         var validOptions = new List<string> { "Option A", "Option B", "Option C" };
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.SingleChoice,
-            IsRequired = true,
-            OptionsJson = JsonSerializer.Serialize(validOptions)
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Choose one",
+            questionType: QuestionType.SingleChoice,
+            isRequired: true);
+        question.SetId(questionId);
+        question.SetOptionsJson(JsonSerializer.Serialize(validOptions));
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -619,13 +605,13 @@ public class ResponseServiceTests
         var selectedOptions = new List<string> { "Option A", "Option C" };
         var validOptions = new List<string> { "Option A", "Option B", "Option C" };
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.MultipleChoice,
-            IsRequired = true,
-            OptionsJson = JsonSerializer.Serialize(validOptions)
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Choose multiple",
+            questionType: QuestionType.MultipleChoice,
+            isRequired: true);
+        question.SetId(questionId);
+        question.SetOptionsJson(JsonSerializer.Serialize(validOptions));
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -645,13 +631,13 @@ public class ResponseServiceTests
         var selectedOptions = new List<string> { "Option A", "Invalid Option" };
         var validOptions = new List<string> { "Option A", "Option B", "Option C" };
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.MultipleChoice,
-            IsRequired = true,
-            OptionsJson = JsonSerializer.Serialize(validOptions)
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Choose multiple",
+            questionType: QuestionType.MultipleChoice,
+            isRequired: true);
+        question.SetId(questionId);
+        question.SetOptionsJson(JsonSerializer.Serialize(validOptions));
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -671,12 +657,12 @@ public class ResponseServiceTests
         var questionId = 1;
         var ratingValue = 4;
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.Rating,
-            IsRequired = true
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Rate this",
+            questionType: QuestionType.Rating,
+            isRequired: true);
+        question.SetId(questionId);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -698,12 +684,12 @@ public class ResponseServiceTests
         // Arrange
         var questionId = 1;
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.Rating,
-            IsRequired = false
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Rate this",
+            questionType: QuestionType.Rating,
+            isRequired: false);
+        question.SetId(questionId);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -722,12 +708,12 @@ public class ResponseServiceTests
         // Arrange
         var questionId = 1;
 
-        var question = new Question
-        {
-            Id = questionId,
-            QuestionType = QuestionType.Rating,
-            IsRequired = true
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Rate this",
+            questionType: QuestionType.Rating,
+            isRequired: true);
+        question.SetId(questionId);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId)).ReturnsAsync(question);
 
@@ -751,15 +737,12 @@ public class ResponseServiceTests
         var surveyId = 1;
         var telegramUserId = 123456789L;
 
-        var incompleteResponse = new Response
-        {
-            Id = 10,
-            SurveyId = surveyId,
-            RespondentTelegramId = telegramUserId,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow.AddHours(-1),
-            Answers = new List<Answer>()
-        };
+        var incompleteResponse = EntityBuilder.CreateResponse(
+            surveyId: surveyId,
+            respondentTelegramId: telegramUserId,
+            isComplete: false);
+        incompleteResponse.SetId(10);
+        incompleteResponse.SetStartedAt(DateTime.UtcNow.AddHours(-1));
 
         _responseRepositoryMock.Setup(r => r.GetIncompleteResponseAsync(surveyId, telegramUserId))
             .ReturnsAsync(incompleteResponse);
@@ -783,23 +766,18 @@ public class ResponseServiceTests
         var surveyId = 1;
         var telegramUserId = 123456789L;
 
-        var survey = new Survey
-        {
-            Id = surveyId,
-            IsActive = true,
-            AllowMultipleResponses = false,
-            CreatorId = 1
-        };
+        var survey = EntityBuilder.CreateSurvey(
+            title: "Test Survey",
+            creatorId: 1,
+            isActive: true);
+        survey.SetId(surveyId);
+        survey.SetAllowMultipleResponses(false);
 
-        var newResponse = new Response
-        {
-            Id = 20,
-            SurveyId = surveyId,
-            RespondentTelegramId = telegramUserId,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow,
-            Answers = new List<Answer>()
-        };
+        var newResponse = EntityBuilder.CreateResponse(
+            surveyId: surveyId,
+            respondentTelegramId: telegramUserId,
+            isComplete: false);
+        newResponse.SetId(20);
 
         _responseRepositoryMock.Setup(r => r.GetIncompleteResponseAsync(surveyId, telegramUserId))
             .ReturnsAsync((Response?)null);
@@ -830,18 +808,17 @@ public class ResponseServiceTests
         var userId = 10;
         var surveyId = 5;
 
-        var response = new Response
-        {
-            Id = responseId,
-            SurveyId = surveyId,
-            IsComplete = true
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: surveyId,
+            respondentTelegramId: 987654321,
+            isComplete: true);
+        response.SetId(responseId);
 
-        var survey = new Survey
-        {
-            Id = surveyId,
-            CreatorId = userId
-        };
+        var survey = EntityBuilder.CreateSurvey(
+            title: "Test Survey",
+            creatorId: userId,
+            isActive: true);
+        survey.SetId(surveyId);
 
         _responseRepositoryMock.Setup(r => r.GetByIdAsync(responseId)).ReturnsAsync(response);
         _surveyRepositoryMock.Setup(r => r.GetByIdAsync(surveyId)).ReturnsAsync(survey);
@@ -862,17 +839,17 @@ public class ResponseServiceTests
         var userId = 10;
         var surveyId = 5;
 
-        var response = new Response
-        {
-            Id = responseId,
-            SurveyId = surveyId
-        };
+        var response = EntityBuilder.CreateResponse(
+            surveyId: surveyId,
+            respondentTelegramId: 987654321,
+            isComplete: false);
+        response.SetId(responseId);
 
-        var survey = new Survey
-        {
-            Id = surveyId,
-            CreatorId = 999 // Different user
-        };
+        var survey = EntityBuilder.CreateSurvey(
+            title: "Test Survey",
+            creatorId: 999, // Different user
+            isActive: true);
+        survey.SetId(surveyId);
 
         _responseRepositoryMock.Setup(r => r.GetByIdAsync(responseId)).ReturnsAsync(response);
         _surveyRepositoryMock.Setup(r => r.GetByIdAsync(surveyId)).ReturnsAsync(survey);

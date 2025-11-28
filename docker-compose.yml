@@ -36,10 +36,10 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=surveybot_db;Username=surveybot_user;Password=surveybot_dev_password;Timeout=30;CommandTimeout=30;Pooling=true;MinPoolSize=0;MaxPoolSize=100;
       - BotConfiguration__BotToken=8540672675:AAHX9frxfMqVRoGEKspNj5Nxlm9JIodtG1Q
       - BotConfiguration__UseWebhook=true
-      - BotConfiguration__WebhookUrl=https://03b39e6cf438.ngrok-free.app
+      - BotConfiguration__WebhookUrl=https://df0778be2c16.ngrok-free.app
       - BotConfiguration__WebhookPath=/api/bot/webhook
       - BotConfiguration__WebhookSecret=SurveyBot_Secret_NgrokWebhook_2025_SecureKey123123
-      - BotConfiguration__ApiBaseUrl=https://03b39e6cf438.ngrok-free.app
+      - BotConfiguration__ApiBaseUrl=https://df0778be2c16.ngrok-free.app
     ports:
       - "5000:8080"
     depends_on:

@@ -472,6 +472,9 @@ public class SurveyResponseHandler
             // Parse answer JSON to extract the appropriate field based on answer structure
             var answer = JsonSerializer.Deserialize<JsonElement>(answerJson);
 
+            // Determine if this is a location answer
+            bool isLocationAnswer = answer.TryGetProperty("latitude", out _);
+
             // Create submit DTO with the correct structure (wrapped in "answer" property)
             var submitDto = new
             {
@@ -486,7 +489,10 @@ public class SurveyResponseHandler
                             : null),
                     ratingValue = answer.TryGetProperty("rating", out var rating) && rating.ValueKind != JsonValueKind.Null
                         ? rating.GetInt32()
-                        : (int?)null
+                        : (int?)null,
+                    // For location answers, include the entire JSON in answerJson field
+                    // This contains the latitude and longitude that the API validation expects
+                    answerJson = isLocationAnswer ? answerJson : null
                 }
             };
 

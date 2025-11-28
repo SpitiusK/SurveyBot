@@ -68,7 +68,7 @@ public class QuestionRepository : GenericRepository<Question>, IQuestionReposito
                     return false;
                 }
 
-                question.OrderIndex = newOrderIndex;
+                question.SetOrderIndex(newOrderIndex);
             }
 
             await _context.SaveChangesAsync();

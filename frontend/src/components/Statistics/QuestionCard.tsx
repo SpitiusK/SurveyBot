@@ -4,6 +4,7 @@ import {
   RadioButtonChecked as SingleChoiceIcon,
   CheckBox as MultipleChoiceIcon,
   Star as RatingIcon,
+  LocationOn as LocationIcon,
 } from '@mui/icons-material';
 import type { Question, QuestionStatistics, Response } from '../../types';
 import { QuestionType } from '../../types';
@@ -28,6 +29,8 @@ const QuestionCard = ({ questionStat, question, responses }: QuestionCardProps) 
         return <MultipleChoiceIcon />;
       case QuestionType.Rating:
         return <RatingIcon />;
+      case QuestionType.Location:
+        return <LocationIcon />;
       default:
         return null;
     }
@@ -43,6 +46,8 @@ const QuestionCard = ({ questionStat, question, responses }: QuestionCardProps) 
         return 'Multiple Choice';
       case QuestionType.Rating:
         return 'Rating';
+      case QuestionType.Location:
+        return 'Location';
       default:
         return 'Unknown';
     }
@@ -101,6 +106,14 @@ const QuestionCard = ({ questionStat, question, responses }: QuestionCardProps) 
 
         {question.questionType === QuestionType.Rating && (
           <RatingChart questionStat={questionStat} question={question} />
+        )}
+
+        {question.questionType === QuestionType.Location && (
+          <TextResponseList
+            questionStat={questionStat}
+            question={question}
+            responses={responses}
+          />
         )}
       </Box>
     </Paper>

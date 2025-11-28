@@ -49,6 +49,7 @@ public class AnswerValidator : IAnswerValidator
                 QuestionType.SingleChoice => ValidateSingleChoiceAnswer(answer, question),
                 QuestionType.MultipleChoice => ValidateMultipleChoiceAnswer(answer, question),
                 QuestionType.Rating => ValidateRatingAnswer(answer, question),
+                QuestionType.Location => ValidateLocationAnswer(answer, question),
                 _ => ValidationResult.Failure($"Unsupported question type: {question.QuestionType}")
             };
         }
@@ -201,6 +202,47 @@ public class AnswerValidator : IAnswerValidator
         {
             return ValidationResult.Failure(
                 $"Rating must be between {minRating} and {maxRating}. You provided {rating}.");
+        }
+
+        return ValidationResult.Success();
+    }
+
+    /// <summary>
+    /// Validates location answer.
+    /// </summary>
+    private ValidationResult ValidateLocationAnswer(JsonElement answer, QuestionDto question)
+    {
+        if (!answer.TryGetProperty("latitude", out var latElement) ||
+            !answer.TryGetProperty("longitude", out var lonElement))
+        {
+            return ValidationResult.Failure("Answer format is invalid. Please provide a location.");
+        }
+
+        // Check for null coordinates (optional question skipped)
+        if (latElement.ValueKind == JsonValueKind.Null || lonElement.ValueKind == JsonValueKind.Null)
+        {
+            if (question.IsRequired)
+            {
+                return ValidationResult.Failure("This question is required. Please share your location.");
+            }
+            return ValidationResult.Success();
+        }
+
+        // Parse coordinate values
+        if (!latElement.TryGetDouble(out var latitude) || !lonElement.TryGetDouble(out var longitude))
+        {
+            return ValidationResult.Failure("Location coordinates must be numbers. Please try again.");
+        }
+
+        // Validate coordinate ranges
+        if (latitude < -90 || latitude > 90)
+        {
+            return ValidationResult.Failure($"Latitude must be between -90 and 90. You provided {latitude}.");
+        }
+
+        if (longitude < -180 || longitude > 180)
+        {
+            return ValidationResult.Failure($"Longitude must be between -180 and 180. You provided {longitude}.");
         }
 
         return ValidationResult.Success();

@@ -49,7 +49,7 @@ public class ConversationStateManagerTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(TestUserId, result.User.Id);
+        Assert.Equal(TestUserId, result.UserId);
         Assert.Equal(ConversationStateType.Idle, result.CurrentState);
     }
 
@@ -115,13 +115,18 @@ public class ConversationStateManagerTests
     [Fact]
     public async Task GetState_ReturnsNull_WhenStateExpired()
     {
-        // Arrange
+        // Arrange - Create a state and manually add it to bypass SetStateAsync's UpdateActivity
         var state = new ConversationState
         {
             UserId = TestUserId,
-            CreatedAt = DateTime.UtcNow.AddMinutes(-31) // 31 minutes old
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-31), // 31 minutes inactive (IsExpired checks LastActivityAt)
+            CreatedAt = DateTime.UtcNow.AddMinutes(-31)
         };
-        await _manager.SetStateAsync(TestUserId, state);
+        // Use reflection to add directly to internal dictionary to avoid SetStateAsync updating LastActivityAt
+        var statesField = typeof(ConversationStateManager).GetField("_states",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var states = statesField.GetValue(_manager) as System.Collections.Concurrent.ConcurrentDictionary<long, ConversationState>;
+        states.TryAdd(TestUserId, state);
 
         // Act
         var result = await _manager.GetStateAsync(TestUserId);
@@ -364,8 +369,8 @@ public class ConversationStateManagerTests
         // Act
         var progress = await _manager.GetProgressPercentAsync(TestUserId);
 
-        // Assert
-        Assert.Equal(30f, progress);
+        // Assert - Use tolerance for float comparison
+        Assert.True(Math.Abs(30f - progress) < 0.01f, $"Expected 30%, but got {progress}%");
     }
 
     [Fact]
@@ -373,7 +378,11 @@ public class ConversationStateManagerTests
     {
         // Arrange
         await _manager.StartSurveyAsync(TestUserId, 1, 100, 5);
+        // Answer first question (index 0)
         await _manager.AnswerQuestionAsync(TestUserId, 0, "{}");
+        // Move to next question
+        await _manager.NextQuestionAsync(TestUserId);
+        // Answer second question (index 1)
         await _manager.AnswerQuestionAsync(TestUserId, 1, "{}");
 
         // Act

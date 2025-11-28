@@ -27,7 +27,7 @@ public class GenericRepositoryTests : RepositoryTestBase
         // Assert
         result.Should().NotBeNull();
         result.Id.Should().BeGreaterThan(0);
-        result.User.TelegramId.Should().Be(user.TelegramId);
+        result.TelegramId.Should().Be(user.TelegramId);
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class GenericRepositoryTests : RepositoryTestBase
         // Assert
         result.Should().NotBeNull();
         result!.Id.Should().Be(user.Id);
-        result.User.TelegramId.Should().Be(user.TelegramId);
+        result.TelegramId.Should().Be(user.TelegramId);
     }
 
     [Fact]
@@ -104,13 +104,13 @@ public class GenericRepositoryTests : RepositoryTestBase
         var user = EntityBuilder.CreateUser(username: "original");
         await _repository.CreateAsync(user);
 
-        user.Username = "updated";
+        user.SetUsername("updated");
 
         // Act
         var result = await _repository.UpdateAsync(user);
 
         // Assert
-        result.User.Username.Should().Be("updated");
+        result.Username.Should().Be("updated");
 
         var retrievedUser = await _repository.GetByIdAsync(user.Id);
         retrievedUser!.Username.Should().Be("updated");

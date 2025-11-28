@@ -377,11 +377,12 @@ public class NextQuestionDeterminantTests
         const string json = "{\"type\":0,\"nextQuestionId\":null}";
 
         // Act & Assert
-        var exception = Assert.Throws<JsonException>(() =>
+        // System.Text.Json wraps constructor exceptions in InvalidOperationException
+        var exception = Assert.Throws<InvalidOperationException>(() =>
             JsonSerializer.Deserialize<NextQuestionDeterminant>(json));
 
-        // Inner exception should be InvalidOperationException from ValidateInvariants
-        Assert.IsType<InvalidOperationException>(exception.InnerException);
+        // Exception message should indicate the invariant violation
+        Assert.Contains("GoToQuestion type requires a valid NextQuestionId", exception.Message);
     }
 
     [Fact]
@@ -391,11 +392,12 @@ public class NextQuestionDeterminantTests
         const string json = "{\"type\":1,\"nextQuestionId\":42}";
 
         // Act & Assert
-        var exception = Assert.Throws<JsonException>(() =>
+        // System.Text.Json wraps constructor exceptions in InvalidOperationException
+        var exception = Assert.Throws<InvalidOperationException>(() =>
             JsonSerializer.Deserialize<NextQuestionDeterminant>(json));
 
-        // Inner exception should be InvalidOperationException from ValidateInvariants
-        Assert.IsType<InvalidOperationException>(exception.InnerException);
+        // Exception message should indicate the invariant violation
+        Assert.Contains("EndSurvey type must not have a NextQuestionId", exception.Message);
     }
 
     #endregion

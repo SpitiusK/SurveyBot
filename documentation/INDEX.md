@@ -1,6 +1,6 @@
 # SurveyBot Documentation Index
 
-**Version**: 1.3.0 | **Last Updated**: 2025-11-21
+**Version**: 1.5.0 | **Last Updated**: 2025-11-27
 
 This is a comprehensive index of all documentation available in the SurveyBot project. All documentation has been organized into logical categories for easy access.
 
@@ -117,10 +117,11 @@ This is a comprehensive index of all documentation available in the SurveyBot pr
 
 ### Architecture & Design
 1. [Main CLAUDE.md](../CLAUDE.md) - Clean Architecture overview
-2. [Core Layer CLAUDE.md](../src/SurveyBot.Core/CLAUDE.md) - Domain layer
+2. [Core Layer CLAUDE.md](../src/SurveyBot.Core/CLAUDE.md) - Domain layer with DDD patterns
 3. [Infrastructure CLAUDE.md](../src/SurveyBot.Infrastructure/CLAUDE.md) - Data access layer
-4. [DI Structure](./development/DI-STRUCTURE.md) - Dependency injection
-5. [State Machine Design](./bot/STATE-MACHINE-DESIGN.md) - Bot state management
+4. [Architecture Improvements Plan](./features/!PRIORITY_ARCHITECTURE_IMPROVEMENTS.md) - **NEW v1.5.0**: DDD enhancements (private setters, factory methods, value objects)
+5. [DI Structure](./development/DI-STRUCTURE.md) - Dependency injection
+6. [State Machine Design](./bot/STATE-MACHINE-DESIGN.md) - Bot state management
 
 ### API & Integration
 1. [API Layer CLAUDE.md](../src/SurveyBot.API/CLAUDE.md) - API documentation
@@ -146,6 +147,17 @@ This is a comprehensive index of all documentation available in the SurveyBot pr
 ### Testing & Quality
 1. [Test Summary](./testing/TEST_SUMMARY.md) - Test results
 2. [Manual Testing Checklist](./testing/MANUAL_TESTING_MEDIA_CHECKLIST.md) - Manual tests
+
+---
+
+## Feature Implementation Plans
+
+### Completed in v1.5.0
+- [Architecture Improvements Plan](./features/!PRIORITY_ARCHITECTURE_IMPROVEMENTS.md) - ✅ **COMPLETED**: ARCH-001, ARCH-002, ARCH-003 (Private setters, factory methods, AnswerValue value objects)
+
+### Ready for Implementation
+- [Location Question Implementation Plan](./features/LOCATION_QUESTION_IMPLEMENTATION_PLAN.md) - Geographic coordinate collection feature
+- [Architecture Improvements - Next Phase](./features/!PRIORITY_ARCHITECTURE_IMPROVEMENTS.md#arch-004) - ARCH-004 to ARCH-007 (SurveyCode, MediaContent value objects, rich domain models)
 
 ---
 
@@ -181,6 +193,8 @@ documentation/
 │   └── README-DOCKER.md
 ├── development/                   # Development documentation
 │   └── DI-STRUCTURE.md
+├── features/                      # Feature implementation plans
+│   └── LOCATION_QUESTION_IMPLEMENTATION_PLAN.md
 ├── infrastructure/                # Infrastructure layer documentation
 │   └── (Reserved for future infrastructure-specific docs)
 └── testing/                       # Testing documentation

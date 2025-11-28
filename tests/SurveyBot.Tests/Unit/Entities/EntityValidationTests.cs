@@ -31,32 +31,26 @@ public class EntityValidationTests
     }
 
     [Fact]
-    public void Survey_EmptyTitle_FailsValidation()
+    public void Survey_EmptyTitle_ThrowsArgumentException()
     {
-        // Arrange
-        var survey = EntityBuilder.CreateSurvey(title: "");
-
-        // Act
-        var errors = ValidateEntity(survey);
-
-        // Assert
-        errors.Should().NotBeEmpty();
-        errors.Should().Contain(e => e.MemberNames.Contains(nameof(Survey.Title)));
+        // Arrange & Act & Assert
+        // With DDD-style private setters, validation happens immediately
+        Action act = () => EntityBuilder.CreateSurvey(title: "");
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Title cannot be empty*");
     }
 
     [Fact]
-    public void Survey_TitleExceedsMaxLength_FailsValidation()
+    public void Survey_TitleExceedsMaxLength_ThrowsArgumentException()
     {
         // Arrange
         var longTitle = new string('A', 501); // MaxLength is 500
-        var survey = EntityBuilder.CreateSurvey(title: longTitle);
 
-        // Act
-        var errors = ValidateEntity(survey);
-
-        // Assert
-        errors.Should().NotBeEmpty();
-        errors.Should().Contain(e => e.MemberNames.Contains(nameof(Survey.Title)));
+        // Act & Assert
+        // With DDD-style private setters, validation happens immediately
+        Action act = () => EntityBuilder.CreateSurvey(title: longTitle);
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Title cannot exceed 500 characters*");
     }
 
     [Fact]
@@ -90,17 +84,13 @@ public class EntityValidationTests
     }
 
     [Fact]
-    public void Question_EmptyQuestionText_FailsValidation()
+    public void Question_EmptyQuestionText_ThrowsArgumentException()
     {
-        // Arrange
-        var question = EntityBuilder.CreateQuestion(questionText: "");
-
-        // Act
-        var errors = ValidateEntity(question);
-
-        // Assert
-        errors.Should().NotBeEmpty();
-        errors.Should().Contain(e => e.MemberNames.Contains(nameof(Question.QuestionText)));
+        // Arrange & Act & Assert
+        // With DDD-style private setters, validation happens immediately
+        Action act = () => EntityBuilder.CreateQuestion(questionText: "");
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Question text cannot be empty*");
     }
 
     [Fact]
@@ -123,17 +113,13 @@ public class EntityValidationTests
     }
 
     [Fact]
-    public void Question_NegativeOrderIndex_FailsValidation()
+    public void Question_NegativeOrderIndex_ThrowsArgumentException()
     {
-        // Arrange
-        var question = EntityBuilder.CreateQuestion(orderIndex: -1);
-
-        // Act
-        var errors = ValidateEntity(question);
-
-        // Assert
-        errors.Should().NotBeEmpty();
-        errors.Should().Contain(e => e.MemberNames.Contains(nameof(Question.OrderIndex)));
+        // Arrange & Act & Assert
+        // With DDD-style private setters, validation happens immediately
+        Action act = () => EntityBuilder.CreateQuestion(orderIndex: -1);
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Order index cannot be negative*");
     }
 
     [Fact]
@@ -314,7 +300,7 @@ public class EntityValidationTests
     public void BaseEntity_InitialValues_AreCorrect()
     {
         // Arrange & Act
-        var user = new User { TelegramId = 12345 };
+        var user = User.Create(telegramId: 12345);
 
         // Assert
         user.Id.Should().Be(0); // Default value before saving

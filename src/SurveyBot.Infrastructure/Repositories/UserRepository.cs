@@ -21,15 +21,6 @@ public class UserRepository : GenericRepository<User>, IUserRepository
     /// <inheritdoc />
     public async Task<User?> GetByTelegramIdAsync(long telegramId)
     {
-        
-        // Debug: Log the actual connection string being used
-        var connectionString = _context.Database.GetConnectionString();
-        Console.WriteLine($"[DEBUG UserRepository] Connection string: {connectionString}");
-        
-        // Debug: Log database provider and state
-        Console.WriteLine($"[DEBUG UserRepository] Database provider: {_context.Database.ProviderName}");
-        Console.WriteLine($"[DEBUG UserRepository] Can connect: {await _context.Database.CanConnectAsync()}");
-        
         return await _dbSet
             .FirstOrDefaultAsync(u => u.TelegramId == telegramId);
     }
@@ -79,28 +70,19 @@ public class UserRepository : GenericRepository<User>, IUserRepository
     /// <inheritdoc />
     public async Task<User> CreateOrUpdateAsync(long telegramId, string? username, string? firstName, string? lastName)
     {
-        Console.WriteLine($"[DEBUG CreateOrUpdateAsync] Starting for telegramId: {telegramId}");
         var existingUser = await GetByTelegramIdAsync(telegramId);
 
         if (existingUser != null)
         {
-            // Update existing user information
-            existingUser.Username = username;
-            existingUser.FirstName = firstName;
-            existingUser.LastName = lastName;
+            // Update existing user information using domain method
+            existingUser.UpdateFromTelegram(username, firstName, lastName);
 
             await _context.SaveChangesAsync();
             return existingUser;
         }
 
-        // Create new user
-        var newUser = new User
-        {
-            TelegramId = telegramId,
-            Username = username,
-            FirstName = firstName,
-            LastName = lastName
-        };
+        // Create new user using factory method
+        var newUser = User.Create(telegramId, username, firstName, lastName);
 
         await _dbSet.AddAsync(newUser);
         await _context.SaveChangesAsync();

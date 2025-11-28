@@ -8,7 +8,10 @@ using SurveyBot.Core.Entities;
 using SurveyBot.Core.Enums;
 using SurveyBot.Core.Exceptions;
 using SurveyBot.Core.Interfaces;
+using SurveyBot.Core.ValueObjects;
+using SurveyBot.Core.ValueObjects.Answers;
 using SurveyBot.Infrastructure.Data;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using ValidationResult = SurveyBot.Core.Models.ValidationResult;
 
@@ -79,14 +82,8 @@ public class ResponseService : IResponseService
             throw new DuplicateResponseException(surveyId, telegramUserId);
         }
 
-        // Create new response
-        var response = new Response
-        {
-            SurveyId = surveyId,
-            RespondentTelegramId = telegramUserId,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow
-        };
+        // Create new response using factory method
+        var response = Response.Start(surveyId, telegramUserId);
 
         var createdResponse = await _responseRepository.CreateAsync(response);
 
@@ -103,7 +100,8 @@ public class ResponseService : IResponseService
         string? answerText = null,
         List<string>? selectedOptions = null,
         int? ratingValue = null,
-        int? userId = null)
+        int? userId = null,
+        string? answerJson = null)
     {
         _logger.LogInformation("Saving answer for response {ResponseId}, question {QuestionId}", responseId, questionId);
 
@@ -144,7 +142,7 @@ public class ResponseService : IResponseService
         }
 
         // Validate answer format
-        var validationResult = await ValidateAnswerFormatAsync(questionId, answerText, selectedOptions, ratingValue);
+        var validationResult = await ValidateAnswerFormatAsync(questionId, answerText, selectedOptions, ratingValue, answerJson);
         if (!validationResult.IsValid)
         {
             _logger.LogWarning("Invalid answer format for question {QuestionId}: {Error}",
@@ -172,42 +170,55 @@ public class ResponseService : IResponseService
         }
 
         // Determine next question based on conditional flow
-        var nextQuestionId = await DetermineNextQuestionIdAsync(
+        var nextStep = await DetermineNextStepAsync(
             question,
             selectedOptionIndexes,
             response.SurveyId,
             CancellationToken.None);
 
         _logger.LogInformation(
-            "Determined next question for Response {ResponseId}, Question {QuestionId}: NextQuestionId={NextQuestionId}",
-            response.Id, question.Id, nextQuestionId);
+            "Determined next step for Response {ResponseId}, Question {QuestionId}: {NextStep}",
+            response.Id, question.Id, nextStep);
 
         // Check if answer already exists for this question
         var existingAnswer = await _answerRepository.GetByResponseAndQuestionAsync(responseId, questionId);
 
+        // Create AnswerValue using factory - this is the FIX for the bug!
+        // Previously used CreateAnswerJson() which only set Value for text questions
+        AnswerValue answerValue;
+        if (question.QuestionType == QuestionType.Location)
+        {
+            // Location answers come pre-serialized from the handler
+            answerValue = LocationAnswerValue.FromJson(answerJson!);
+        }
+        else
+        {
+            answerValue = AnswerValueFactory.CreateFromInput(
+                questionType: question.QuestionType,
+                textAnswer: answerText,
+                selectedOptions: selectedOptions,
+                ratingValue: ratingValue,
+                question: question);
+        }
+
         if (existingAnswer != null)
         {
-            // Update existing answer
-            existingAnswer.AnswerText = answerText;
-            existingAnswer.AnswerJson = CreateAnswerJson(question.QuestionType, selectedOptions, ratingValue);
-            existingAnswer.NextQuestionId = nextQuestionId;
-            existingAnswer.CreatedAt = DateTime.UtcNow;
+            // Update existing answer using UpdateValue (not legacy SetAnswerText/SetAnswerJson)
+            existingAnswer.UpdateValue(answerValue);
+            existingAnswer.SetNext(nextStep);
+            existingAnswer.SetCreatedAt(DateTime.UtcNow);
 
             await _answerRepository.UpdateAsync(existingAnswer);
             _logger.LogInformation("Updated existing answer {AnswerId} for response {ResponseId}", existingAnswer.Id, responseId);
         }
         else
         {
-            // Create new answer
-            var answer = new Answer
-            {
-                ResponseId = responseId,
-                QuestionId = questionId,
-                AnswerText = answerText,
-                AnswerJson = CreateAnswerJson(question.QuestionType, selectedOptions, ratingValue),
-                NextQuestionId = nextQuestionId,
-                CreatedAt = DateTime.UtcNow
-            };
+            // Create new answer using CreateWithValue (not legacy Create)
+            var answer = Answer.CreateWithValue(
+                responseId,
+                questionId,
+                answerValue,
+                nextStep);
 
             await _answerRepository.CreateAsync(answer);
             _logger.LogInformation("Created new answer for response {ResponseId}, question {QuestionId}", responseId, questionId);
@@ -244,8 +255,7 @@ public class ResponseService : IResponseService
         }
 
         // Mark as complete
-        response.IsComplete = true;
-        response.SubmittedAt = DateTime.UtcNow;
+        response.MarkAsComplete();
 
         await _responseRepository.UpdateAsync(response);
 
@@ -358,7 +368,8 @@ public class ResponseService : IResponseService
         int questionId,
         string? answerText = null,
         List<string>? selectedOptions = null,
-        int? ratingValue = null)
+        int? ratingValue = null,
+        string? answerJson = null)
     {
         var question = await _questionRepository.GetByIdAsync(questionId);
         if (question == null)
@@ -373,6 +384,7 @@ public class ResponseService : IResponseService
             QuestionType.SingleChoice => ValidateSingleChoiceAnswer(selectedOptions, question.OptionsJson, question.IsRequired),
             QuestionType.MultipleChoice => ValidateMultipleChoiceAnswer(selectedOptions, question.OptionsJson, question.IsRequired),
             QuestionType.Rating => ValidateRatingAnswer(ratingValue, question.IsRequired),
+            QuestionType.Location => ValidateLocationAnswer(answerJson, question.IsRequired),
             _ => ValidationResult.Failure("Unknown question type")
         };
     }
@@ -503,30 +515,25 @@ public class ResponseService : IResponseService
             return firstQuestion.Id;
         }
 
-        // TODO: Refactor Answer entity to use NextQuestionDeterminant value object
-        // This is the ONE remaining magic value check in the codebase (NextQuestionId = 0 means end of survey)
-        // Answer.NextQuestionId is still int (not yet refactored to NextQuestionDeterminant)
-        // Future refactoring: Answer.Next?.Type == NextStepType.EndSurvey
-        // Check if last answer indicates end of survey (NextQuestionId = 0 means end)
-        if (lastAnswer.NextQuestionId == 0)
+        // Check if last answer indicates end of survey using value object
+        if (lastAnswer.Next.Type == NextStepType.EndSurvey)
         {
             _logger.LogInformation(
                 "Response {ResponseId} reached end of survey, marking as complete",
                 responseId);
 
-            response.IsComplete = true;
-            response.SubmittedAt = DateTime.UtcNow;
+            response.MarkAsComplete();
             await _responseRepository.UpdateAsync(response);
 
             return null;
         }
 
-        // Return NextQuestionId from last answer
+        // Return NextQuestionId from last answer's value object
         _logger.LogInformation(
             "Next question for response {ResponseId} is {NextQuestionId}",
-            responseId, lastAnswer.NextQuestionId);
+            responseId, lastAnswer.Next.NextQuestionId);
 
-        return lastAnswer.NextQuestionId;
+        return lastAnswer.Next.NextQuestionId;
     }
 
     // Private helper methods
@@ -588,32 +595,61 @@ public class ResponseService : IResponseService
             QuestionId = answer.QuestionId,
             QuestionText = question?.QuestionText ?? "",
             QuestionType = question?.QuestionType ?? QuestionType.Text,
-            AnswerText = answer.AnswerText,
             CreatedAt = answer.CreatedAt
         };
 
-        // Parse JSON answer for choice and rating questions
-        if (!string.IsNullOrEmpty(answer.AnswerJson))
+        // Use pattern matching on answer.Value (new approach - no JSON parsing!)
+        switch (answer.Value)
         {
-            try
-            {
-                var answerData = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(answer.AnswerJson);
-                if (answerData != null)
+            case TextAnswerValue textValue:
+                dto.AnswerText = textValue.Text;
+                break;
+
+            case SingleChoiceAnswerValue singleChoice:
+                dto.SelectedOptions = new List<string> { singleChoice.SelectedOption };
+                break;
+
+            case MultipleChoiceAnswerValue multipleChoice:
+                dto.SelectedOptions = multipleChoice.SelectedOptions.ToList();
+                break;
+
+            case RatingAnswerValue ratingValue:
+                dto.RatingValue = ratingValue.Rating;
+                break;
+
+            case LocationAnswerValue locationValue:
+                dto.Latitude = locationValue.Latitude;
+                dto.Longitude = locationValue.Longitude;
+                dto.LocationAccuracy = locationValue.Accuracy;
+                dto.LocationTimestamp = locationValue.Timestamp;
+                break;
+
+            case null:
+                // Fallback for legacy data - try legacy AnswerText/AnswerJson
+                dto.AnswerText = answer.AnswerText;
+                if (!string.IsNullOrEmpty(answer.AnswerJson))
                 {
-                    if (answerData.ContainsKey("selectedOptions"))
+                    try
                     {
-                        dto.SelectedOptions = JsonSerializer.Deserialize<List<string>>(answerData["selectedOptions"].GetRawText());
+                        var answerData = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(answer.AnswerJson);
+                        if (answerData != null)
+                        {
+                            if (answerData.ContainsKey("selectedOptions"))
+                            {
+                                dto.SelectedOptions = JsonSerializer.Deserialize<List<string>>(answerData["selectedOptions"].GetRawText());
+                            }
+                            if (answerData.ContainsKey("ratingValue"))
+                            {
+                                dto.RatingValue = answerData["ratingValue"].GetInt32();
+                            }
+                        }
                     }
-                    if (answerData.ContainsKey("ratingValue"))
+                    catch (JsonException ex)
                     {
-                        dto.RatingValue = answerData["ratingValue"].GetInt32();
+                        _logger.LogWarning(ex, "Failed to parse legacy answer JSON for answer {AnswerId}", answer.Id);
                     }
                 }
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning(ex, "Failed to parse answer JSON for answer {AnswerId}", answer.Id);
-            }
+                break;
         }
 
         return dto;
@@ -635,26 +671,58 @@ public class ResponseService : IResponseService
         }
     }
 
-    private string? CreateAnswerJson(QuestionType questionType, List<string>? selectedOptions, int? ratingValue)
+
+    /// <summary>
+    /// Validates location answer from JSON.
+    /// </summary>
+    private ValidationResult ValidateLocationAnswer(string? answerJson, bool isRequired)
     {
-        if (questionType == QuestionType.Text)
+        if (isRequired && string.IsNullOrWhiteSpace(answerJson))
         {
-            return null;
+            return ValidationResult.Failure("Location answer is required");
         }
 
-        var answerData = new Dictionary<string, object?>();
-
-        if (questionType == QuestionType.SingleChoice || questionType == QuestionType.MultipleChoice)
+        if (string.IsNullOrWhiteSpace(answerJson))
         {
-            answerData["selectedOptions"] = selectedOptions;
+            return ValidationResult.Success(); // Optional question with no answer
         }
 
-        if (questionType == QuestionType.Rating)
+        try
         {
-            answerData["ratingValue"] = ratingValue;
-        }
+            // Use LocationAnswerValue.FromJson() which includes validation
+            var locationValue = LocationAnswerValue.FromJson(answerJson);
 
-        return JsonSerializer.Serialize(answerData);
+            _logger.LogInformation(
+                "Location coordinates validated: Lat range {LatRange}, Lon range {LonRange}",
+                GetCoordinateRange(locationValue.Latitude),
+                GetCoordinateRange(locationValue.Longitude));
+
+            return ValidationResult.Success();
+        }
+        catch (InvalidLocationException ex)
+        {
+            _logger.LogError(ex, "Invalid location data: {Json}", answerJson);
+            return ValidationResult.Failure($"Invalid location data: {ex.Message}");
+        }
+        catch (InvalidAnswerFormatException ex)
+        {
+            _logger.LogError(ex, "Invalid answer format for location: {Json}", answerJson);
+            return ValidationResult.Failure($"Invalid location answer format: {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Invalid JSON format for location answer: {Json}", answerJson);
+            return ValidationResult.Failure("Invalid JSON format for location answer.");
+        }
+    }
+
+    /// <summary>
+    /// Returns a privacy-preserving coordinate range for logging.
+    /// </summary>
+    private static string GetCoordinateRange(double coordinate)
+    {
+        var rounded = Math.Floor(coordinate / 10) * 10;
+        return $"{rounded} to {rounded + 10}";
     }
 
     private ValidationResult ValidateTextAnswer(string? answerText, bool isRequired)
@@ -771,7 +839,7 @@ public class ResponseService : IResponseService
     /// Determines the next question ID based on the question type and answer.
     /// Implements the conditional flow logic priority: Conditional → Default → Sequential → End.
     /// </summary>
-    private async Task<int> DetermineNextQuestionIdAsync(
+    private async Task<NextQuestionDeterminant> DetermineNextStepAsync(
         Question question,
         List<int>? selectedOptions,
         int surveyId,
@@ -780,18 +848,18 @@ public class ResponseService : IResponseService
         // For branching question types (SingleChoice, Rating)
         if (question.QuestionType == QuestionType.SingleChoice || question.QuestionType == QuestionType.Rating)
         {
-            return await DetermineBranchingNextQuestionAsync(question, selectedOptions, cancellationToken);
+            return await DetermineBranchingNextStepAsync(question, selectedOptions, cancellationToken);
         }
 
         // For non-branching question types (Text, MultipleChoice)
-        return await DetermineNonBranchingNextQuestionAsync(question, surveyId, cancellationToken);
+        return await DetermineNonBranchingNextStepAsync(question, surveyId, cancellationToken);
     }
 
     /// <summary>
     /// Determines next question for branching question types (SingleChoice, Rating).
-    /// Priority: Option's Next → Question's DefaultNext → Sequential fallback → End (0).
+    /// Priority: Option's Next → Question's DefaultNext → Sequential fallback → End.
     /// </summary>
-    private async Task<int> DetermineBranchingNextQuestionAsync(
+    private async Task<NextQuestionDeterminant> DetermineBranchingNextStepAsync(
         Question question,
         List<int>? selectedOptions,
         CancellationToken cancellationToken)
@@ -802,7 +870,7 @@ public class ResponseService : IResponseService
             _logger.LogWarning(
                 "No option selected for branching question {QuestionId}, ending survey",
                 question.Id);
-            return 0; // No selection, end survey
+            return NextQuestionDeterminant.End(); // No selection, end survey
         }
 
         var selectedOptionIndex = selectedOptions.First();
@@ -818,7 +886,7 @@ public class ResponseService : IResponseService
             _logger.LogWarning(
                 "Invalid option index {OptionIndex} for question {QuestionId}, ending survey",
                 selectedOptionIndex, question.Id);
-            return 0; // Invalid option, end survey
+            return NextQuestionDeterminant.End(); // Invalid option, end survey
         }
 
         // Priority 1: Check option's conditional flow
@@ -826,9 +894,9 @@ public class ResponseService : IResponseService
             selectedOption.Next.Type == NextStepType.GoToQuestion)
         {
             _logger.LogInformation(
-                "Using option conditional flow for question {QuestionId}, option {OptionId}: NextQuestionId={NextQuestionId}",
-                question.Id, selectedOption.Id, selectedOption.Next.NextQuestionId);
-            return selectedOption.Next.NextQuestionId ?? 0;
+                "Using option conditional flow for question {QuestionId}, option {OptionId}: {Next}",
+                question.Id, selectedOption.Id, selectedOption.Next);
+            return selectedOption.Next;
         }
 
         // Priority 2: Check question's default flow
@@ -836,9 +904,9 @@ public class ResponseService : IResponseService
             question.DefaultNext.Type == NextStepType.GoToQuestion)
         {
             _logger.LogInformation(
-                "Using question default flow for question {QuestionId}: NextQuestionId={NextQuestionId}",
-                question.Id, question.DefaultNext.NextQuestionId);
-            return question.DefaultNext.NextQuestionId ?? 0;
+                "Using question default flow for question {QuestionId}: {DefaultNext}",
+                question.Id, question.DefaultNext);
+            return question.DefaultNext;
         }
 
         // Priority 3: Sequential fallback (backward compatibility)
@@ -852,22 +920,22 @@ public class ResponseService : IResponseService
             _logger.LogInformation(
                 "Using sequential fallback for question {QuestionId}: NextQuestionId={NextQuestionId}",
                 question.Id, sequentialNextId);
+            return NextQuestionDeterminant.ToQuestion(sequentialNextId);
         }
         else
         {
             _logger.LogInformation(
                 "No next question found for question {QuestionId}, ending survey",
                 question.Id);
+            return NextQuestionDeterminant.End();
         }
-
-        return sequentialNextId;
     }
 
     /// <summary>
     /// Determines next question for non-branching question types (Text, MultipleChoice).
-    /// Priority: Question's DefaultNext → Sequential fallback → End (0).
+    /// Priority: Question's DefaultNext → Sequential fallback → End.
     /// </summary>
-    private async Task<int> DetermineNonBranchingNextQuestionAsync(
+    private async Task<NextQuestionDeterminant> DetermineNonBranchingNextStepAsync(
         Question question,
         int surveyId,
         CancellationToken cancellationToken)
@@ -877,9 +945,9 @@ public class ResponseService : IResponseService
             question.DefaultNext.Type == NextStepType.GoToQuestion)
         {
             _logger.LogInformation(
-                "Using question default flow for non-branching question {QuestionId}: NextQuestionId={NextQuestionId}",
-                question.Id, question.DefaultNext.NextQuestionId);
-            return question.DefaultNext.NextQuestionId ?? 0;
+                "Using question default flow for non-branching question {QuestionId}: {DefaultNext}",
+                question.Id, question.DefaultNext);
+            return question.DefaultNext;
         }
 
         // Priority 2: Sequential fallback (backward compatibility)
@@ -893,15 +961,15 @@ public class ResponseService : IResponseService
             _logger.LogInformation(
                 "Using sequential fallback for non-branching question {QuestionId}: NextQuestionId={NextQuestionId}",
                 question.Id, sequentialNextId);
+            return NextQuestionDeterminant.ToQuestion(sequentialNextId);
         }
         else
         {
             _logger.LogInformation(
                 "No next question found for non-branching question {QuestionId}, ending survey",
                 question.Id);
+            return NextQuestionDeterminant.End();
         }
-
-        return sequentialNextId;
     }
 
     /// <summary>

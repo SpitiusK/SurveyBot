@@ -201,7 +201,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
                 surveyId: survey.Id,
                 respondentTelegramId: 999888777,
                 isComplete: true);
-            response.SubmittedAt = DateTime.UtcNow;
+            response.SetSubmittedAt(DateTime.UtcNow);
             db.Responses.Add(response);
             db.SaveChanges();
             responseId = response.Id;

@@ -16,6 +16,7 @@ import {
   CheckBox as MultipleChoiceIcon,
   Star as RatingIcon,
   Image as ImageIcon,
+  LocationOn as LocationIcon,
 } from '@mui/icons-material';
 import { QuestionType } from '@/types';
 import type { QuestionDraft } from '@/schemas/questionSchemas';
@@ -37,6 +38,8 @@ const QuestionPreview: React.FC<QuestionPreviewProps> = ({ question, index }) =>
         return <MultipleChoiceIcon fontSize="small" />;
       case QuestionType.Rating:
         return <RatingIcon fontSize="small" />;
+      case QuestionType.Location:
+        return <LocationIcon fontSize="small" />;
       default:
         return null;
     }
@@ -52,6 +55,8 @@ const QuestionPreview: React.FC<QuestionPreviewProps> = ({ question, index }) =>
         return 'Multiple Choice';
       case QuestionType.Rating:
         return 'Rating (1-5)';
+      case QuestionType.Location:
+        return 'Location';
       default:
         return 'Unknown';
     }
@@ -67,6 +72,8 @@ const QuestionPreview: React.FC<QuestionPreviewProps> = ({ question, index }) =>
         return 'warning';
       case QuestionType.Rating:
         return 'secondary';
+      case QuestionType.Location:
+        return 'primary';
       default:
         return 'default';
     }
@@ -310,6 +317,21 @@ const QuestionPreview: React.FC<QuestionPreviewProps> = ({ question, index }) =>
               >
                 <Typography variant="caption" color="text.secondary">
                   Respondents will provide free-form text answers
+                </Typography>
+              </Box>
+            )}
+
+            {/* Location Question Preview */}
+            {question.questionType === QuestionType.Location && (
+              <Box
+                sx={{
+                  pl: 2,
+                  borderLeft: 2,
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  Respondents will share their GPS location
                 </Typography>
               </Box>
             )}

@@ -26,6 +26,7 @@ import {
   RadioButtonChecked as SingleChoiceIcon,
   CheckBox as MultipleChoiceIcon,
   Star as RatingIcon,
+  LocationOn as LocationIcon,
 } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -250,8 +251,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
     }
 
     // Clear conditional flow fields for question types that don't use option-based flow
-    if (newType === QuestionType.Text || newType === QuestionType.MultipleChoice) {
-      // Text and MultipleChoice only use defaultNextQuestionId
+    if (newType === QuestionType.Text || newType === QuestionType.MultipleChoice || newType === QuestionType.Location) {
+      // Text, MultipleChoice, and Location only use defaultNextQuestionId
       setValue('optionNextQuestions', {}, { shouldDirty: true });
     } else if (newType === QuestionType.SingleChoice) {
       // SingleChoice uses optionNextQuestions
@@ -276,6 +277,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         return <MultipleChoiceIcon />;
       case QuestionType.Rating:
         return <RatingIcon />;
+      case QuestionType.Location:
+        return <LocationIcon />;
     }
   };
 
@@ -289,6 +292,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         return 'Respondents can select multiple options from a list';
       case QuestionType.Rating:
         return 'Respondents can rate on a scale of 1-5 stars';
+      case QuestionType.Location:
+        return 'Respondents can share their GPS location';
     }
   };
 
@@ -382,6 +387,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                     QuestionType.SingleChoice,
                     QuestionType.MultipleChoice,
                     QuestionType.Rating,
+                    QuestionType.Location,
                   ].map((type) => (
                     <Box
                       key={type}
@@ -420,6 +426,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                                 {type === QuestionType.MultipleChoice &&
                                   'Multiple Choice'}
                                 {type === QuestionType.Rating && 'Rating'}
+                                {type === QuestionType.Location && 'Location'}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
                                 {getQuestionTypeDescription(type)}
@@ -654,8 +661,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
               </>
             )}
 
-            {/* Conditional Flow for Text and MultipleChoice */}
-            {(questionType === QuestionType.Text || questionType === QuestionType.MultipleChoice) && (
+            {/* Conditional Flow for Text, MultipleChoice, and Location */}
+            {(questionType === QuestionType.Text || questionType === QuestionType.MultipleChoice || questionType === QuestionType.Location) && (
               <>
                 <Divider />
                 <Box>
@@ -709,6 +716,14 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
               <Alert severity="info">
                 This question will use a 5-star rating scale (1-5).
                 Respondents will select one rating value.
+              </Alert>
+            )}
+
+            {/* Location Info */}
+            {questionType === QuestionType.Location && (
+              <Alert severity="info">
+                This question will prompt respondents to share their GPS location.
+                In the Telegram bot, users will see a "Share Location" button.
               </Alert>
             )}
           </Stack>

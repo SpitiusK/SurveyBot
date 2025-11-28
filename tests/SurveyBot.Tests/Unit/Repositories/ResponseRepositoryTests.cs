@@ -90,10 +90,10 @@ public class ResponseRepositoryTests : RepositoryTestBase
         await _surveyRepository.CreateAsync(survey);
 
         var completed1 = EntityBuilder.CreateResponse(surveyId: survey.Id, isComplete: true);
-        completed1.SubmittedAt = DateTime.UtcNow;
+        completed1.SetSubmittedAt(DateTime.UtcNow);
         var incomplete = EntityBuilder.CreateResponse(surveyId: survey.Id, isComplete: false);
         var completed2 = EntityBuilder.CreateResponse(surveyId: survey.Id, isComplete: true);
-        completed2.SubmittedAt = DateTime.UtcNow;
+        completed2.SetSubmittedAt(DateTime.UtcNow);
 
         await _repository.CreateAsync(completed1);
         await _repository.CreateAsync(incomplete);
@@ -253,13 +253,13 @@ public class ResponseRepositoryTests : RepositoryTestBase
         await _surveyRepository.CreateAsync(survey);
 
         var response1 = EntityBuilder.CreateResponse(surveyId: survey.Id);
-        response1.SubmittedAt = new DateTime(2024, 1, 15);
+        response1.SetSubmittedAt(new DateTime(2024, 1, 15));
 
         var response2 = EntityBuilder.CreateResponse(surveyId: survey.Id);
-        response2.SubmittedAt = new DateTime(2024, 1, 20);
+        response2.SetSubmittedAt(new DateTime(2024, 1, 20));
 
         var response3 = EntityBuilder.CreateResponse(surveyId: survey.Id);
-        response3.SubmittedAt = new DateTime(2024, 1, 25);
+        response3.SetSubmittedAt(new DateTime(2024, 1, 25));
 
         await _repository.CreateAsync(response1);
         await _repository.CreateAsync(response2);

@@ -6,4 +6,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- Allow Infrastructure and Tests to access internal members -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="SurveyBot.Infrastructure" />
+    <InternalsVisibleTo Include="SurveyBot.Bot" />
+    <InternalsVisibleTo Include="SurveyBot.Tests" />
+  </ItemGroup>
+
 </Project>

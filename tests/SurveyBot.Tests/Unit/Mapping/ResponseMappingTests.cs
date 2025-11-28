@@ -2,12 +2,14 @@ using AutoMapper;
 using SurveyBot.API.Mapping;
 using SurveyBot.Core.DTOs.Response;
 using SurveyBot.Core.Entities;
+using SurveyBot.Tests.Fixtures;
 using Xunit;
 
 namespace SurveyBot.Tests.Unit.Mapping;
 
 /// <summary>
 /// Tests for Response entity AutoMapper mappings.
+/// Updated in v1.5.0 to use internal methods instead of reflection.
 /// </summary>
 public class ResponseMappingTests
 {
@@ -18,6 +20,8 @@ public class ResponseMappingTests
         var config = new MapperConfiguration(cfg =>
         {
             cfg.AddProfile<ResponseMappingProfile>();
+            cfg.AddProfile<AnswerMappingProfile>();
+            cfg.AddProfile<QuestionMappingProfile>();
         });
         _mapper = config.CreateMapper();
     }
@@ -29,6 +33,8 @@ public class ResponseMappingTests
         var config = new MapperConfiguration(cfg =>
         {
             cfg.AddProfile<ResponseMappingProfile>();
+            cfg.AddProfile<AnswerMappingProfile>();
+            cfg.AddProfile<QuestionMappingProfile>();
         });
         config.AssertConfigurationIsValid();
     }
@@ -37,32 +43,38 @@ public class ResponseMappingTests
     public void Map_Response_To_ResponseDto_Success()
     {
         // Arrange
-        var response = new Response
-        {
-            Id = 1,
-            SurveyId = 1,
-            RespondentTelegramId = 123456789,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow.AddMinutes(-10),
-            SubmittedAt = null,
-            Survey = new Survey
-            {
-                Id = 1,
-                Questions = new List<Question>
-                {
-                    new Question { Id = 1 },
-                    new Question { Id = 2 },
-                    new Question { Id = 3 },
-                    new Question { Id = 4 },
-                    new Question { Id = 5 }
-                }
-            },
-            Answers = new List<Answer>
-            {
-                new Answer { Id = 1, QuestionId = 1 },
-                new Answer { Id = 2, QuestionId = 2 }
-            }
-        };
+        var survey = EntityBuilder.CreateSurvey();
+        survey.SetId(1);
+
+        var question1 = EntityBuilder.CreateQuestion(surveyId: 1);
+        question1.SetId(1);
+        var question2 = EntityBuilder.CreateQuestion(surveyId: 1);
+        question2.SetId(2);
+        var question3 = EntityBuilder.CreateQuestion(surveyId: 1);
+        question3.SetId(3);
+        var question4 = EntityBuilder.CreateQuestion(surveyId: 1);
+        question4.SetId(4);
+        var question5 = EntityBuilder.CreateQuestion(surveyId: 1);
+        question5.SetId(5);
+
+        // Add questions using internal method instead of reflection
+        survey.AddQuestionInternal(question1);
+        survey.AddQuestionInternal(question2);
+        survey.AddQuestionInternal(question3);
+        survey.AddQuestionInternal(question4);
+        survey.AddQuestionInternal(question5);
+
+        var response = EntityBuilder.CreateResponse(surveyId: 1, respondentTelegramId: 123456789);
+        response.SetId(1);
+        response.SetSurveyInternal(survey);
+
+        var answer1 = EntityBuilder.CreateAnswer(responseId: 1, questionId: 1);
+        answer1.SetId(1);
+        var answer2 = EntityBuilder.CreateAnswer(responseId: 1, questionId: 2);
+        answer2.SetId(2);
+
+        response.AddAnswerInternal(answer1);
+        response.AddAnswerInternal(answer2);
 
         // Act
         var dto = _mapper.Map<ResponseDto>(response);
@@ -85,29 +97,32 @@ public class ResponseMappingTests
         // Arrange
         var startTime = DateTime.UtcNow.AddHours(-1);
         var submitTime = DateTime.UtcNow;
-        var response = new Response
-        {
-            Id = 2,
-            SurveyId = 1,
-            RespondentTelegramId = 987654321,
-            IsComplete = true,
-            StartedAt = startTime,
-            SubmittedAt = submitTime,
-            Survey = new Survey
-            {
-                Id = 1,
-                Questions = new List<Question>
-                {
-                    new Question { Id = 1 },
-                    new Question { Id = 2 }
-                }
-            },
-            Answers = new List<Answer>
-            {
-                new Answer { Id = 1, QuestionId = 1 },
-                new Answer { Id = 2, QuestionId = 2 }
-            }
-        };
+
+        var survey = EntityBuilder.CreateSurvey();
+        survey.SetId(1);
+
+        var question1 = EntityBuilder.CreateQuestion(surveyId: 1);
+        question1.SetId(1);
+        var question2 = EntityBuilder.CreateQuestion(surveyId: 1);
+        question2.SetId(2);
+
+        // Add questions using internal method instead of reflection
+        survey.AddQuestionInternal(question1);
+        survey.AddQuestionInternal(question2);
+
+        var response = EntityBuilder.CreateResponse(surveyId: 1, respondentTelegramId: 987654321, isComplete: true);
+        response.SetId(2);
+        response.SetStartedAt(startTime);
+        response.SetSubmittedAt(submitTime);
+        response.SetSurveyInternal(survey);
+
+        var answer1 = EntityBuilder.CreateAnswer(responseId: 2, questionId: 1);
+        answer1.SetId(1);
+        var answer2 = EntityBuilder.CreateAnswer(responseId: 2, questionId: 2);
+        answer2.SetId(2);
+
+        response.AddAnswerInternal(answer1);
+        response.AddAnswerInternal(answer2);
 
         // Act
         var dto = _mapper.Map<ResponseDto>(response);
@@ -125,29 +140,29 @@ public class ResponseMappingTests
     public void Map_Response_To_ResponseListDto_Success()
     {
         // Arrange
-        var response = new Response
-        {
-            Id = 3,
-            SurveyId = 2,
-            RespondentTelegramId = 111222333,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow,
-            SubmittedAt = null,
-            Survey = new Survey
-            {
-                Id = 2,
-                Questions = new List<Question>
-                {
-                    new Question { Id = 1 },
-                    new Question { Id = 2 },
-                    new Question { Id = 3 }
-                }
-            },
-            Answers = new List<Answer>
-            {
-                new Answer { Id = 1 }
-            }
-        };
+        var survey = EntityBuilder.CreateSurvey();
+        survey.SetId(2);
+
+        var question1 = EntityBuilder.CreateQuestion(surveyId: 2);
+        question1.SetId(1);
+        var question2 = EntityBuilder.CreateQuestion(surveyId: 2);
+        question2.SetId(2);
+        var question3 = EntityBuilder.CreateQuestion(surveyId: 2);
+        question3.SetId(3);
+
+        // Add questions using internal method instead of reflection
+        survey.AddQuestionInternal(question1);
+        survey.AddQuestionInternal(question2);
+        survey.AddQuestionInternal(question3);
+
+        var response = EntityBuilder.CreateResponse(surveyId: 2, respondentTelegramId: 111222333);
+        response.SetId(3);
+        response.SetSurveyInternal(survey);
+
+        var answer1 = EntityBuilder.CreateAnswer(responseId: 3, questionId: 1);
+        answer1.SetId(1);
+
+        response.AddAnswerInternal(answer1);
 
         // Act
         var dto = _mapper.Map<ResponseListDto>(response);
@@ -188,23 +203,19 @@ public class ResponseMappingTests
     public void Map_Response_With_No_Answers_Success()
     {
         // Arrange
-        var response = new Response
-        {
-            Id = 4,
-            SurveyId = 1,
-            RespondentTelegramId = 123,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow,
-            Survey = new Survey
-            {
-                Id = 1,
-                Questions = new List<Question>
-                {
-                    new Question { Id = 1 }
-                }
-            },
-            Answers = new List<Answer>()
-        };
+        var survey = EntityBuilder.CreateSurvey();
+        survey.SetId(1);
+
+        var question1 = EntityBuilder.CreateQuestion(surveyId: 1);
+        question1.SetId(1);
+
+        // Add question using internal method instead of reflection
+        survey.AddQuestionInternal(question1);
+
+        var response = EntityBuilder.CreateResponse(surveyId: 1, respondentTelegramId: 123);
+        response.SetId(4);
+        response.SetSurveyInternal(survey);
+        // No answers added - response starts with empty answers collection
 
         // Act
         var dto = _mapper.Map<ResponseDto>(response);

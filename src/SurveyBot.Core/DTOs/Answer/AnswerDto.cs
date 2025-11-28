@@ -52,4 +52,24 @@ public class AnswerDto
     /// Gets or sets the timestamp when the answer was created.
     /// </summary>
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// Latitude for Location question types. Null for other types.
+    /// </summary>
+    public double? Latitude { get; set; }
+
+    /// <summary>
+    /// Longitude for Location question types. Null for other types.
+    /// </summary>
+    public double? Longitude { get; set; }
+
+    /// <summary>
+    /// Accuracy in meters for Location question types. Null if not provided.
+    /// </summary>
+    public double? LocationAccuracy { get; set; }
+
+    /// <summary>
+    /// Timestamp when location was captured. Null if not provided.
+    /// </summary>
+    public DateTime? LocationTimestamp { get; set; }
 }

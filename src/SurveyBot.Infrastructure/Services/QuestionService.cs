@@ -84,17 +84,16 @@ public class QuestionService : IQuestionService
                 "Question validation failed: " + string.Join(", ", validationResult.Errors));
         }
 
-        // Create question entity
-        var question = new Question
-        {
-            SurveyId = surveyId,
-            QuestionText = dto.QuestionText,
-            QuestionType = dto.QuestionType,
-            IsRequired = dto.IsRequired,
-            OrderIndex = await _questionRepository.GetNextOrderIndexAsync(surveyId),
-            // NEW: Set conditional flow using value object (use extension method to convert DTO)
-            DefaultNext = dto.DefaultNext.ToValueObject()
-        };
+        // Create question entity using factory method
+        var question = Question.Create(
+            surveyId,
+            dto.QuestionText,
+            dto.QuestionType,
+            await _questionRepository.GetNextOrderIndexAsync(surveyId),
+            dto.IsRequired,
+            optionsJson: null,  // Will be set below for choice questions
+            mediaContent: null, // Will be set below if provided
+            dto.DefaultNext.ToValueObject());
 
         // Handle options for choice-based questions
         if (dto.QuestionType == QuestionType.SingleChoice || dto.QuestionType == QuestionType.MultipleChoice)
@@ -102,33 +101,34 @@ public class QuestionService : IQuestionService
             if (dto.Options != null && dto.Options.Any())
             {
                 // Create QuestionOption entities (NEW approach with flow support)
-                question.Options = new List<QuestionOption>();
+                var options = new List<QuestionOption>();
 
                 for (int i = 0; i < dto.Options.Count; i++)
                 {
-                    var option = new QuestionOption
-                    {
-                        Text = dto.Options[i],
-                        OrderIndex = i,
-                        Question = question,
-                        // Set Next from OptionNextDeterminants dictionary using extension method
-                        Next = dto.OptionNextDeterminants?.ContainsKey(i) == true
-                            ? dto.OptionNextDeterminants[i].ToValueObject()
-                            : null
-                    };
+                    // Create option using internal constructor (factory requires positive QuestionId,
+                    // but the Question doesn't have an ID yet until saved)
+                    // EF Core will set the FK automatically via the navigation property
+                    var option = new QuestionOption(forInfrastructure: true);
+                    option.SetText(dto.Options[i]);
+                    option.SetOrderIndex(i);
+                    option.SetQuestionInternal(question);
+                    option.SetNext(dto.OptionNextDeterminants?.ContainsKey(i) == true
+                        ? dto.OptionNextDeterminants[i].ToValueObject()
+                        : null);
 
-                    question.Options.Add(option);
+                    options.Add(option);
                 }
+                question.SetOptionsInternal(options);
 
                 // Keep legacy OptionsJson for backwards compatibility
-                question.OptionsJson = JsonSerializer.Serialize(dto.Options);
+                question.SetOptionsJson(JsonSerializer.Serialize(dto.Options));
             }
         }
 
         // Handle media content if provided
         if (!string.IsNullOrWhiteSpace(dto.MediaContent))
         {
-            question.MediaContent = dto.MediaContent;
+            question.SetMediaContent(dto.MediaContent);
         }
 
         // Save to database
@@ -200,23 +200,22 @@ public class QuestionService : IQuestionService
         }
 
         // Update question properties
-        question.QuestionText = dto.QuestionText;
-        question.QuestionType = dto.QuestionType;
-        question.IsRequired = dto.IsRequired;
-        question.UpdatedAt = DateTime.UtcNow;
+        question.SetQuestionText(dto.QuestionText);
+        question.SetQuestionType(dto.QuestionType);
+        question.SetIsRequired(dto.IsRequired);
 
         // Update options for choice-based questions
         if (dto.QuestionType == QuestionType.SingleChoice || dto.QuestionType == QuestionType.MultipleChoice)
         {
-            question.OptionsJson = JsonSerializer.Serialize(dto.Options);
+            question.SetOptionsJson(JsonSerializer.Serialize(dto.Options));
         }
         else
         {
-            question.OptionsJson = null;
+            question.SetOptionsJson(null);
         }
 
         // Update media content (null to clear, string to set)
-        question.MediaContent = dto.MediaContent;
+        question.SetMediaContent(dto.MediaContent);
 
         // Save changes
         await _questionRepository.UpdateAsync(question);
@@ -390,6 +389,13 @@ public class QuestionService : IQuestionService
                 rules["description"] = $"Numeric rating ({MinRating}-{MaxRating} scale)";
                 break;
 
+            case QuestionType.Location:
+                rules["requiresOptions"] = false;
+                rules["latitudeRange"] = new { min = -90.0, max = 90.0 };
+                rules["longitudeRange"] = new { min = -180.0, max = 180.0 };
+                rules["description"] = "Geographic location (latitude/longitude coordinates)";
+                break;
+
             default:
                 throw new InvalidQuestionTypeException(type);
         }
@@ -459,6 +465,14 @@ public class QuestionService : IQuestionService
                 if (options != null && options.Any())
                 {
                     return QuestionValidationResult.Failure("Rating questions should not have options.");
+                }
+                return QuestionValidationResult.Success();
+
+            case QuestionType.Location:
+                // Location questions should not have options
+                if (options != null && options.Any())
+                {
+                    return QuestionValidationResult.Failure("Location questions should not have options.");
                 }
                 return QuestionValidationResult.Success();
 
@@ -617,7 +631,7 @@ public class QuestionService : IQuestionService
                 {
                     // EndSurvey type
                     _logger.LogInformation("   ✅ END SURVEY type → Creating EndSurvey determinant");
-                    question.DefaultNext = NextQuestionDeterminant.End();
+                    question.SetDefaultNext(NextQuestionDeterminant.End());
                     _logger.LogInformation("   NEW Value: {Value}", question.DefaultNext);
                 }
                 else if (dto.DefaultNext.Type == Core.Enums.NextStepType.GoToQuestion)
@@ -642,7 +656,7 @@ public class QuestionService : IQuestionService
                         throw new InvalidOperationException($"Question {id} cannot reference itself");
                     }
 
-                    question.DefaultNext = NextQuestionDeterminant.ToQuestion(targetQuestionId);
+                    question.SetDefaultNext(NextQuestionDeterminant.ToQuestion(targetQuestionId));
                     _logger.LogInformation("   ✅ NEW Value: {Value}", question.DefaultNext);
                 }
             }
@@ -650,7 +664,7 @@ public class QuestionService : IQuestionService
             {
                 // null = clear flow configuration (sequential flow)
                 _logger.LogInformation("📌 DefaultNext is NULL → Sequential flow");
-                question.DefaultNext = null;
+                question.SetDefaultNext(null);
                 _logger.LogInformation("   NEW Value: NULL");
             }
 
@@ -688,7 +702,7 @@ public class QuestionService : IQuestionService
                     {
                         // End of survey marker
                         _logger.LogInformation("       ✅ END SURVEY type → Creating EndSurvey determinant");
-                        option.Next = NextQuestionDeterminant.End();
+                        option.SetNext(NextQuestionDeterminant.End());
                         _logger.LogInformation("       NEW Next: {Value}", option.Next);
                     }
                     else if (determinant.Type == Core.Enums.NextStepType.GoToQuestion)
@@ -715,7 +729,7 @@ public class QuestionService : IQuestionService
                             throw new InvalidOperationException($"Option {optionId} cannot reference question {id}");
                         }
 
-                        option.Next = NextQuestionDeterminant.ToQuestion(targetQuestionId);
+                        option.SetNext(NextQuestionDeterminant.ToQuestion(targetQuestionId));
                         _logger.LogInformation("       ✅ NEW Next: {Value}", option.Next);
                     }
                 }

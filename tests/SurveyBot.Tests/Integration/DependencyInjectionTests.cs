@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SurveyBot.Core.Entities;
 using SurveyBot.Core.Interfaces;
 using SurveyBot.Infrastructure.Data;
 using SurveyBot.Infrastructure.Repositories;
@@ -276,11 +277,11 @@ public class DependencyInjectionTests
         userRepo.Should().NotBeNull();
 
         // Verify repository can interact with database
-        var createTask = userRepo!.CreateAsync(new Core.Entities.User
-        {
-            TelegramId = 12345,
-            Username = "testuser"
-        });
+        var testUser = User.Create(
+            telegramId: 12345,
+            username: "testuser");
+
+        var createTask = userRepo!.CreateAsync(testUser);
 
         createTask.Should().NotBeNull();
         var action = async () => await createTask;

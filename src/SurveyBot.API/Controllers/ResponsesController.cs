@@ -357,7 +357,8 @@ public class ResponsesController : ControllerBase
                 dto.Answer.QuestionId,
                 dto.Answer.AnswerText,
                 dto.Answer.SelectedOptions,
-                dto.Answer.RatingValue);
+                dto.Answer.RatingValue,
+                dto.Answer.AnswerJson);
 
             if (!validationResult.IsValid)
             {
@@ -377,7 +378,9 @@ public class ResponsesController : ControllerBase
                 dto.Answer.QuestionId,
                 dto.Answer.AnswerText,
                 dto.Answer.SelectedOptions,
-                dto.Answer.RatingValue);
+                dto.Answer.RatingValue,
+                userId: null,
+                answerJson: dto.Answer.AnswerJson);
 
             return Ok(ApiResponse<ResponseDto>.Ok(response, "Answer saved successfully"));
         }

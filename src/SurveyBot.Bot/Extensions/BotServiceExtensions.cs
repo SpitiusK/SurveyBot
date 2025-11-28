@@ -61,6 +61,7 @@ public static class BotServiceExtensions
         services.AddScoped<IQuestionHandler, SingleChoiceQuestionHandler>();
         services.AddScoped<IQuestionHandler, MultipleChoiceQuestionHandler>();
         services.AddScoped<IQuestionHandler, RatingQuestionHandler>();
+        services.AddScoped<IQuestionHandler, LocationQuestionHandler>();
 
         // Register completion handler
         services.AddScoped<CompletionHandler>();

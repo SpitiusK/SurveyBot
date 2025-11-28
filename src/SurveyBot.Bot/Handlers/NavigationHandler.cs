@@ -457,7 +457,8 @@ public class NavigationHandler
                             : null),
                     ratingValue = answer.TryGetProperty("rating", out var rating) && rating.ValueKind != JsonValueKind.Null
                         ? rating.GetInt32()
-                        : (int?)null
+                        : (int?)null,
+                    answerJson = answer.TryGetProperty("latitude", out _) ? answerJson : null
                 }
             };
 

@@ -63,11 +63,14 @@ public class SurveyValidationServiceTests
         // Arrange - Q1 → (Option A → Q2, Option B → Q3), Q2 → End, Q3 → End
         var surveyId = 1;
         var q1 = CreateQuestion(1, surveyId, QuestionType.SingleChoice);
-        q1.Options = new List<QuestionOption>
-        {
-            new() { Id = 1, QuestionId = 1, Text = "Option A", OrderIndex = 0, Next = NextQuestionDeterminant.ToQuestion(2) },
-            new() { Id = 2, QuestionId = 1, Text = "Option B", OrderIndex = 1, Next = NextQuestionDeterminant.ToQuestion(3) }
-        };
+
+        var opt1 = QuestionOption.Create(1, "Option A", 0, NextQuestionDeterminant.ToQuestion(2));
+        opt1.SetId(1);
+        q1.AddOptionInternal(opt1);
+
+        var opt2 = QuestionOption.Create(1, "Option B", 1, NextQuestionDeterminant.ToQuestion(3));
+        opt2.SetId(2);
+        q1.AddOptionInternal(opt2);
 
         var questions = new List<Question>
         {
@@ -174,11 +177,14 @@ public class SurveyValidationServiceTests
         var surveyId = 1;
 
         var q2 = CreateQuestion(2, surveyId, QuestionType.SingleChoice);
-        q2.Options = new List<QuestionOption>
-        {
-            new() { Id = 1, QuestionId = 2, Text = "Option A", OrderIndex = 0, Next = NextQuestionDeterminant.ToQuestion(3) },
-            new() { Id = 2, QuestionId = 2, Text = "Option B", OrderIndex = 1, Next = NextQuestionDeterminant.ToQuestion(4) }
-        };
+
+        var opt1 = QuestionOption.Create(2, "Option A", 0, NextQuestionDeterminant.ToQuestion(3));
+        opt1.SetId(1);
+        q2.AddOptionInternal(opt1);
+
+        var opt2 = QuestionOption.Create(2, "Option B", 1, NextQuestionDeterminant.ToQuestion(4));
+        opt2.SetId(2);
+        q2.AddOptionInternal(opt2);
 
         var questions = new List<Question>
         {
@@ -236,7 +242,7 @@ public class SurveyValidationServiceTests
         {
             CreateQuestion(1, surveyId, QuestionType.Text, NextQuestionDeterminant.ToQuestion(2)),
             CreateQuestion(2, surveyId, QuestionType.Text, NextQuestionDeterminant.ToQuestion(1)),
-            CreateQuestion(3, surveyId, QuestionType.Text, defaultNext: 4),
+            CreateQuestion(3, surveyId, QuestionType.Text, NextQuestionDeterminant.ToQuestion(4)),
             CreateQuestion(4, surveyId, QuestionType.Text, NextQuestionDeterminant.ToQuestion(3))
         };
 
@@ -307,11 +313,14 @@ public class SurveyValidationServiceTests
         var surveyId = 1;
 
         var q1 = CreateQuestion(1, surveyId, QuestionType.SingleChoice);
-        q1.Options = new List<QuestionOption>
-        {
-            new() { Id = 1, QuestionId = 1, Text = "Option A", OrderIndex = 0, Next = NextQuestionDeterminant.ToQuestion(2) },
-            new() { Id = 2, QuestionId = 1, Text = "Option B", OrderIndex = 1, Next = NextQuestionDeterminant.End() }
-        };
+
+        var opt1 = QuestionOption.Create(1, "Option A", 0, NextQuestionDeterminant.ToQuestion(2));
+        opt1.SetId(1);
+        q1.AddOptionInternal(opt1);
+
+        var opt2 = QuestionOption.Create(1, "Option B", 1, NextQuestionDeterminant.End());
+        opt2.SetId(2);
+        q1.AddOptionInternal(opt2);
 
         var questions = new List<Question>
         {
@@ -355,12 +364,12 @@ public class SurveyValidationServiceTests
     [Fact]
     public async Task ValidateSurveyStructureAsync_NoEndpoints_ReturnsFalse()
     {
-        // Arrange - Invalid: Q1 → Q2 (no endpoint, Q2 doesn't point to end)
+        // Arrange - Invalid: Q1 → Q2 → Q1 (cycle with no endpoints)
         var surveyId = 1;
         var questions = new List<Question>
         {
             CreateQuestion(1, surveyId, QuestionType.Text, NextQuestionDeterminant.ToQuestion(2)),
-            CreateQuestion(2, surveyId, QuestionType.Text, null) // No next question, but not explicitly end
+            CreateQuestion(2, surveyId, QuestionType.Text, NextQuestionDeterminant.ToQuestion(1)) // Cycle back
         };
 
         _questionRepositoryMock
@@ -370,27 +379,30 @@ public class SurveyValidationServiceTests
         // Act
         var result = await _sut.ValidateSurveyStructureAsync(surveyId);
 
-        // Assert
+        // Assert - Should fail due to cycle, not because of missing endpoints
         Assert.False(result);
     }
 
     [Fact]
     public async Task ValidateSurveyStructureAsync_SomeBranchesDeadEnd_ReturnsFalse()
     {
-        // Arrange - Invalid: Branching question where one branch doesn't reach endpoint
+        // Arrange - Invalid: All branches point to non-existent questions (no endpoints)
         var surveyId = 1;
 
         var q1 = CreateQuestion(1, surveyId, QuestionType.SingleChoice);
-        q1.Options = new List<QuestionOption>
-        {
-            new() { Id = 1, QuestionId = 1, Text = "Option A", OrderIndex = 0, Next = NextQuestionDeterminant.End() },
-            new() { Id = 2, QuestionId = 1, Text = "Option B", OrderIndex = 1, Next = NextQuestionDeterminant.ToQuestion(2) }
-        };
+
+        // Both options point to non-existent questions - no valid endpoints
+        var opt1 = QuestionOption.Create(1, "Option A", 0, NextQuestionDeterminant.ToQuestion(999));
+        opt1.SetId(1);
+        q1.AddOptionInternal(opt1);
+
+        var opt2 = QuestionOption.Create(1, "Option B", 1, NextQuestionDeterminant.ToQuestion(888));
+        opt2.SetId(2);
+        q1.AddOptionInternal(opt2);
 
         var questions = new List<Question>
         {
-            q1,
-            CreateQuestion(2, surveyId, QuestionType.Text, null) // Dead end
+            q1
         };
 
         _questionRepositoryMock
@@ -400,7 +412,7 @@ public class SurveyValidationServiceTests
         // Act
         var result = await _sut.ValidateSurveyStructureAsync(surveyId);
 
-        // Assert
+        // Assert - Should fail because no valid endpoints (all paths are dead ends)
         Assert.False(result);
     }
 
@@ -479,12 +491,13 @@ public class SurveyValidationServiceTests
     [Fact]
     public async Task FindSurveyEndpointsAsync_NoEndpoints_ReturnsEmptyList()
     {
-        // Arrange - Q1 → Q2 (no endpoints)
+        // Arrange - Q1 → Q2 → Q3 (no endpoints - all questions point to next)
         var surveyId = 1;
         var questions = new List<Question>
         {
             CreateQuestion(1, surveyId, QuestionType.Text, NextQuestionDeterminant.ToQuestion(2)),
-            CreateQuestion(2, surveyId, QuestionType.Text, null)
+            CreateQuestion(2, surveyId, QuestionType.Text, NextQuestionDeterminant.ToQuestion(3)),
+            CreateQuestion(3, surveyId, QuestionType.Text, NextQuestionDeterminant.ToQuestion(1)) // Cycle, no endpoint
         };
 
         _questionRepositoryMock
@@ -494,7 +507,7 @@ public class SurveyValidationServiceTests
         // Act
         var result = await _sut.FindSurveyEndpointsAsync(surveyId);
 
-        // Assert
+        // Assert - No endpoints because all questions point to other questions (cycle exists)
         Assert.NotNull(result);
         Assert.Empty(result);
     }
@@ -506,11 +519,14 @@ public class SurveyValidationServiceTests
         var surveyId = 1;
 
         var q1 = CreateQuestion(1, surveyId, QuestionType.SingleChoice);
-        q1.Options = new List<QuestionOption>
-        {
-            new() { Id = 1, QuestionId = 1, Text = "Option A", OrderIndex = 0, Next = NextQuestionDeterminant.End() },
-            new() { Id = 2, QuestionId = 1, Text = "Option B", OrderIndex = 1, Next = NextQuestionDeterminant.ToQuestion(2) }
-        };
+
+        var opt1 = QuestionOption.Create(1, "Option A", 0, NextQuestionDeterminant.End());
+        opt1.SetId(1);
+        q1.AddOptionInternal(opt1);
+
+        var opt2 = QuestionOption.Create(1, "Option B", 1, NextQuestionDeterminant.ToQuestion(2));
+        opt2.SetId(2);
+        q1.AddOptionInternal(opt2);
 
         var questions = new List<Question>
         {
@@ -545,8 +561,8 @@ public class SurveyValidationServiceTests
 
         for (int i = 1; i <= 100; i++)
         {
-            var nextId = i < 100 ? i + 1 : SurveyConstants.EndOfSurveyMarker;
-            questions.Add(CreateQuestion(i, surveyId, QuestionType.Text, defaultNext: nextId));
+            var next = i < 100 ? NextQuestionDeterminant.ToQuestion(i + 1) : NextQuestionDeterminant.End();
+            questions.Add(CreateQuestion(i, surveyId, QuestionType.Text, next));
         }
 
         _questionRepositoryMock
@@ -576,13 +592,14 @@ public class SurveyValidationServiceTests
 
             // Each question branches to next level or end
             var nextQuestionId = questionId;
-            q.Options = new List<QuestionOption>
-            {
-                new() { Id = questionId * 10, QuestionId = q.Id, Text = "Option A", OrderIndex = 0,
-                       Next = level < 9 ? NextQuestionDeterminant.ToQuestion(nextQuestionId) : NextQuestionDeterminant.End() },
-                new() { Id = questionId * 10 + 1, QuestionId = q.Id, Text = "Option B", OrderIndex = 1,
-                       Next = NextQuestionDeterminant.End() }
-            };
+
+            var optA = QuestionOption.Create(q.Id, "Option A", 0, level < 9 ? NextQuestionDeterminant.ToQuestion(nextQuestionId) : NextQuestionDeterminant.End());
+            optA.SetId(questionId * 10);
+            q.AddOptionInternal(optA);
+
+            var optB = QuestionOption.Create(q.Id, "Option B", 1, NextQuestionDeterminant.End());
+            optB.SetId(questionId * 10 + 1);
+            q.AddOptionInternal(optB);
 
             questions.Add(q);
         }
@@ -605,12 +622,18 @@ public class SurveyValidationServiceTests
         var surveyId = 1;
 
         var q1 = CreateQuestion(1, surveyId, QuestionType.SingleChoice);
-        q1.Options = new List<QuestionOption>
-        {
-            new() { Id = 1, QuestionId = 1, Text = "Option A", OrderIndex = 0, Next = NextQuestionDeterminant.ToQuestion(2) },
-            new() { Id = 2, QuestionId = 1, Text = "Option B", OrderIndex = 1, Next = NextQuestionDeterminant.ToQuestion(2) },
-            new() { Id = 3, QuestionId = 1, Text = "Option C", OrderIndex = 2, Next = NextQuestionDeterminant.ToQuestion(2) }
-        };
+
+        var opt1 = QuestionOption.Create(1, "Option A", 0, NextQuestionDeterminant.ToQuestion(2));
+        opt1.SetId(1);
+        q1.AddOptionInternal(opt1);
+
+        var opt2 = QuestionOption.Create(1, "Option B", 1, NextQuestionDeterminant.ToQuestion(2));
+        opt2.SetId(2);
+        q1.AddOptionInternal(opt2);
+
+        var opt3 = QuestionOption.Create(1, "Option C", 2, NextQuestionDeterminant.ToQuestion(2));
+        opt3.SetId(3);
+        q1.AddOptionInternal(opt3);
 
         var questions = new List<Question>
         {
@@ -636,18 +659,24 @@ public class SurveyValidationServiceTests
         var surveyId = 1;
 
         var q1 = CreateQuestion(1, surveyId, QuestionType.SingleChoice);
-        q1.Options = new List<QuestionOption>
-        {
-            new() { Id = 1, QuestionId = 1, Text = "Option A", OrderIndex = 0, Next = NextQuestionDeterminant.ToQuestion(2) },
-            new() { Id = 2, QuestionId = 1, Text = "Option B", OrderIndex = 1, Next = NextQuestionDeterminant.ToQuestion(3) }
-        };
+
+        var opt1 = QuestionOption.Create(1, "Option A", 0, NextQuestionDeterminant.ToQuestion(2));
+        opt1.SetId(1);
+        q1.AddOptionInternal(opt1);
+
+        var opt2 = QuestionOption.Create(1, "Option B", 1, NextQuestionDeterminant.ToQuestion(3));
+        opt2.SetId(2);
+        q1.AddOptionInternal(opt2);
 
         var q3 = CreateQuestion(3, surveyId, QuestionType.Rating);
-        q3.Options = new List<QuestionOption>
-        {
-            new() { Id = 3, QuestionId = 3, Text = "1", OrderIndex = 0, Next = NextQuestionDeterminant.End() },
-            new() { Id = 4, QuestionId = 3, Text = "5", OrderIndex = 1, Next = NextQuestionDeterminant.End() }
-        };
+
+        var opt3 = QuestionOption.Create(3, "1", 0, NextQuestionDeterminant.End());
+        opt3.SetId(3);
+        q3.AddOptionInternal(opt3);
+
+        var opt4 = QuestionOption.Create(3, "5", 1, NextQuestionDeterminant.End());
+        opt4.SetId(4);
+        q3.AddOptionInternal(opt4);
 
         var questions = new List<Question>
         {
@@ -678,12 +707,18 @@ public class SurveyValidationServiceTests
         var surveyId = 1;
 
         var q1 = CreateQuestion(1, surveyId, QuestionType.SingleChoice);
-        q1.Options = new List<QuestionOption>
-        {
-            new() { Id = 1, QuestionId = 1, Text = "Option A", OrderIndex = 0, Next = NextQuestionDeterminant.ToQuestion(2) },
-            new() { Id = 2, QuestionId = 1, Text = "Option B", OrderIndex = 1, Next = NextQuestionDeterminant.ToQuestion(3) },
-            new() { Id = 3, QuestionId = 1, Text = "Option C", OrderIndex = 2, Next = NextQuestionDeterminant.ToQuestion(4) }
-        };
+
+        var opt1 = QuestionOption.Create(1, "Option A", 0, NextQuestionDeterminant.ToQuestion(2));
+        opt1.SetId(1);
+        q1.AddOptionInternal(opt1);
+
+        var opt2 = QuestionOption.Create(1, "Option B", 1, NextQuestionDeterminant.ToQuestion(3));
+        opt2.SetId(2);
+        q1.AddOptionInternal(opt2);
+
+        var opt3 = QuestionOption.Create(1, "Option C", 2, NextQuestionDeterminant.ToQuestion(4));
+        opt3.SetId(3);
+        q1.AddOptionInternal(opt3);
 
         var questions = new List<Question>
         {
@@ -795,17 +830,17 @@ public class SurveyValidationServiceTests
         QuestionType questionType,
         NextQuestionDeterminant? defaultNext = null)
     {
-        return new Question
-        {
-            Id = id,
-            SurveyId = surveyId,
-            QuestionText = $"Question {id}?",
-            Type = questionType,
-            OrderIndex = id - 1,
-            IsRequired = true,
-            DefaultNext = defaultNext,
-            Options = new List<QuestionOption>()
-        };
+        var question = Question.Create(
+            surveyId: surveyId,
+            questionText: $"Question {id}?",
+            questionType: questionType,
+            orderIndex: id - 1,
+            isRequired: true,
+            optionsJson: null,
+            mediaContent: null,
+            defaultNext: defaultNext);
+        question.SetId(id);
+        return question;
     }
 
     #endregion

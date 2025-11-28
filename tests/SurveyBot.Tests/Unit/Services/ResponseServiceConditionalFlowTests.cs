@@ -76,10 +76,10 @@ public class ResponseServiceConditionalFlowTests : IDisposable
 
         // Configure option flows: Option A -> Q3, Option B -> Q5
         var optionA = q1.Options.First(o => o.Text == "Option A");
-        optionA.Next = NextQuestionDeterminant.ToQuestion(q3.Id);
+        optionA.SetNext(NextQuestionDeterminant.ToQuestion(q3.Id));
 
         var optionB = q1.Options.First(o => o.Text == "Option B");
-        optionB.Next = NextQuestionDeterminant.ToQuestion(q5.Id);
+        optionB.SetNext(NextQuestionDeterminant.ToQuestion(q5.Id));
 
         await _context.SaveChangesAsync();
 
@@ -100,7 +100,9 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q1.Id);
 
         Assert.NotNull(answer);
-        Assert.Equal(q3.Id, answer.NextQuestionId);
+        Assert.NotNull(answer.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answer.Next.Type);
+        Assert.Equal(q3.Id, answer.Next.NextQuestionId);
     }
 
     [Fact]
@@ -112,7 +114,7 @@ public class ResponseServiceConditionalFlowTests : IDisposable
 
         // Configure option flow: Option A -> End Survey
         var optionA = q1.Options.First(o => o.Text == "Option A");
-        optionA.Next = NextQuestionDeterminant.End();
+        optionA.SetNext(NextQuestionDeterminant.End());
 
         await _context.SaveChangesAsync();
 
@@ -133,7 +135,9 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q1.Id);
 
         Assert.NotNull(answer);
-        Assert.Equal(0, answer.NextQuestionId); // 0 = end of survey
+        Assert.NotNull(answer.Next);
+        Assert.Equal(NextStepType.EndSurvey, answer.Next.Type);
+        Assert.Null(answer.Next.NextQuestionId);
     }
 
     [Fact]
@@ -145,7 +149,7 @@ public class ResponseServiceConditionalFlowTests : IDisposable
         var q4 = CreateTextQuestion(survey.Id, "Question 4", 3);
 
         // Option A has no flow configured (null), Q1 has DefaultNext = Q4
-        q1.DefaultNext = NextQuestionDeterminant.ToQuestion(q4.Id);
+        q1.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q4.Id));
         await _context.SaveChangesAsync();
 
         var response = CreateResponse(survey.Id, 123456);
@@ -165,7 +169,9 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q1.Id);
 
         Assert.NotNull(answer);
-        Assert.Equal(q4.Id, answer.NextQuestionId);
+        Assert.NotNull(answer.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answer.Next.Type);
+        Assert.Equal(q4.Id, answer.Next.NextQuestionId);
     }
 
     [Fact]
@@ -197,7 +203,9 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q1.Id);
 
         Assert.NotNull(answer);
-        Assert.Equal(q2.Id, answer.NextQuestionId);
+        Assert.NotNull(answer.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answer.Next.Type);
+        Assert.Equal(q2.Id, answer.Next.NextQuestionId);
     }
 
     [Fact]
@@ -229,7 +237,9 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q3.Id);
 
         Assert.NotNull(answer);
-        Assert.Equal(0, answer.NextQuestionId); // Last question
+        Assert.NotNull(answer.Next);
+        Assert.Equal(NextStepType.EndSurvey, answer.Next.Type);
+        Assert.Null(answer.Next.NextQuestionId);
     }
 
     #endregion
@@ -245,7 +255,7 @@ public class ResponseServiceConditionalFlowTests : IDisposable
         var q5 = CreateTextQuestion(survey.Id, "Question 5", 4);
 
         // Q1 has DefaultNext = Q5
-        q1.DefaultNext = NextQuestionDeterminant.ToQuestion(q5.Id);
+        q1.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q5.Id));
         await _context.SaveChangesAsync();
 
         var response = CreateResponse(survey.Id, 123456);
@@ -265,7 +275,9 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q1.Id);
 
         Assert.NotNull(answer);
-        Assert.Equal(q5.Id, answer.NextQuestionId);
+        Assert.NotNull(answer.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answer.Next.Type);
+        Assert.Equal(q5.Id, answer.Next.NextQuestionId);
     }
 
     [Fact]
@@ -297,7 +309,9 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q1.Id);
 
         Assert.NotNull(answer);
-        Assert.Equal(q2.Id, answer.NextQuestionId);
+        Assert.NotNull(answer.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answer.Next.Type);
+        Assert.Equal(q2.Id, answer.Next.NextQuestionId);
     }
 
     [Fact]
@@ -327,7 +341,9 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q1.Id);
 
         Assert.NotNull(answer);
-        Assert.Equal(0, answer.NextQuestionId);
+        Assert.NotNull(answer.Next);
+        Assert.Equal(NextStepType.EndSurvey, answer.Next.Type);
+        Assert.Null(answer.Next.NextQuestionId);
     }
 
     #endregion
@@ -335,7 +351,7 @@ public class ResponseServiceConditionalFlowTests : IDisposable
     #region Category 3: Edge Cases
 
     [Fact]
-    public async Task EdgeCase_InvalidOptionIndex_SetsNextQuestionIdToZero()
+    public async Task EdgeCase_InvalidOptionIndex_ThrowsInvalidAnswerFormatException()
     {
         // Arrange
         var survey = CreateSurvey();
@@ -345,26 +361,23 @@ public class ResponseServiceConditionalFlowTests : IDisposable
 
         var response = CreateResponse(survey.Id, 123456);
 
-        // Act - Answer Q1 with invalid option (not in list)
-        var result = await _service.SaveAnswerAsync(
-            response.Id,
-            q1.Id,
-            answerText: null,
-            selectedOptions: new List<string> { "Invalid Option X" }, // Not in A, B, C
-            ratingValue: null,
-            userId: null
+        // Act & Assert - Answer Q1 with invalid option (not in list) should throw
+        var exception = await Assert.ThrowsAsync<InvalidAnswerFormatException>(async () =>
+            await _service.SaveAnswerAsync(
+                response.Id,
+                q1.Id,
+                answerText: null,
+                selectedOptions: new List<string> { "Invalid Option X" }, // Not in A, B, C
+                ratingValue: null,
+                userId: null
+            )
         );
 
-        // Assert
-        var answer = await _context.Answers
-            .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q1.Id);
-
-        Assert.NotNull(answer);
-        Assert.Equal(0, answer.NextQuestionId); // Graceful failure
+        Assert.Contains("Selected option is not valid", exception.Message);
     }
 
     [Fact]
-    public async Task EdgeCase_EmptySelectedOptions_SetsNextQuestionIdToZero()
+    public async Task EdgeCase_EmptySelectedOptions_ThrowsValidationException()
     {
         // Arrange
         var survey = CreateSurvey();
@@ -374,64 +387,56 @@ public class ResponseServiceConditionalFlowTests : IDisposable
 
         var response = CreateResponse(survey.Id, 123456);
 
-        // Act - Answer Q1 with empty options list
-        var result = await _service.SaveAnswerAsync(
-            response.Id,
-            q1.Id,
-            answerText: null,
-            selectedOptions: new List<string>(), // Empty!
-            ratingValue: null,
-            userId: null
-        );
+        // Act & Assert - Answer Q1 with empty options list should throw
+        var exception = await Assert.ThrowsAsync<InvalidAnswerFormatException>(async () =>
+            await _service.SaveAnswerAsync(
+                response.Id,
+                q1.Id,
+                answerText: null,
+                selectedOptions: new List<string>(), // Empty! Should throw for required question
+                ratingValue: null,
+                userId: null
+            ));
 
-        // Assert
-        var answer = await _context.Answers
-            .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q1.Id);
-
-        Assert.NotNull(answer);
-        Assert.Equal(0, answer.NextQuestionId);
+        // Verify the error message mentions that an option must be selected
+        Assert.Contains("An option must be selected", exception.Message);
     }
 
     [Fact]
-    public async Task EdgeCase_QuestionWithoutOptions_FallsBackToDefaultNext()
+    public async Task EdgeCase_QuestionWithoutOptions_ThrowsValidationException()
     {
         // Arrange
         var survey = CreateSurvey();
-        var q1 = new Question
-        {
-            SurveyId = survey.Id,
-            QuestionText = "Question 1",
-            QuestionType = QuestionType.SingleChoice,
-            IsRequired = true,
-            OrderIndex = 0,
-            Options = new List<QuestionOption>() // Empty options!
-        };
+        var q1 = Question.CreateSingleChoiceQuestion(
+            surveyId: survey.Id,
+            questionText: "Question 1",
+            orderIndex: 0,
+            optionsJson: "[]", // No options defined
+            isRequired: true);
         _context.Questions.Add(q1);
+        await _context.SaveChangesAsync();
 
         var q2 = CreateTextQuestion(survey.Id, "Question 2", 1);
 
         // Set DefaultNext as fallback
-        q1.DefaultNext = NextQuestionDeterminant.ToQuestion(q2.Id);
+        q1.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q2.Id));
         await _context.SaveChangesAsync();
 
         var response = CreateResponse(survey.Id, 123456);
 
-        // Act - Answer Q1 (single choice with no options, uses DefaultNext)
-        var result = await _service.SaveAnswerAsync(
-            response.Id,
-            q1.Id,
-            answerText: null,
-            selectedOptions: new List<string> { "Something" },
-            ratingValue: null,
-            userId: null
-        );
+        // Act & Assert - Answer Q1 with invalid option should throw
+        var exception = await Assert.ThrowsAsync<InvalidAnswerFormatException>(async () =>
+            await _service.SaveAnswerAsync(
+                response.Id,
+                q1.Id,
+                answerText: null,
+                selectedOptions: new List<string> { "Something" }, // Option doesn't exist
+                ratingValue: null,
+                userId: null
+            ));
 
-        // Assert
-        var answer = await _context.Answers
-            .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q1.Id);
-
-        Assert.NotNull(answer);
-        Assert.Equal(q2.Id, answer.NextQuestionId);
+        // Verify the error message mentions invalid option
+        Assert.Contains("Selected option is not valid", exception.Message);
     }
 
     #endregion
@@ -448,10 +453,10 @@ public class ResponseServiceConditionalFlowTests : IDisposable
 
         // Both options lead to same question Q3
         var optionA = q1.Options.First(o => o.Text == "A");
-        optionA.Next = NextQuestionDeterminant.ToQuestion(q3.Id);
+        optionA.SetNext(NextQuestionDeterminant.ToQuestion(q3.Id));
 
         var optionB = q1.Options.First(o => o.Text == "B");
-        optionB.Next = NextQuestionDeterminant.ToQuestion(q3.Id);
+        optionB.SetNext(NextQuestionDeterminant.ToQuestion(q3.Id));
 
         await _context.SaveChangesAsync();
 
@@ -485,10 +490,14 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == responseB.Id && a.QuestionId == q1.Id);
 
         Assert.NotNull(answerA);
-        Assert.Equal(q3.Id, answerA.NextQuestionId);
+        Assert.NotNull(answerA.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answerA.Next.Type);
+        Assert.Equal(q3.Id, answerA.Next.NextQuestionId);
 
         Assert.NotNull(answerB);
-        Assert.Equal(q3.Id, answerB.NextQuestionId);
+        Assert.NotNull(answerB.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answerB.Next.Type);
+        Assert.Equal(q3.Id, answerB.Next.NextQuestionId);
     }
 
     [Fact]
@@ -502,11 +511,11 @@ public class ResponseServiceConditionalFlowTests : IDisposable
 
         // Q1 Option A -> Q2
         var optionA = q1.Options.First(o => o.Text == "A");
-        optionA.Next = NextQuestionDeterminant.ToQuestion(q2.Id);
+        optionA.SetNext(NextQuestionDeterminant.ToQuestion(q2.Id));
 
         // Q2 Option X -> Q5
         var optionX = q2.Options.First(o => o.Text == "X");
-        optionX.Next = NextQuestionDeterminant.ToQuestion(q5.Id);
+        optionX.SetNext(NextQuestionDeterminant.ToQuestion(q5.Id));
 
         await _context.SaveChangesAsync();
 
@@ -539,10 +548,14 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q2.Id);
 
         Assert.NotNull(answer1);
-        Assert.Equal(q2.Id, answer1.NextQuestionId);
+        Assert.NotNull(answer1.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answer1.Next.Type);
+        Assert.Equal(q2.Id, answer1.Next.NextQuestionId);
 
         Assert.NotNull(answer2);
-        Assert.Equal(q5.Id, answer2.NextQuestionId);
+        Assert.NotNull(answer2.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answer2.Next.Type);
+        Assert.Equal(q5.Id, answer2.Next.NextQuestionId);
     }
 
     [Fact]
@@ -556,10 +569,10 @@ public class ResponseServiceConditionalFlowTests : IDisposable
 
         // Q1 (branching) -> Q2
         var optionA = q1.Options.First(o => o.Text == "A");
-        optionA.Next = NextQuestionDeterminant.ToQuestion(q2.Id);
+        optionA.SetNext(NextQuestionDeterminant.ToQuestion(q2.Id));
 
         // Q2 (non-branching) -> Q3
-        q2.DefaultNext = NextQuestionDeterminant.ToQuestion(q3.Id);
+        q2.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q3.Id));
 
         await _context.SaveChangesAsync();
 
@@ -592,10 +605,14 @@ public class ResponseServiceConditionalFlowTests : IDisposable
             .FirstOrDefaultAsync(a => a.ResponseId == response.Id && a.QuestionId == q2.Id);
 
         Assert.NotNull(answer1);
-        Assert.Equal(q2.Id, answer1.NextQuestionId);
+        Assert.NotNull(answer1.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answer1.Next.Type);
+        Assert.Equal(q2.Id, answer1.Next.NextQuestionId);
 
         Assert.NotNull(answer2);
-        Assert.Equal(q3.Id, answer2.NextQuestionId);
+        Assert.NotNull(answer2.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answer2.Next.Type);
+        Assert.Equal(q3.Id, answer2.Next.NextQuestionId);
     }
 
     #endregion
@@ -607,14 +624,14 @@ public class ResponseServiceConditionalFlowTests : IDisposable
     /// </summary>
     private Survey CreateSurvey()
     {
-        var survey = new Survey
-        {
-            Title = "Test Survey",
-            Code = "TST001",
-            IsActive = true,
-            CreatorId = 1,
-            AllowMultipleResponses = true
-        };
+        var survey = Survey.Create(
+            title: "Test Survey",
+            creatorId: 1,
+            description: null,
+            code: "TST001",
+            isActive: true,
+            allowMultipleResponses: true,
+            showResults: true);
         _context.Surveys.Add(survey);
         _context.SaveChanges();
         return survey;
@@ -625,26 +642,23 @@ public class ResponseServiceConditionalFlowTests : IDisposable
     /// </summary>
     private Question CreateSingleChoiceQuestion(int surveyId, string text, int orderIndex, List<string> options)
     {
-        var question = new Question
-        {
-            SurveyId = surveyId,
-            QuestionText = text,
-            QuestionType = QuestionType.SingleChoice,
-            IsRequired = true,
-            OrderIndex = orderIndex
-        };
+        var question = Question.CreateSingleChoiceQuestion(
+            surveyId: surveyId,
+            questionText: text,
+            orderIndex: orderIndex,
+            optionsJson: System.Text.Json.JsonSerializer.Serialize(options),
+            isRequired: true);
         _context.Questions.Add(question);
         _context.SaveChanges();
 
         // Add options
         for (int i = 0; i < options.Count; i++)
         {
-            var option = new QuestionOption
-            {
-                QuestionId = question.Id,
-                Text = options[i],
-                OrderIndex = i
-            };
+            var option = QuestionOption.Create(
+                questionId: question.Id,
+                text: options[i],
+                orderIndex: i,
+                next: null);
             _context.QuestionOptions.Add(option);
         }
         _context.SaveChanges();
@@ -660,14 +674,11 @@ public class ResponseServiceConditionalFlowTests : IDisposable
     /// </summary>
     private Question CreateTextQuestion(int surveyId, string text, int orderIndex)
     {
-        var question = new Question
-        {
-            SurveyId = surveyId,
-            QuestionText = text,
-            QuestionType = QuestionType.Text,
-            IsRequired = true,
-            OrderIndex = orderIndex
-        };
+        var question = Question.CreateTextQuestion(
+            surveyId: surveyId,
+            questionText: text,
+            orderIndex: orderIndex,
+            isRequired: true);
         _context.Questions.Add(question);
         _context.SaveChanges();
         return question;
@@ -678,13 +689,7 @@ public class ResponseServiceConditionalFlowTests : IDisposable
     /// </summary>
     private Response CreateResponse(int surveyId, long telegramUserId)
     {
-        var response = new Response
-        {
-            SurveyId = surveyId,
-            RespondentTelegramId = telegramUserId,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow
-        };
+        var response = Response.Start(surveyId, telegramUserId);
         _context.Responses.Add(response);
         _context.SaveChanges();
         return response;

@@ -1,0 +1,1252 @@
+# ARCH-003: Complete AnswerValue Migration - Comprehensive Task Plan
+# Version: 1.5.1
+# Created: 2025-11-28
+# Status: Ready for Implementation
+# Priority: CRITICAL
+# Estimated Effort: 18 hours (2-3 days)
+
+project:
+  name: "ARCH-003: Complete AnswerValue Migration"
+  version: "1.5.1"
+  description: |
+    Complete migration from legacy answer handling (AnswerText/AnswerJson string properties)
+    to the new polymorphic AnswerValue value object system.
+
+    SCOPE: NO backward compatibility - remove all legacy code entirely.
+
+    BACKGROUND:
+    - Root bug: ResponseService.SaveAnswerAsync() uses legacy Answer.Create() which only
+      creates AnswerValue for text questions
+    - Choice/rating questions get Value = null, causing "Unable to determine next question" error
+    - Database stores answer_value_json = NULL for non-text questions
+
+    TARGET: Clean architecture with ONLY AnswerValue, no legacy AnswerText/AnswerJson
+
+  estimated_hours: 18
+  priority: CRITICAL
+  risk_level: HIGH
+
+  breaking_changes:
+    - "Answer.AnswerText property REMOVED (use answer.Value pattern matching)"
+    - "Answer.AnswerJson property REMOVED (use answer.Value.ToJson())"
+    - "Answer.Create() marked [Obsolete] (use CreateWithValue())"
+    - "Answer.SetAnswerText() marked [Obsolete] (use UpdateValue())"
+    - "Database columns answer_text and answer_json DROPPED"
+    - "All tests must use CreateWithValue() instead of Create()"
+
+  success_criteria:
+    - "All new answers have answer_value_json populated (NOT NULL)"
+    - "Legacy columns (answer_text, answer_json) dropped from database"
+    - "All 200+ tests passing with no warnings"
+    - "ResponseService uses AnswerValueFactory.CreateFromInput()"
+    - "Statistics and export working with Value property"
+    - "No legacy methods used in codebase (except marked [Obsolete])"
+    - "Documentation complete and up-to-date"
+    - "Migration runs successfully on production data"
+
+  rollback_plan: |
+    If critical issues occur:
+    1. Revert migration: dotnet ef migrations remove
+    2. Restore backup: pg_restore surveybot_backup.sql
+    3. Revert commits: git revert <commit-sha>
+    4. Restore NuGet packages: dotnet restore
+    5. Clear bin/obj: dotnet clean
+    6. Rebuild: dotnet build
+
+    IMPORTANT: Take database backup BEFORE applying migration!
+
+# ==============================================================================
+# PHASE 1: CORE LAYER - DEPRECATION AND VERIFICATION
+# ==============================================================================
+
+phases:
+  - id: PHASE-1
+    name: "Core Layer - Deprecation and Verification"
+    description: |
+      Mark legacy methods as obsolete and verify AnswerValueFactory is correct.
+      Prepare Core layer for migration without breaking existing code yet.
+    estimated_hours: 2
+    risk_level: LOW
+
+    tasks:
+      - id: ARCH003-CORE-001
+        name: "Mark Answer.Create() as [Obsolete]"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Core\Entities\Answer.cs
+        agent: aspnet-api-agent
+        estimated_minutes: 15
+        priority: HIGH
+
+        description: |
+          Add [Obsolete] attribute to Answer.Create() method to warn developers.
+          Do NOT remove yet - just mark as deprecated.
+
+        changes:
+          - location: "Line ~215 (public static Answer Create method)"
+            action: "Add [Obsolete] attribute above method"
+            before: |
+              public static Answer Create(
+                  int responseId,
+                  int questionId,
+                  string? answerText = null,
+                  string? answerJson = null,
+                  NextQuestionDeterminant? next = null)
+            after: |
+              [Obsolete("Use CreateWithValue() instead. This method only creates AnswerValue for text questions. Will be removed in v2.0.0")]
+              public static Answer Create(
+                  int responseId,
+                  int questionId,
+                  string? answerText = null,
+                  string? answerJson = null,
+                  NextQuestionDeterminant? next = null)
+
+        dependencies: []
+
+        acceptance_criteria:
+          - "Build succeeds with CS0618 warnings where Create() is used"
+          - "Method still functional (not removed)"
+          - "XML doc updated with deprecation notice"
+
+        validation:
+          - "Run: dotnet build src/SurveyBot.Core"
+          - "Check: Warnings show 'Use CreateWithValue() instead'"
+
+      - id: ARCH003-CORE-002
+        name: "Mark Answer.SetAnswerText() and SetAnswerJson() as [Obsolete]"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Core\Entities\Answer.cs
+        agent: aspnet-api-agent
+        estimated_minutes: 10
+        priority: HIGH
+
+        description: |
+          Add [Obsolete] attributes to setter methods that modify legacy properties.
+
+        changes:
+          - location: "SetAnswerText() and SetAnswerJson() methods"
+            action: "Add [Obsolete] attribute"
+            after: |
+              [Obsolete("Use UpdateValue() instead. Will be removed in v2.0.0")]
+              public void SetAnswerText(string? answerText)
+
+              [Obsolete("Use UpdateValue() instead. Will be removed in v2.0.0")]
+              public void SetAnswerJson(string? answerJson)
+
+        dependencies: [ARCH003-CORE-001]
+
+        acceptance_criteria:
+          - "Both methods marked [Obsolete]"
+          - "Compiler warnings appear where used"
+
+      - id: ARCH003-CORE-003
+        name: "Verify AnswerValueFactory implementation"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Core\ValueObjects\Answers\AnswerValueFactory.cs
+        agent: aspnet-api-agent
+        estimated_minutes: 30
+        priority: CRITICAL
+
+        description: |
+          Review AnswerValueFactory to ensure it correctly handles all question types.
+          This is the KEY factory that will replace all legacy parsing.
+
+        verification_checklist:
+          - "Parse() method handles all QuestionType enum values"
+          - "TryParse() returns null on errors (no exceptions thrown)"
+          - "CreateFromInput() correctly maps:"
+          - "  - Text → TextAnswerValue"
+          - "  - SingleChoice → SingleChoiceAnswerValue"
+          - "  - MultipleChoice → MultipleChoiceAnswerValue"
+          - "  - Rating → RatingAnswerValue"
+          - "  - Location → LocationAnswerValue"
+          - "Validation logic matches AnswerValidator rules"
+          - "ConvertFromLegacy() correctly migrates old data"
+
+        dependencies: []
+
+        acceptance_criteria:
+          - "All public methods have XML docs"
+          - "No TODO or FIXME comments"
+          - "CreateFromInput() tested with all question types"
+
+        validation:
+          - "Read file and verify logic"
+          - "Check for edge cases (null inputs, empty arrays, etc.)"
+
+      - id: ARCH003-CORE-004
+        name: "Document AnswerValue hierarchy in CLAUDE.md"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Core\CLAUDE.md
+        agent: aspnet-api-agent
+        estimated_minutes: 30
+        priority: MEDIUM
+
+        description: |
+          Update Core layer documentation to emphasize AnswerValue usage
+          and mark legacy methods as deprecated.
+
+        changes:
+          - location: "DDD Patterns section"
+            action: "Add detailed AnswerValue hierarchy section"
+          - location: "Answer entity section"
+            action: "Mark AnswerText/AnswerJson as deprecated"
+          - location: "Breaking Changes section"
+            action: "Add ARCH-003 migration notes"
+
+        dependencies: [ARCH003-CORE-001, ARCH003-CORE-002]
+
+        acceptance_criteria:
+          - "AnswerValue usage examples added"
+          - "Legacy properties documented as deprecated"
+          - "Migration guide snippet included"
+
+# ==============================================================================
+# PHASE 2: INFRASTRUCTURE - RESPONSESERVICE REWRITE (CRITICAL)
+# ==============================================================================
+
+  - id: PHASE-2
+    name: "Infrastructure - ResponseService Rewrite (CRITICAL)"
+    description: |
+      Complete rewrite of ResponseService.SaveAnswerAsync() to use AnswerValueFactory
+      and CreateWithValue(). This is the PRIMARY BUG FIX.
+    estimated_hours: 3
+    risk_level: CRITICAL
+
+    tasks:
+      - id: ARCH003-INFRA-001
+        name: "Rewrite ResponseService.SaveAnswerAsync() to use AnswerValueFactory"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\Services\ResponseService.cs
+        agent: ef-core-agent
+        estimated_minutes: 90
+        priority: CRITICAL
+
+        description: |
+          COMPLETE REWRITE of SaveAnswerAsync() method:
+          1. Replace CreateAnswerJson() calls with AnswerValueFactory.CreateFromInput()
+          2. Use Answer.CreateWithValue() instead of Answer.Create()
+          3. Remove all legacy AnswerText/AnswerJson assignment
+          4. Ensure Value property is ALWAYS populated
+
+        current_implementation: |
+          // BROKEN - Lines 91-150
+          var answer = Answer.Create(
+              responseId: response.Id,
+              questionId: dto.QuestionId,
+              answerText: dto.AnswerText,
+              answerJson: CreateAnswerJson(question.Type, dto),  // Only creates AnswerValue for text!
+              next: nextStep
+          );
+
+        target_implementation: |
+          // FIXED - Use AnswerValueFactory
+          var answerValue = AnswerValueFactory.CreateFromInput(
+              questionType: question.Type,
+              textAnswer: dto.AnswerText,
+              selectedOptions: dto.SelectedOptions,
+              ratingValue: dto.RatingValue,
+              question: question
+          );
+
+          var answer = Answer.CreateWithValue(
+              responseId: response.Id,
+              questionId: dto.QuestionId,
+              value: answerValue,
+              next: nextStep
+          );
+
+        dependencies: [ARCH003-CORE-003]
+
+        acceptance_criteria:
+          - "No calls to Answer.Create() (use CreateWithValue())"
+          - "No calls to CreateAnswerJson() (method will be deleted)"
+          - "answer.Value is NEVER null for valid inputs"
+          - "All question types handled correctly"
+          - "DetermineNextStepAsync still works with answer.Value"
+
+        validation:
+          - "Run unit tests: ResponseServiceTests.cs"
+          - "Run integration tests: SurveyResponseFlowIntegrationTests.cs"
+          - "Check: All tests pass"
+
+      - id: ARCH003-INFRA-002
+        name: "DELETE ResponseService.CreateAnswerJson() method"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\Services\ResponseService.cs
+        agent: ef-core-agent
+        estimated_minutes: 10
+        priority: HIGH
+
+        description: |
+          Remove the entire CreateAnswerJson() private method.
+          This method is replaced by AnswerValueFactory.CreateFromInput().
+
+        changes:
+          - location: "Lines ~300-350 (private string? CreateAnswerJson method)"
+            action: "DELETE entire method"
+
+        dependencies: [ARCH003-INFRA-001]
+
+        acceptance_criteria:
+          - "Method completely removed"
+          - "No compilation errors"
+          - "No references to CreateAnswerJson() remain"
+
+        validation:
+          - "Grep: 'CreateAnswerJson' returns no results in ResponseService.cs"
+          - "Build succeeds"
+
+      - id: ARCH003-INFRA-003
+        name: "Rewrite ResponseService.MapToDto() to use Value pattern matching"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\Services\ResponseService.cs
+        agent: ef-core-agent
+        estimated_minutes: 45
+        priority: HIGH
+
+        description: |
+          Update MapToDto() to use answer.Value pattern matching instead of
+          parsing AnswerJson string.
+
+        current_implementation: |
+          // Parse AnswerJson string
+          if (!string.IsNullOrEmpty(answer.AnswerJson))
+          {
+              var jsonDoc = JsonDocument.Parse(answer.AnswerJson);
+              // ... complex parsing logic
+          }
+
+        target_implementation: |
+          // Pattern matching on Value
+          dto.AnswerText = answer.Value switch
+          {
+              TextAnswerValue text => text.Text,
+              _ => null
+          };
+
+          dto.SelectedOptions = answer.Value switch
+          {
+              SingleChoiceAnswerValue single => new List<string> { single.SelectedOption },
+              MultipleChoiceAnswerValue multiple => multiple.SelectedOptions.ToList(),
+              _ => null
+          };
+
+          dto.RatingValue = answer.Value switch
+          {
+              RatingAnswerValue rating => rating.Rating,
+              _ => null
+          };
+
+        dependencies: [ARCH003-INFRA-001]
+
+        acceptance_criteria:
+          - "No string parsing of AnswerJson"
+          - "Uses pattern matching on answer.Value"
+          - "All question types mapped correctly"
+          - "DTOs populated accurately"
+
+        validation:
+          - "Run: ResponseServiceTests for MapToDto"
+          - "Check: DTOs have correct values for all types"
+
+# ==============================================================================
+# PHASE 3: INFRASTRUCTURE - SURVEYSERVICE STATISTICS AND EXPORT
+# ==============================================================================
+
+  - id: PHASE-3
+    name: "Infrastructure - SurveyService Statistics and Export"
+    description: |
+      Update SurveyService methods that read Answer entities to use
+      Value property instead of AnswerText/AnswerJson.
+    estimated_hours: 2
+    risk_level: MEDIUM
+
+    tasks:
+      - id: ARCH003-INFRA-004
+        name: "Update SurveyService.GetStatisticsForChoiceQuestion() to use Value"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\Services\SurveyService.cs
+        agent: ef-core-agent
+        estimated_minutes: 30
+        priority: MEDIUM
+
+        description: |
+          Rewrite choice question statistics to use answer.Value pattern matching.
+
+        current_implementation: |
+          // Parse AnswerJson to get selected options
+          var jsonDoc = JsonDocument.Parse(answer.AnswerJson);
+          var selectedOption = jsonDoc.RootElement.GetProperty("selectedOption").GetString();
+
+        target_implementation: |
+          // Pattern match on Value
+          var selectedOptions = answer.Value switch
+          {
+              SingleChoiceAnswerValue single => new[] { single.SelectedOption },
+              MultipleChoiceAnswerValue multiple => multiple.SelectedOptions.ToArray(),
+              _ => Array.Empty<string>()
+          };
+
+        dependencies: [ARCH003-INFRA-001]
+
+        acceptance_criteria:
+          - "No JSON parsing"
+          - "Pattern matching on answer.Value"
+          - "Statistics accurate for choice questions"
+
+      - id: ARCH003-INFRA-005
+        name: "Update SurveyService.GetStatisticsForRatingQuestion() to use Value"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\Services\SurveyService.cs
+        agent: ef-core-agent
+        estimated_minutes: 20
+        priority: MEDIUM
+
+        description: |
+          Rewrite rating question statistics to use answer.Value.
+
+        current_implementation: |
+          var jsonDoc = JsonDocument.Parse(answer.AnswerJson);
+          var rating = jsonDoc.RootElement.GetProperty("rating").GetInt32();
+
+        target_implementation: |
+          var rating = answer.Value is RatingAnswerValue ratingValue
+              ? ratingValue.Rating
+              : 0;
+
+        dependencies: [ARCH003-INFRA-001]
+
+        acceptance_criteria:
+          - "No JSON parsing"
+          - "Uses pattern matching"
+          - "Average rating calculated correctly"
+
+      - id: ARCH003-INFRA-006
+        name: "Update SurveyService.GetAnswerTextForExport() to use Value"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\Services\SurveyService.cs
+        agent: ef-core-agent
+        estimated_minutes: 30
+        priority: MEDIUM
+
+        description: |
+          Update CSV export to use DisplayValue property from AnswerValue.
+
+        target_implementation: |
+          private string GetAnswerTextForExport(Answer answer)
+          {
+              return answer.Value?.DisplayValue ?? "No answer";
+          }
+
+        dependencies: [ARCH003-INFRA-001]
+
+        acceptance_criteria:
+          - "Uses answer.Value.DisplayValue"
+          - "All question types export correctly"
+          - "CSV format correct"
+
+# ==============================================================================
+# PHASE 4: API LAYER - AUTOMAPPER AND VALUE RESOLVERS
+# ==============================================================================
+
+  - id: PHASE-4
+    name: "API Layer - AutoMapper and Value Resolvers"
+    description: |
+      Simplify AutoMapper configuration to use direct Value property mapping.
+      Delete all legacy value resolvers that parse AnswerJson.
+    estimated_hours: 1.5
+    risk_level: MEDIUM
+
+    tasks:
+      - id: ARCH003-API-001
+        name: "Simplify AnswerMappingProfile to use Value pattern matching"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.API\Mapping\AnswerMappingProfile.cs
+        agent: aspnet-api-agent
+        estimated_minutes: 45
+        priority: HIGH
+
+        description: |
+          Remove all .ForMember() calls that use value resolvers.
+          Use inline pattern matching on src.Value instead.
+
+        current_implementation: |
+          CreateMap<Answer, AnswerDto>()
+              .ForMember(dest => dest.AnswerText,
+                  opt => opt.MapFrom<AnswerTextResolver>())
+              .ForMember(dest => dest.SelectedOptions,
+                  opt => opt.MapFrom<AnswerSelectedOptionsResolver>())
+              .ForMember(dest => dest.RatingValue,
+                  opt => opt.MapFrom<AnswerRatingValueResolver>())
+              // ... 5 more resolvers for Location
+
+        target_implementation: |
+          CreateMap<Answer, AnswerDto>()
+              .ForMember(dest => dest.AnswerText, opt => opt.MapFrom(src =>
+                  src.Value is TextAnswerValue text ? text.Text : null))
+              .ForMember(dest => dest.SelectedOptions, opt => opt.MapFrom(src =>
+                  src.Value switch
+                  {
+                      SingleChoiceAnswerValue single => new List<string> { single.SelectedOption },
+                      MultipleChoiceAnswerValue multiple => multiple.SelectedOptions.ToList(),
+                      _ => null
+                  }))
+              .ForMember(dest => dest.RatingValue, opt => opt.MapFrom(src =>
+                  src.Value is RatingAnswerValue rating ? rating.Rating : (int?)null))
+              .ForMember(dest => dest.Latitude, opt => opt.MapFrom(src =>
+                  src.Value is LocationAnswerValue loc ? loc.Latitude : (double?)null))
+              .ForMember(dest => dest.Longitude, opt => opt.MapFrom(src =>
+                  src.Value is LocationAnswerValue loc ? loc.Longitude : (double?)null))
+              .ForMember(dest => dest.LocationAccuracy, opt => opt.MapFrom(src =>
+                  src.Value is LocationAnswerValue loc ? loc.Accuracy : (double?)null))
+              .ForMember(dest => dest.LocationTimestamp, opt => opt.MapFrom(src =>
+                  src.Value is LocationAnswerValue loc ? loc.Timestamp : (DateTime?)null));
+
+        dependencies: [ARCH003-INFRA-001]
+
+        acceptance_criteria:
+          - "No UseValueResolver calls"
+          - "All mappings inline with pattern matching"
+          - "8 ForMember calls (text, options, rating, 4 location fields, timestamps)"
+          - "Build succeeds"
+
+        validation:
+          - "Run: dotnet build src/SurveyBot.API"
+          - "Run: AnswerMappingTests.cs"
+          - "Check: All 13+ mapping tests pass"
+
+      - id: ARCH003-API-002
+        name: "DELETE all AnswerValue resolvers (8 files)"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.API\Mapping\ValueResolvers\
+        agent: aspnet-api-agent
+        estimated_minutes: 15
+        priority: HIGH
+
+        description: |
+          Delete all value resolver files in the ValueResolvers folder related to Answer.
+          These are no longer needed after simplifying AnswerMappingProfile.
+
+        files_to_delete:
+          - "AnswerJsonResolver.cs"
+          - "AnswerSelectedOptionsResolver.cs"
+          - "AnswerRatingValueResolver.cs"
+          - "AnswerLocationLatitudeResolver.cs"
+          - "AnswerLocationLongitudeResolver.cs"
+          - "AnswerLocationAccuracyResolver.cs"
+          - "AnswerLocationTimestampResolver.cs"
+
+        dependencies: [ARCH003-API-001]
+
+        acceptance_criteria:
+          - "All 7 resolver files deleted"
+          - "Build succeeds (no missing references)"
+          - "Grep shows no references to deleted classes"
+
+        validation:
+          - "Grep: 'AnswerJsonResolver|AnswerSelectedOptionsResolver' returns no results"
+          - "Build: dotnet build src/SurveyBot.API"
+
+      - id: ARCH003-API-003
+        name: "Update ResponsesController to construct AnswerValue if needed"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.API\Controllers\ResponsesController.cs
+        agent: aspnet-api-agent
+        estimated_minutes: 30
+        priority: MEDIUM
+
+        description: |
+          Review ResponsesController to ensure CreateAnswerDto is passed correctly
+          to ResponseService. May need to construct AnswerValue from DTO primitives.
+
+        verification_checklist:
+          - "SubmitAnswer endpoint receives CreateAnswerDto"
+          - "DTO has AnswerText, SelectedOptions, RatingValue fields"
+          - "Service layer (ResponseService) constructs AnswerValue"
+          - "Controller does NOT need changes (service handles it)"
+
+        dependencies: [ARCH003-INFRA-001]
+
+        acceptance_criteria:
+          - "Controller passes DTO to service"
+          - "Service handles AnswerValue construction"
+          - "No breaking changes to API contract"
+
+# ==============================================================================
+# PHASE 5: DATABASE MIGRATION - DROP LEGACY COLUMNS
+# ==============================================================================
+
+  - id: PHASE-5
+    name: "Database Migration - Drop Legacy Columns"
+    description: |
+      Create and apply migration to drop answer_text and answer_json columns.
+      Keep only answer_value_json column.
+    estimated_hours: 1
+    risk_level: HIGH
+
+    pre_migration_checklist:
+      - "BACKUP DATABASE: pg_dump surveybot_db > backup_before_arch003.sql"
+      - "Verify all code changes complete (Phases 1-4)"
+      - "Run all tests and ensure passing"
+      - "Test migration on development database first"
+
+    tasks:
+      - id: ARCH003-DB-001
+        name: "Remove AnswerText and AnswerJson property mappings"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\Data\Configurations\AnswerConfiguration.cs
+        agent: ef-core-agent
+        estimated_minutes: 15
+        priority: CRITICAL
+
+        description: |
+          Remove EF Core property configurations for AnswerText and AnswerJson.
+          Keep only Value property mapping with JSON converter.
+
+        changes:
+          - location: "OnModelCreating Answer configuration"
+            action: "Remove .Property(a => a.AnswerText) and .Property(a => a.AnswerJson)"
+            keep: |
+              entity.Property(a => a.Value)
+                  .HasColumnName("answer_value_json")
+                  .HasColumnType("jsonb")
+                  .HasConversion(
+                      v => JsonSerializer.Serialize(v, (JsonSerializerOptions)null),
+                      v => JsonSerializer.Deserialize<AnswerValue>(v, (JsonSerializerOptions)null));
+
+        dependencies: [ARCH003-INFRA-001, ARCH003-API-001]
+
+        acceptance_criteria:
+          - "Only Value property mapped"
+          - "answer_text and answer_json no longer mapped"
+          - "Build succeeds"
+
+      - id: ARCH003-DB-002
+        name: "Create migration: RemoveLegacyAnswerColumns"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.API\
+        agent: ef-core-agent
+        estimated_minutes: 10
+        priority: CRITICAL
+
+        description: |
+          Generate EF Core migration to drop legacy columns.
+
+        command: |
+          cd src/SurveyBot.API
+          dotnet ef migrations add RemoveLegacyAnswerColumns
+
+        expected_migration_content: |
+          public partial class RemoveLegacyAnswerColumns : Migration
+          {
+              protected override void Up(MigrationBuilder migrationBuilder)
+              {
+                  migrationBuilder.DropColumn(
+                      name: "answer_text",
+                      table: "answers");
+
+                  migrationBuilder.DropColumn(
+                      name: "answer_json",
+                      table: "answers");
+              }
+
+              protected override void Down(MigrationBuilder migrationBuilder)
+              {
+                  migrationBuilder.AddColumn<string>(
+                      name: "answer_text",
+                      table: "answers",
+                      type: "text",
+                      nullable: true);
+
+                  migrationBuilder.AddColumn<string>(
+                      name: "answer_json",
+                      table: "answers",
+                      type: "jsonb",
+                      nullable: true);
+              }
+          }
+
+        dependencies: [ARCH003-DB-001]
+
+        acceptance_criteria:
+          - "Migration file created in Migrations folder"
+          - "Up() drops both columns"
+          - "Down() restores both columns (for rollback)"
+
+        validation:
+          - "Review migration file"
+          - "Ensure no data loss (backup taken)"
+
+      - id: ARCH003-DB-003
+        name: "Apply migration to development database"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.API\
+        agent: ef-core-agent
+        estimated_minutes: 5
+        priority: CRITICAL
+
+        description: |
+          Apply migration to development database and verify schema.
+
+        command: |
+          cd src/SurveyBot.API
+          dotnet ef database update
+
+        dependencies: [ARCH003-DB-002]
+
+        acceptance_criteria:
+          - "Migration applies successfully"
+          - "Columns answer_text and answer_json no longer exist"
+          - "Column answer_value_json still exists"
+          - "No data loss"
+
+        validation: |
+          -- SQL query to verify schema
+          SELECT column_name, data_type
+          FROM information_schema.columns
+          WHERE table_name = 'answers';
+
+          -- Expected columns:
+          -- id, response_id, question_id, answer_value_json,
+          -- next_step_type, next_step_question_id, created_at
+
+      - id: ARCH003-DB-004
+        name: "Verify database integrity after migration"
+        file: N/A
+        agent: ef-core-agent
+        estimated_minutes: 10
+        priority: CRITICAL
+
+        description: |
+          Run queries to ensure all answers have answer_value_json populated.
+
+        verification_queries: |
+          -- Check for NULL answer_value_json (should be 0)
+          SELECT COUNT(*) FROM answers WHERE answer_value_json IS NULL;
+
+          -- Sample answer_value_json content
+          SELECT id, question_id, answer_value_json
+          FROM answers
+          LIMIT 10;
+
+          -- Verify JSON structure is valid
+          SELECT id, question_id,
+                 answer_value_json->>'$type' as answer_type
+          FROM answers
+          LIMIT 10;
+
+        dependencies: [ARCH003-DB-003]
+
+        acceptance_criteria:
+          - "Zero NULL answer_value_json values"
+          - "All answer_value_json have $type field"
+          - "JSON is valid and parseable"
+
+# ==============================================================================
+# PHASE 6: BOT LAYER - VERIFY AND UPDATE IF NEEDED
+# ==============================================================================
+
+  - id: PHASE-6
+    name: "Bot Layer - Verify and Update if Needed"
+    description: |
+      Check Bot layer for any DTO usage or answer handling that needs updating.
+      Likely minimal changes as bot uses API endpoints.
+    estimated_hours: 0.5
+    risk_level: LOW
+
+    tasks:
+      - id: ARCH003-BOT-001
+        name: "Review SurveyResponseHandler for DTO usage"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Bot\Handlers\SurveyResponseHandler.cs
+        agent: telegram-bot-handler-agent
+        estimated_minutes: 20
+        priority: LOW
+
+        description: |
+          Verify bot handler submits CreateAnswerDto correctly to API.
+          May need to update if DTO structure changed.
+
+        verification_checklist:
+          - "Check SubmitAnswerAsync() method"
+          - "Ensure DTO has correct fields (AnswerText, SelectedOptions, etc.)"
+          - "No direct Answer entity usage (bot uses API)"
+
+        dependencies: [ARCH003-API-003]
+
+        acceptance_criteria:
+          - "Bot compiles without errors"
+          - "DTO construction correct"
+          - "API calls succeed"
+
+      - id: ARCH003-BOT-002
+        name: "Review AnswerValidator for legacy parsing"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Bot\Validators\AnswerValidator.cs
+        agent: telegram-bot-handler-agent
+        estimated_minutes: 10
+        priority: LOW
+
+        description: |
+          Check if validator uses AnswerJson parsing. Update to use AnswerValue if needed.
+
+        dependencies: []
+
+        acceptance_criteria:
+          - "No legacy JSON parsing"
+          - "Validation logic uses AnswerValue if applicable"
+
+# ==============================================================================
+# PHASE 7: TEST FIXES - ALL UNIT AND INTEGRATION TESTS
+# ==============================================================================
+
+  - id: PHASE-7
+    name: "Test Fixes - All Unit and Integration Tests"
+    description: |
+      Fix all tests to use CreateWithValue() and answer.Value pattern matching.
+      Estimated 200+ tests to update.
+    estimated_hours: 4
+    risk_level: HIGH
+
+    tasks:
+      - id: ARCH003-TEST-001
+        name: "Fix EntityBuilder to use CreateWithValue()"
+        file: C:\Users\User\Desktop\SurveyBot\tests\SurveyBot.Tests\Fixtures\EntityBuilder.cs
+        agent: dotnet-testing-agent
+        estimated_minutes: 20
+        priority: CRITICAL
+
+        description: |
+          Update EntityBuilder helper methods to use modern Answer creation.
+
+        changes:
+          - location: "CreateTextAnswer method (line ~175)"
+            action: "Use Answer.CreateTextAnswer() or CreateWithValue()"
+          - location: "CreateJsonAnswer method (line ~187)"
+            action: "Use Answer.CreateJsonAnswer() or CreateWithValue()"
+          - location: "CreateAnswer method (line ~199)"
+            action: "Keep for backward compatibility but mark as obsolete"
+
+        dependencies: [ARCH003-CORE-001]
+
+        acceptance_criteria:
+          - "All builder methods use factory methods"
+          - "No direct Answer() constructor calls"
+          - "Tests compile"
+
+      - id: ARCH003-TEST-002
+        name: "Fix ResponseServiceTests - Answer creation"
+        file: C:\Users\User\Desktop\SurveyBot\tests\SurveyBot.Tests\Unit\Services\ResponseServiceTests.cs
+        agent: dotnet-testing-agent
+        estimated_minutes: 45
+        priority: HIGH
+
+        description: |
+          Update all test assertions to check answer.Value instead of answer.AnswerText/AnswerJson.
+
+        pattern_to_find: |
+          Assert.Equal("expected", answer.AnswerText);
+          Assert.NotNull(answer.AnswerJson);
+
+        pattern_to_replace: |
+          Assert.NotNull(answer.Value);
+          Assert.IsType<TextAnswerValue>(answer.Value);
+          Assert.Equal("expected", ((TextAnswerValue)answer.Value).Text);
+
+        dependencies: [ARCH003-INFRA-001, ARCH003-TEST-001]
+
+        acceptance_criteria:
+          - "All assertions use answer.Value"
+          - "Pattern matching or type casting used"
+          - "All tests pass"
+
+        validation:
+          - "Run: dotnet test --filter ResponseServiceTests"
+          - "Check: All tests green"
+
+      - id: ARCH003-TEST-003
+        name: "Fix AnswerMappingTests - 13+ assertions"
+        file: C:\Users\User\Desktop\SurveyBot\tests\SurveyBot.Tests\Unit\Mapping\AnswerMappingTests.cs
+        agent: dotnet-testing-agent
+        estimated_minutes: 60
+        priority: HIGH
+
+        description: |
+          Complete rewrite of all AutoMapper tests to use Value-based assertions.
+
+        test_pattern_example: |
+          [Fact]
+          public void Map_TextAnswer_MapsCorrectly()
+          {
+              // Arrange
+              var textValue = TextAnswerValue.Create("My answer");
+              var answer = Answer.CreateWithValue(
+                  responseId: 1,
+                  questionId: 1,
+                  value: textValue
+              );
+
+              // Act
+              var dto = _mapper.Map<AnswerDto>(answer);
+
+              // Assert
+              Assert.Equal("My answer", dto.AnswerText);
+              Assert.Null(dto.SelectedOptions);
+              Assert.Null(dto.RatingValue);
+          }
+
+        dependencies: [ARCH003-API-001, ARCH003-TEST-001]
+
+        acceptance_criteria:
+          - "13+ tests rewritten (Text, SingleChoice, MultipleChoice, Rating, Location)"
+          - "All use CreateWithValue()"
+          - "All assertions check DTO fields, not answer.Value directly"
+          - "All tests pass"
+
+      - id: ARCH003-TEST-004
+        name: "Fix Integration Tests - DbContextTests"
+        file: C:\Users\User\Desktop\SurveyBot\tests\SurveyBot.Tests\Integration\DbContextTests.cs
+        agent: dotnet-testing-agent
+        estimated_minutes: 30
+        priority: MEDIUM
+
+        description: |
+          Update database integration tests to use Value property.
+
+        dependencies: [ARCH003-DB-003, ARCH003-TEST-001]
+
+        acceptance_criteria:
+          - "Tests use CreateWithValue()"
+          - "Assertions check answer.Value"
+          - "Database round-trip tests pass"
+
+      - id: ARCH003-TEST-005
+        name: "Fix Integration Tests - SurveyResponseFlowIntegrationTests"
+        file: C:\Users\User\Desktop\SurveyBot\tests\SurveyBot.Tests\Integration\SurveyResponseFlowIntegrationTests.cs
+        agent: dotnet-testing-agent
+        estimated_minutes: 45
+        priority: HIGH
+
+        description: |
+          Update end-to-end flow tests for answer submission.
+
+        dependencies: [ARCH003-INFRA-001, ARCH003-TEST-001]
+
+        acceptance_criteria:
+          - "All answer creations use CreateWithValue()"
+          - "Flow tests verify answer.Value populated"
+          - "All tests pass"
+
+      - id: ARCH003-TEST-006
+        name: "Fix Integration Tests - ResponsesControllerIntegrationTests"
+        file: C:\Users\User\Desktop\SurveyBot\tests\SurveyBot.Tests\Integration\Controllers\ResponsesControllerIntegrationTests.cs
+        agent: dotnet-testing-agent
+        estimated_minutes: 30
+        priority: MEDIUM
+
+        description: |
+          Update API integration tests for answer submission endpoints.
+
+        dependencies: [ARCH003-API-003, ARCH003-TEST-001]
+
+        acceptance_criteria:
+          - "API tests verify DTO correctness"
+          - "Response assertions check answer.Value"
+          - "All tests pass"
+
+      - id: ARCH003-TEST-007
+        name: "Fix Integration Tests - QuestionFlowIntegrationTests"
+        file: C:\Users\User\Desktop\SurveyBot\tests\SurveyBot.Tests\Integration\Services\QuestionFlowIntegrationTests.cs
+        agent: dotnet-testing-agent
+        estimated_minutes: 20
+        priority: MEDIUM
+
+        description: |
+          Update conditional flow tests to use Value-based logic.
+
+        dependencies: [ARCH003-INFRA-001, ARCH003-TEST-001]
+
+        acceptance_criteria:
+          - "Flow determination uses answer.Value"
+          - "All conditional flow tests pass"
+
+      - id: ARCH003-TEST-008
+        name: "Fix Remaining Unit Tests - SurveyServiceTests, etc."
+        file: C:\Users\User\Desktop\SurveyBot\tests\SurveyBot.Tests\Unit\Services\
+        agent: dotnet-testing-agent
+        estimated_minutes: 30
+        priority: MEDIUM
+
+        description: |
+          Fix any remaining unit tests in Services folder that use Answer.
+
+        dependencies: [ARCH003-INFRA-004, ARCH003-INFRA-005, ARCH003-TEST-001]
+
+        acceptance_criteria:
+          - "All SurveyService tests pass"
+          - "Statistics tests use answer.Value"
+          - "Export tests use answer.Value.DisplayValue"
+
+      - id: ARCH003-TEST-009
+        name: "Run full test suite and verify all pass"
+        file: N/A
+        agent: dotnet-testing-agent
+        estimated_minutes: 15
+        priority: CRITICAL
+
+        description: |
+          Run entire test suite (200+ tests) and ensure all green.
+
+        command: |
+          cd tests/SurveyBot.Tests
+          dotnet test --logger "console;verbosity=normal"
+
+        dependencies:
+          - ARCH003-TEST-001
+          - ARCH003-TEST-002
+          - ARCH003-TEST-003
+          - ARCH003-TEST-004
+          - ARCH003-TEST-005
+          - ARCH003-TEST-006
+          - ARCH003-TEST-007
+          - ARCH003-TEST-008
+
+        acceptance_criteria:
+          - "All tests pass (200+ tests)"
+          - "Zero failures"
+          - "Zero warnings (except [Obsolete] warnings on legacy methods)"
+          - "Test coverage maintained or improved"
+
+        validation: |
+          Expected output:
+          Passed! - Failed: 0, Passed: 200+, Skipped: 0, Total: 200+
+
+# ==============================================================================
+# PHASE 8: DOCUMENTATION - UPDATE ALL CLAUDE.MD FILES
+# ==============================================================================
+
+  - id: PHASE-8
+    name: "Documentation - Update All CLAUDE.md Files"
+    description: |
+      Update all layer documentation and create migration guides.
+    estimated_hours: 1.5
+    risk_level: LOW
+
+    tasks:
+      - id: ARCH003-DOC-001
+        name: "Update root CLAUDE.md with breaking changes"
+        file: C:\Users\User\Desktop\SurveyBot\CLAUDE.md
+        agent: aspnet-api-agent
+        estimated_minutes: 20
+        priority: MEDIUM
+
+        description: |
+          Add ARCH-003 to recent changes section and breaking changes list.
+
+        changes:
+          - location: "Recent Changes section"
+            action: "Add v1.5.1 entry for ARCH-003"
+          - location: "Breaking Changes section"
+            action: "Document removed properties and migration path"
+
+        content_to_add: |
+          **v1.5.1 (ARCH-003 Complete AnswerValue Migration)**:
+          - REMOVED: Answer.AnswerText and Answer.AnswerJson properties
+          - REMOVED: Answer.Create(), Answer.SetAnswerText(), Answer.SetAnswerJson() (marked obsolete in v1.5.0)
+          - Database migration: Dropped answer_text and answer_json columns
+          - All answer handling now uses polymorphic AnswerValue hierarchy
+          - ResponseService completely rewritten to use AnswerValueFactory
+          - AutoMapper simplified with inline pattern matching (deleted 7 value resolvers)
+
+        dependencies: [ARCH003-DB-003]
+
+        acceptance_criteria:
+          - "Breaking changes documented"
+          - "Migration path explained"
+          - "Version history updated"
+
+      - id: ARCH003-DOC-002
+        name: "Update Core/CLAUDE.md with final AnswerValue architecture"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Core\CLAUDE.md
+        agent: aspnet-api-agent
+        estimated_minutes: 30
+        priority: MEDIUM
+
+        description: |
+          Mark legacy methods as removed and emphasize AnswerValue usage.
+
+        changes:
+          - location: "Answer entity section"
+            action: "Remove AnswerText/AnswerJson property documentation"
+          - location: "DDD Patterns section"
+            action: "Expand AnswerValue hierarchy documentation"
+          - location: "Factory Methods section"
+            action: "Document Answer.CreateWithValue() as primary method"
+
+        dependencies: [ARCH003-CORE-001, ARCH003-CORE-004]
+
+        acceptance_criteria:
+          - "Legacy properties not documented (or marked as removed)"
+          - "AnswerValue usage clear and prominent"
+          - "Examples show CreateWithValue()"
+
+      - id: ARCH003-DOC-003
+        name: "Update Infrastructure/CLAUDE.md with service changes"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\CLAUDE.md
+        agent: ef-core-agent
+        estimated_minutes: 20
+        priority: MEDIUM
+
+        description: |
+          Document ResponseService rewrite and SurveyService updates.
+
+        changes:
+          - location: "ResponseService section"
+            action: "Document SaveAnswerAsync() using AnswerValueFactory"
+          - location: "Database Configuration section"
+            action: "Note removed columns and migration"
+
+        dependencies: [ARCH003-INFRA-001, ARCH003-DB-003]
+
+        acceptance_criteria:
+          - "Service method signatures documented"
+          - "Migration noted"
+          - "AnswerValueFactory usage explained"
+
+      - id: ARCH003-DOC-004
+        name: "Update API/CLAUDE.md with AutoMapper simplification"
+        file: C:\Users\User\Desktop\SurveyBot\src\SurveyBot.API\CLAUDE.md
+        agent: aspnet-api-agent
+        estimated_minutes: 20
+        priority: MEDIUM
+
+        description: |
+          Document simplified AnswerMappingProfile and removed value resolvers.
+
+        changes:
+          - location: "AutoMapper section"
+            action: "Show new inline pattern matching approach"
+          - location: "Value Resolvers section"
+            action: "Remove or mark as deprecated"
+
+        dependencies: [ARCH003-API-001, ARCH003-API-002]
+
+        acceptance_criteria:
+          - "Mapping examples use pattern matching"
+          - "Value resolver deletion documented"
+          - "No references to deleted classes"
+
+      - id: ARCH003-DOC-005
+        name: "Create migration guide: ARCH-003_AnswerValue_Migration_Complete.md"
+        file: C:\Users\User\Desktop\SurveyBot\documentation\guides\ARCH-003_AnswerValue_Migration_Complete.md
+        agent: aspnet-api-agent
+        estimated_minutes: 30
+        priority: MEDIUM
+
+        description: |
+          Create comprehensive migration guide for developers.
+
+        content_outline: |
+          # ARCH-003: Complete AnswerValue Migration
+
+          ## Overview
+          Migration from legacy Answer.AnswerText/AnswerJson to polymorphic AnswerValue.
+
+          ## Breaking Changes
+          - Removed properties: AnswerText, AnswerJson
+          - Removed methods: Create(), SetAnswerText(), SetAnswerJson()
+          - Database: Dropped columns answer_text, answer_json
+
+          ## Migration Path
+
+          ### Before (v1.5.0)
+          ```csharp
+          var answer = Answer.Create(responseId, questionId, "text answer");
+          var text = answer.AnswerText; // Legacy
+          ```
+
+          ### After (v1.5.1)
+          ```csharp
+          var value = TextAnswerValue.Create("text answer");
+          var answer = Answer.CreateWithValue(responseId, questionId, value);
+          var text = (answer.Value as TextAnswerValue)?.Text; // Pattern matching
+          ```
+
+          ## Code Examples
+          [... detailed examples for all question types ...]
+
+          ## Testing Changes
+          [... how to update tests ...]
+
+          ## Database Migration
+          [... migration steps and rollback ...]
+
+        dependencies: [ARCH003-DOC-001, ARCH003-DOC-002, ARCH003-DOC-003]
+
+        acceptance_criteria:
+          - "Migration guide complete"
+          - "Before/after examples for all scenarios"
+          - "Rollback procedure documented"
+          - "Test update examples included"
+
+# ==============================================================================
+# POST-MIGRATION CHECKLIST
+# ==============================================================================
+
+post_migration_checklist:
+  critical_verifications:
+    - title: "All tests passing"
+      command: "dotnet test"
+      expected: "200+ passed, 0 failed"
+
+    - title: "Database schema correct"
+      command: "SELECT column_name FROM information_schema.columns WHERE table_name='answers'"
+      expected: "No answer_text or answer_json columns"
+
+    - title: "No NULL answer_value_json"
+      command: "SELECT COUNT(*) FROM answers WHERE answer_value_json IS NULL"
+      expected: "0"
+
+    - title: "API health check"
+      command: "curl http://localhost:5000/health/db"
+      expected: "Healthy"
+
+    - title: "No obsolete warnings in production code"
+      command: "dotnet build -c Release"
+      expected: "0 warnings (except in test projects)"
+
+  performance_checks:
+    - title: "Answer creation performance"
+      description: "Ensure CreateWithValue() not slower than legacy Create()"
+
+    - title: "Statistics query performance"
+      description: "Check GetStatisticsForChoiceQuestion() execution time"
+
+    - title: "AutoMapper performance"
+      description: "Verify mapping performance with inline pattern matching"
+
+  rollback_triggers:
+    - "More than 10% test failures"
+    - "Database migration fails with data loss"
+    - "Critical production errors within 24 hours"
+    - "Performance degradation > 50%"
+
+deployment_plan:
+  development:
+    - "Apply migration: dotnet ef database update"
+    - "Run tests: dotnet test"
+    - "Manual smoke test: Create survey, submit answers, view statistics"
+
+  staging:
+    - "Backup database: pg_dump"
+    - "Apply migration"
+    - "Run full test suite"
+    - "Performance testing with realistic data"
+    - "Verify statistics and export features"
+
+  production:
+    - "Schedule maintenance window (estimate 15 minutes downtime)"
+    - "Full database backup"
+    - "Apply migration with --script flag (review SQL first)"
+    - "Verify migration success"
+    - "Monitor error logs for 24 hours"
+    - "Rollback plan ready if needed"
+
+metrics_to_monitor:
+  - "Answer creation latency (should be < 100ms)"
+  - "Statistics generation time (should be < 2s for 1000 responses)"
+  - "Database query performance (answer_value_json JSONB indexing)"
+  - "API response times (should not increase)"
+  - "Error rate (should remain < 0.1%)"
+
+notes:
+  - "This is a COMPLETE migration - no backward compatibility"
+  - "Legacy AnswerText/AnswerJson properties are REMOVED, not deprecated"
+  - "Database backup is MANDATORY before applying migration"
+  - "All 200+ tests must pass before merging to master"
+  - "Documentation must be updated before deployment"
+  - "Consider performance testing with large datasets (10,000+ answers)"
+  - "Frontend (React) should be checked for any answer structure dependencies"
+  - "Bot layer changes should be minimal (uses API, not direct entities)"

@@ -4,7 +4,7 @@
 
 **Layer**: Domain | **Dependencies**: None | **Location**: `C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Core`
 
-**Version**: 1.4.0 | **Last Updated**: 2025-11-25
+**Version**: 1.5.0 (Location Question Type) | **Last Updated**: 2025-11-27
 
 ## Overview
 
@@ -70,8 +70,15 @@ SurveyBot.Core/
 │   ├── ConditionalFlowDto.cs      # Flow configuration (NEW v1.4.0)
 │   ├── NextQuestionDeterminantDto.cs # Next step DTO (NEW v1.4.0)
 │   └── UpdateQuestionFlowDto.cs   # Flow update DTO (NEW v1.4.0)
-├── ValueObjects/                  # Domain value objects (NEW v1.4.0)
-│   └── NextQuestionDeterminant.cs # Next step value object (DDD pattern)
+├── ValueObjects/                  # Domain value objects (v1.4.0+)
+│   ├── NextQuestionDeterminant.cs # Next step value object (DDD pattern - v1.4.0)
+│   └── Answers/                   # Polymorphic answer value objects (NEW v1.5.0)
+│       ├── AnswerValue.cs         # Abstract base with [JsonDerivedType]
+│       ├── TextAnswerValue.cs     # Text answer (max 5000 chars)
+│       ├── SingleChoiceAnswerValue.cs  # Single selection with validation
+│       ├── MultipleChoiceAnswerValue.cs # Multiple selections
+│       ├── RatingAnswerValue.cs   # Rating with min/max validation
+│       └── AnswerValueFactory.cs  # Factory for parsing/creating values
 ├── Enums/                         # Domain enumerations (NEW v1.4.0)
 │   ├── QuestionType.cs            # Text, SingleChoice, MultipleChoice, Rating
 │   └── NextStepType.cs            # GoToQuestion, EndSurvey
@@ -98,15 +105,272 @@ SurveyBot.Core/
     └── SurveyCodeGenerator.cs     # 6-char code generator (Base36)
 ```
 
-**File Count Summary**:
-- **Entities**: 7 (BaseEntity + 6 domain entities)
+**File Count Summary** (v1.5.0):
+- **Entities**: 7 (BaseEntity + 6 domain entities, all with private setters + factory methods)
 - **Interfaces**: 16 (1 generic + 15 specific)
 - **DTOs**: 42+ (organized in 8 categories)
-- **Value Objects**: 1 (NextQuestionDeterminant)
+- **Value Objects**: 7 total
+  - NextQuestionDeterminant (v1.4.0)
+  - AnswerValue hierarchy: AnswerValue (abstract), TextAnswerValue, SingleChoiceAnswerValue, MultipleChoiceAnswerValue, RatingAnswerValue (v1.5.0)
+  - AnswerValueFactory (v1.5.0)
 - **Enums**: 2 (QuestionType, NextStepType)
 - **Exceptions**: 10 (domain-specific)
 - **Constants**: 1 (SurveyConstants)
 - **Utilities**: 1 (SurveyCodeGenerator)
+
+---
+
+## DDD Patterns (v1.5.0)
+
+### Encapsulation with Private Setters (ARCH-001)
+
+All entities now enforce proper encapsulation using private setters. Direct property modification is no longer allowed - entities control their own state through dedicated methods.
+
+**Pattern**:
+```csharp
+public class Survey : BaseEntity
+{
+    // Private setter - cannot be set directly from outside
+    public string Title { get; private set; } = string.Empty;
+    public bool IsActive { get; private set; }
+
+    // Private backing field for collections
+    private readonly List<Question> _questions = new();
+
+    // Exposed as read-only collection
+    public IReadOnlyCollection<Question> Questions => _questions.AsReadOnly();
+
+    // Modification through controlled methods
+    public void SetTitle(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title) || title.Length < 3)
+            throw new SurveyValidationException("Title must be at least 3 characters");
+
+        Title = title.Trim();
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void Activate()
+    {
+        if (_questions.Count == 0)
+            throw new SurveyValidationException("Cannot activate survey without questions");
+
+        IsActive = true;
+        UpdatedAt = DateTime.UtcNow;
+    }
+}
+```
+
+**Benefits**:
+- **Invariant enforcement**: Business rules validated on every modification
+- **Audit trail**: Can add logging/events in setter methods
+- **Immutability of collections**: Cannot replace entire collection, only add/remove items
+- **EF Core compatible**: Internal methods like `AddQuestionInternal()` for framework use
+
+**All entities with private setters**: User, Survey, Question, QuestionOption, Response, Answer
+
+### Factory Methods (ARCH-002)
+
+All entities use static factory methods for creation instead of public constructors. This centralizes validation and ensures entities are always created in a valid state.
+
+**Pattern**:
+```csharp
+public class Survey : BaseEntity
+{
+    // Private constructor - cannot use 'new Survey()' from outside
+    private Survey() { }
+
+    // Factory method - the ONLY way to create a survey
+    public static Survey Create(
+        string title,
+        int creatorId,
+        string? description = null,
+        string? code = null,
+        bool isActive = false,
+        bool allowMultipleResponses = false,
+        bool showResults = true)
+    {
+        // Validation at construction
+        if (string.IsNullOrWhiteSpace(title))
+            throw new ArgumentException("Title cannot be empty", nameof(title));
+
+        if (creatorId <= 0)
+            throw new ArgumentException("Invalid creator ID", nameof(creatorId));
+
+        // Auto-generation of defaults
+        return new Survey
+        {
+            Title = title.Trim(),
+            Description = description?.Trim(),
+            CreatorId = creatorId,
+            Code = code ?? SurveyCodeGenerator.GenerateCode(),  // Auto-generate code
+            IsActive = isActive,
+            AllowMultipleResponses = allowMultipleResponses,
+            ShowResults = showResults,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+    }
+}
+
+// Usage
+var survey = Survey.Create("My Survey", userId: 123, description: "Survey description");
+// NOT: var survey = new Survey { Title = "My Survey" };  // Won't compile
+```
+
+**Factory Methods Available**:
+
+| Entity | Factory Method | Validation |
+|--------|---------------|------------|
+| Survey | `Survey.Create(title, creatorId, ...)` | Title length, CreatorId > 0 |
+| Question | `Question.Create(surveyId, text, type, ...)` | QuestionText not empty |
+| QuestionOption | `QuestionOption.Create(questionId, text, orderIndex)` | Text not empty |
+| Response | `Response.Create(surveyId, respondentId)` | SurveyId, RespondentId > 0 |
+| Answer | `Answer.CreateWithValue(responseId, questionId, value, ...)` | All IDs > 0, value not null |
+| Answer | `Answer.CreateTextAnswer(responseId, questionId, text, ...)` | For text questions |
+| Answer | `Answer.CreateJsonAnswer(responseId, questionId, json, ...)` | For choice/rating questions |
+| User | `User.Create(telegramId, ...)` | TelegramId > 0 |
+
+**Benefits**:
+- **Centralized validation**: All validation logic in one place
+- **Clear intent**: `Survey.Create()` more explicit than `new Survey()`
+- **Impossible invalid states**: Cannot create entity without required data
+- **Auto-generation**: Handles timestamps, codes automatically
+
+### Polymorphic Value Objects (ARCH-003)
+
+The AnswerValue hierarchy provides type-safe answer handling with polymorphic serialization. Each question type has its own value object class.
+
+**Hierarchy**:
+```
+AnswerValue (abstract base)
+├── TextAnswerValue
+├── SingleChoiceAnswerValue
+├── MultipleChoiceAnswerValue
+├── RatingAnswerValue
+└── LocationAnswerValue (NEW v1.5.0)
+```
+
+**Pattern**:
+```csharp
+// Base class with polymorphic JSON support
+[JsonDerivedType(typeof(TextAnswerValue), typeDiscriminator: "Text")]
+[JsonDerivedType(typeof(SingleChoiceAnswerValue), typeDiscriminator: "SingleChoice")]
+[JsonDerivedType(typeof(MultipleChoiceAnswerValue), typeDiscriminator: "MultipleChoice")]
+[JsonDerivedType(typeof(RatingAnswerValue), typeDiscriminator: "Rating")]
+[JsonDerivedType(typeof(LocationAnswerValue), typeDiscriminator: "Location")]
+public abstract class AnswerValue : IEquatable<AnswerValue>
+{
+    public abstract QuestionType QuestionType { get; }
+    public abstract string DisplayValue { get; }
+    public abstract string ToJson();
+    public abstract bool IsValidFor(Question question);
+}
+
+// Concrete implementation
+public sealed class TextAnswerValue : AnswerValue
+{
+    public const int MaxLength = 5000;
+
+    public string Text { get; private set; }  // Immutable
+
+    private TextAnswerValue(string text) => Text = text;
+
+    // Factory method with validation
+    public static TextAnswerValue Create(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            throw new InvalidAnswerFormatException(0, QuestionType.Text, "Text answer cannot be empty");
+
+        if (text.Length > MaxLength)
+            throw new InvalidAnswerFormatException(0, QuestionType.Text,
+                $"Text answer cannot exceed {MaxLength} characters");
+
+        return new TextAnswerValue(text.Trim());
+    }
+
+    public override QuestionType QuestionType => QuestionType.Text;
+    public override string DisplayValue => Text;
+    public override string ToJson() => JsonSerializer.Serialize(new { text = Text });
+    public override bool IsValidFor(Question question) =>
+        question.QuestionType == QuestionType.Text;
+}
+```
+
+**Usage in Answer Entity**:
+```csharp
+public class Answer
+{
+    public AnswerValue? Value { get; private set; }  // New value object property
+    public string? AnswerText { get; private set; }  // Legacy for backward compatibility
+    public string? AnswerJson { get; private set; }  // Legacy for backward compatibility
+
+    // Create answer with type-safe value object
+    public static Answer CreateWithValue(
+        int responseId,
+        int questionId,
+        AnswerValue value,
+        NextQuestionDeterminant? next = null)
+    {
+        // ...validation...
+        return new Answer
+        {
+            ResponseId = responseId,
+            QuestionId = questionId,
+            Value = value,
+            // Also set legacy properties for backward compatibility
+            AnswerText = value is TextAnswerValue textValue ? textValue.Text : null,
+            AnswerJson = value is not TextAnswerValue ? value.ToJson() : null,
+            Next = next ?? NextQuestionDeterminant.End()
+        };
+    }
+}
+```
+
+**AnswerValueFactory for Parsing**:
+```csharp
+public static class AnswerValueFactory
+{
+    // Strict parsing (throws on error)
+    public static AnswerValue Parse(string json, QuestionType questionType);
+
+    // Lenient parsing (returns null on error)
+    public static AnswerValue? TryParse(string? json, QuestionType questionType);
+
+    // Create from user input
+    public static AnswerValue CreateFromInput(
+        QuestionType questionType,
+        string? textAnswer = null,
+        IEnumerable<string>? selectedOptions = null,
+        int? ratingValue = null,
+        Question? question = null);
+
+    // Parse with type detection from JSON discriminator
+    public static AnswerValue ParseWithTypeDiscriminator(string json);
+
+    // Convert from legacy storage format
+    public static AnswerValue? ConvertFromLegacy(
+        string? answerText,
+        string? answerJson,
+        QuestionType questionType);
+}
+
+// Usage
+var answer = AnswerValueFactory.CreateFromInput(
+    QuestionType.SingleChoice,
+    selectedOptions: new[] { "Option A" },
+    question: question);
+
+var parsed = AnswerValueFactory.Parse(jsonFromDb, QuestionType.Rating);
+```
+
+**Benefits**:
+- **Type safety**: Compiler prevents wrong answer types for questions
+- **Validation**: Each value object validates its own data
+- **Polymorphism**: Serialize/deserialize with automatic type detection
+- **No string parsing**: Strongly-typed access to answer content
+- **Value semantics**: Equality based on content, not reference
+- **Backward compatible**: Legacy AnswerText/AnswerJson still supported
 
 ---
 
@@ -294,7 +558,7 @@ public class Question : BaseEntity
     public Question? DefaultNextQuestion { get; set; }  // Navigation to next question
 }
 
-public enum QuestionType { Text = 0, SingleChoice = 1, MultipleChoice = 2, Rating = 3 }
+public enum QuestionType { Text = 0, SingleChoice = 1, MultipleChoice = 2, Rating = 3, Location = 4 }
 ```
 
 **Business Rules - Conditional Flow** (NEW in v1.4.0):
@@ -406,22 +670,24 @@ public class Answer
     public string? AnswerJson { get; set; }        // JSONB for structured data
     public DateTime CreatedAt { get; set; }
 
-    // NEW: Conditional Flow (v1.4.0)
-    public NextQuestionDeterminant NextStep { get; set; }  // Where to go after this answer (value object)
+    // UPDATED in v1.4.2: Complete migration to value object (no more magic values!)
+    public NextQuestionDeterminant Next { get; set; } = NextQuestionDeterminant.End();
 
     public Response Response { get; set; }
     public Question Question { get; set; }
 }
 ```
 
-**NextStep** (NEW in v1.4.0):
+**Next** (UPDATED in v1.4.2 - Complete Migration):
 - **Type**: NextQuestionDeterminant (value object, not a magic integer)
 - **Purpose**: Encapsulates the decision of where to navigate after answering
+- **Migration**: v1.4.2 completed migration from `int NextQuestionId` to value object
 - **Determined by**: Question type and answer
   - **Branching questions** (SingleChoice, Rating): Selected option determines next step
   - **Non-branching** (Text, MultipleChoice): Question's DefaultNextQuestionId used
-- **Set by**: ResponseService.SaveAnswerAsync during answer recording
+- **Set by**: ResponseService.DetermineNextStepAsync during answer recording
 - **Used by**: Frontend/Bot to determine next question display
+- **No Magic Values**: Compiler enforces type safety, no 0 checks needed
 
 **Answer Formats by Question Type**:
 
@@ -440,6 +706,11 @@ public class Answer
 **Rating**:
 ```json
 {"rating": 4}
+```
+
+**Location** (NEW v1.5.0):
+```json
+{"latitude": 40.7128, "longitude": -74.0060}
 ```
 
 ---
@@ -696,10 +967,12 @@ public class SurveyCycleException : Exception
    - **Helper Methods**: `HasVisitedQuestion(id)`, `RecordVisitedQuestion(id)`
 
 4. **Answer Entity** (`C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Core\Entities\Answer.cs`):
-   - **Changed**: `NextQuestionId` (int?) → `NextStep` (NextQuestionDeterminant value object)
-   - **Before**: `NextQuestionId = 0` meant "end survey" (magic value)
-   - **After**: `NextStep = NextQuestionDeterminant.End()` (explicit, type-safe)
-   - **Migration Path**: Infrastructure layer maps between nullable int and value object
+   - **COMPLETED v1.4.2**: Full migration from `NextQuestionId` (int with magic value 0) to `Next` (NextQuestionDeterminant)
+   - **Before**: `NextQuestionId = 0` meant "end survey" (magic value, inconsistent with Question/QuestionOption)
+   - **After**: `Next = NextQuestionDeterminant.End()` (explicit, type-safe, consistent)
+   - **Database**: Owned type with columns `next_step_type` (TEXT) and `next_step_question_id` (INT)
+   - **Migration**: 20251126180649_AnswerNextStepValueObject with data transformation
+   - **Invariants**: CHECK constraint enforces value object rules at database level
 
 **New Value Objects**:
 
@@ -1640,6 +1913,7 @@ public void Equals_WithSameValues_ReturnsTrue()
 - Format must match question type
 - Selected options must exist in question's OptionsJson
 - Rating must be 1-5
+- Location latitude must be -90 to 90, longitude must be -180 to 180
 
 ---
 
@@ -1773,7 +2047,7 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 ---
 
-**Last Updated**: 2025-11-25 | **Version**: 1.4.0 | **Status**: Production-Ready
+**Last Updated**: 2025-11-26 | **Version**: 1.4.2 | **Status**: Production-Ready
 
 ---
 
@@ -1807,12 +2081,21 @@ For comprehensive project documentation, see the **centralized documentation fol
 6. Strategy Pattern (implicit)
 
 **Recent Major Changes**:
+- **v1.5.0 (2025-11-27)**: Complete DDD architecture enhancements
+  - ✅ **ARCH-001**: Private setters with encapsulation (all entities)
+  - ✅ **ARCH-002**: Factory methods with validation (all entities)
+  - ✅ **ARCH-003**: AnswerValue polymorphic value object hierarchy
+- **v1.4.2 (2025-11-26)**: Completed Answer.Next value object migration, eliminated all magic values in conditional flow
 - **v1.4.0 (2025-11-21 to 2025-11-25)**: Conditional question flow with NextQuestionDeterminant value object, cycle detection, QuestionOption entity
 - **v1.3.0 (2025-11-18 to 2025-11-20)**: Multimedia support with MediaContent, file storage services
 
-**Next Recommended Enhancements**:
-1. MediaContent value object (replace string JSONB)
-2. Rich domain models (add behavior to entities)
+**Next Recommended Enhancements** (ARCH-004 to ARCH-007):
+1. **ARCH-004**: SurveyCode value object (replace string primitive)
+2. **ARCH-005**: MediaContent value object (replace string JSONB)
+3. **ARCH-006**: Rich domain models (add behavior to entities, Survey as aggregate root)
+4. **ARCH-007**: JSON-based question configuration (for scalable question types)
+
+**See**: [Architecture Improvements Plan](../../documentation/features/!PRIORITY_ARCHITECTURE_IMPROVEMENTS.md) for detailed implementation guide
 3. Aggregate roots (Survey as aggregate)
 4. Unit tests for value objects
 5. Specification pattern for reusable business rules
@@ -1828,6 +2111,8 @@ For comprehensive project documentation, see the **centralized documentation fol
 ---
 
 **Version History**:
+- **v1.5.0** (2025-11-27): DDD architecture enhancements - private setters, factory methods, AnswerValue hierarchy
+- **v1.4.2** (2025-11-26): Complete value object migration for Answer.Next
 - **v1.4.0** (2025-11-25): Conditional flow with value objects, cycle detection
 - **v1.3.0** (2025-11-20): Multimedia support
 - **v1.2.0** (2025-11-15): JWT authentication

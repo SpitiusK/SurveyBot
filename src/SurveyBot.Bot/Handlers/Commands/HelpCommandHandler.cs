@@ -103,6 +103,13 @@ public class HelpCommandHandler : ICommandHandler
         helpText += "2. *Take Surveys*\n";
         helpText += "   When someone shares a survey link with you, simply click it to start taking the survey.\n\n";
 
+        helpText += "*Question Types:*\n";
+        helpText += "• Text - Type your answer\n";
+        helpText += "• Single Choice - Select one option\n";
+        helpText += "• Multiple Choice - Select multiple options\n";
+        helpText += "• Rating - Rate 1-5 stars\n";
+        helpText += "• Location - Share your location\n\n";
+
         helpText += "3. *View Results*\n";
         helpText += "   Survey creators can view detailed statistics and responses for their surveys.\n\n";
 

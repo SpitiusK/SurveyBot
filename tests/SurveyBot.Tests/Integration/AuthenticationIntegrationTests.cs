@@ -60,8 +60,9 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
         result!.Success.Should().BeTrue();
         result.Data.Should().NotBeNull();
         result.Data!.Token.Should().NotBeEmpty();
-        result.Data.TelegramId.Should().Be(123456789);
-        result.Data.Username.Should().Be("testuser");
+        result.Data.User.Should().NotBeNull();
+        result.Data.User.TelegramId.Should().Be(123456789);
+        result.Data.User.Username.Should().Be("testuser");
         result.Data.ExpiresAt.Should().BeAfter(DateTime.UtcNow);
 
         // Verify JWT token structure
@@ -93,12 +94,13 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
         result.Should().NotBeNull();
         result!.Data.Should().NotBeNull();
         result.Data!.Token.Should().NotBeEmpty();
-        result.Data.TelegramId.Should().Be(999888777);
+        result.Data.User.Should().NotBeNull();
+        result.Data.User.TelegramId.Should().Be(999888777);
 
         // Verify user was created in database
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
-        var user = await db.Users.FindAsync(result.Data.UserId);
+        var user = await db.Users.FindAsync(result.Data.User.Id);
         user.Should().NotBeNull();
         user!.TelegramId.Should().Be(999888777);
     }

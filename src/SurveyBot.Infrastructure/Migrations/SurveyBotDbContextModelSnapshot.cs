@@ -45,12 +45,6 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                    b.Property<int>("NextQuestionId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("next_question_id");
-
                     b.Property<int>("QuestionId")
                         .HasColumnType("integer")
                         .HasColumnName("question_id");
@@ -59,6 +53,10 @@ namespace SurveyBot.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("response_id");
 
+                    b.Property<string>("Value")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("answer_value_json");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AnswerJson")
@@ -66,14 +64,16 @@ namespace SurveyBot.Infrastructure.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("AnswerJson"), "gin");
 
-                    b.HasIndex("NextQuestionId")
-                        .HasDatabaseName("idx_answers_next_question_id");
-
                     b.HasIndex("QuestionId")
                         .HasDatabaseName("idx_answers_question_id");
 
                     b.HasIndex("ResponseId")
                         .HasDatabaseName("idx_answers_response_id");
+
+                    b.HasIndex("Value")
+                        .HasDatabaseName("idx_answers_value_json");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Value"), "gin");
 
                     b.HasIndex("ResponseId", "QuestionId")
                         .IsUnique()
@@ -81,7 +81,7 @@ namespace SurveyBot.Infrastructure.Migrations
 
                     b.ToTable("answers", null, t =>
                         {
-                            t.HasCheckConstraint("chk_answer_not_null", "answer_text IS NOT NULL OR answer_json IS NOT NULL");
+                            t.HasCheckConstraint("chk_answer_not_null", "answer_text IS NOT NULL OR answer_json IS NOT NULL OR answer_value_json IS NOT NULL");
                         });
                 });
 
@@ -162,7 +162,7 @@ namespace SurveyBot.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("chk_order_index", "order_index >= 0");
 
-                            t.HasCheckConstraint("chk_question_type", "question_type IN (0, 1, 2, 3)");
+                            t.HasCheckConstraint("chk_question_type", "question_type IN (0, 1, 2, 3, 4)");
                         });
                 });
 
@@ -429,6 +429,33 @@ namespace SurveyBot.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_answers_response");
+
+                    b.OwnsOne("SurveyBot.Core.ValueObjects.NextQuestionDeterminant", "Next", b1 =>
+                        {
+                            b1.Property<int>("AnswerId")
+                                .HasColumnType("integer");
+
+                            b1.Property<int?>("NextQuestionId")
+                                .HasColumnType("integer")
+                                .HasColumnName("next_step_question_id")
+                                .HasAnnotation("Relational:JsonPropertyName", "nextQuestionId");
+
+                            b1.Property<string>("Type")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("next_step_type")
+                                .HasAnnotation("Relational:JsonPropertyName", "type");
+
+                            b1.HasKey("AnswerId");
+
+                            b1.ToTable("answers");
+
+                            b1.WithOwner()
+                                .HasForeignKey("AnswerId");
+                        });
+
+                    b.Navigation("Next")
+                        .IsRequired();
 
                     b.Navigation("Question");
 

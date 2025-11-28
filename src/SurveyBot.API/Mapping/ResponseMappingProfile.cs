@@ -44,6 +44,7 @@ public class ResponseMappingProfile : Profile
             .ForMember(dest => dest.StartedAt, opt => opt.MapFrom(src => DateTime.UtcNow))
             .ForMember(dest => dest.SubmittedAt, opt => opt.Ignore())
             .ForMember(dest => dest.Survey, opt => opt.Ignore())
-            .ForMember(dest => dest.Answers, opt => opt.Ignore());
+            .ForMember(dest => dest.Answers, opt => opt.Ignore())
+            .ForMember(dest => dest.VisitedQuestionIds, opt => opt.Ignore()); // Managed by ResponseService
     }
 }

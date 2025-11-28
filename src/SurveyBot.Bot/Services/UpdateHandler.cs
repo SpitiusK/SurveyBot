@@ -106,26 +106,35 @@ public class UpdateHandler : IUpdateHandler
 
     private async Task<bool> HandleMessageAsync(Message message, CancellationToken cancellationToken)
     {
-        if (message.Text == null)
+        // CRITICAL: Check Location FIRST, before text null check
+        // Location messages have message.Location but no message.Text
+        if (message.Location != null)
         {
-            _logger.LogDebug("Message has no text content, ignoring");
-            return false;
+            _logger.LogDebug("Processing location message from {UserId}", message.From?.Id);
+            return await HandleLocationMessageAsync(message, cancellationToken);
         }
 
-        _logger.LogInformation(
-            "Processing message from user {TelegramId} in chat {ChatId}: {MessageText}",
-            message.From?.Id,
-            message.Chat.Id,
-            message.Text.Length > 50 ? message.Text.Substring(0, 47) + "..." : message.Text);
-
-        // Check if message is a command
-        if (message.Text.StartsWith('/'))
+        if (message.Text != null)
         {
-            return await _commandRouter.RouteCommandAsync(message, cancellationToken);
+            _logger.LogInformation(
+                "Processing message from user {TelegramId} in chat {ChatId}: {MessageText}",
+                message.From?.Id,
+                message.Chat.Id,
+                message.Text.Length > 50 ? message.Text.Substring(0, 47) + "..." : message.Text);
+
+            // Check if message is a command
+            if (message.Text.StartsWith('/'))
+            {
+                return await _commandRouter.RouteCommandAsync(message, cancellationToken);
+            }
+
+            // Handle regular text messages
+            return await HandleTextMessageAsync(message, cancellationToken);
         }
 
-        // Handle regular text messages
-        return await HandleTextMessageAsync(message, cancellationToken);
+        // Only now ignore truly unhandled message types
+        _logger.LogDebug("Message has no text or location content, ignoring");
+        return false;
     }
 
     private async Task<bool> HandleTextMessageAsync(Message message, CancellationToken cancellationToken)
@@ -186,6 +195,43 @@ public class UpdateHandler : IUpdateHandler
             _logger.LogError(ex, "Failed to send help text to chat {ChatId}", message.Chat.Id);
             return false;
         }
+    }
+
+    private async Task<bool> HandleLocationMessageAsync(Message message, CancellationToken cancellationToken)
+    {
+        var userId = message.From?.Id;
+        if (userId == null)
+        {
+            _logger.LogWarning("Location message received with no user ID");
+            return false;
+        }
+
+        _logger.LogInformation(
+            "Processing location message from user {UserId}: Latitude={Latitude}, Longitude={Longitude}",
+            userId,
+            message.Location?.Latitude,
+            message.Location?.Longitude);
+
+        // Get conversation state
+        var state = await _stateManager.GetStateAsync(userId.Value);
+        if (state?.CurrentSurveyId == null || state?.CurrentQuestionIndex == null)
+        {
+            _logger.LogWarning("Location received but no active survey for user {UserId}", userId.Value);
+            await _botService.Client.SendMessage(
+                message.Chat.Id,
+                "⚠️ No active survey. Use /surveys to start one.",
+                cancellationToken: cancellationToken);
+            return false;
+        }
+
+        _logger.LogInformation(
+            "User {UserId} has active survey {SurveyId}, routing location to response handler",
+            userId.Value,
+            state.CurrentSurveyId);
+
+        // Route to survey response handler
+        // The SurveyResponseHandler will find the appropriate Location handler
+        return await _surveyResponseHandler.HandleMessageResponseAsync(message, cancellationToken);
     }
 
     private async Task<bool> HandleCallbackQueryAsync(CallbackQuery callbackQuery, CancellationToken cancellationToken)

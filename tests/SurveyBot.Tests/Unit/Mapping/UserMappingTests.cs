@@ -2,6 +2,7 @@ using AutoMapper;
 using SurveyBot.API.Mapping;
 using SurveyBot.Core.DTOs.User;
 using SurveyBot.Core.Entities;
+using SurveyBot.Tests.Fixtures;
 using Xunit;
 
 namespace SurveyBot.Tests.Unit.Mapping;
@@ -37,16 +38,15 @@ public class UserMappingTests
     public void Map_User_To_UserDto_Success()
     {
         // Arrange
-        var user = new User
-        {
-            Id = 1,
-            TelegramId = 123456789,
-            Username = "testuser",
-            FirstName = "John",
-            LastName = "Doe",
-            CreatedAt = DateTime.UtcNow.AddDays(-30),
-            UpdatedAt = DateTime.UtcNow
-        };
+        var user = EntityBuilder.CreateUser(
+            telegramId: 123456789,
+            username: "testuser",
+            firstName: "John",
+            lastName: "Doe"
+        );
+        user.SetId(1);
+        user.SetCreatedAt(DateTime.UtcNow.AddDays(-30));
+        user.SetUpdatedAt(DateTime.UtcNow);
 
         // Act
         var dto = _mapper.Map<UserDto>(user);
@@ -66,16 +66,15 @@ public class UserMappingTests
     public void Map_User_With_Nullable_Fields_Success()
     {
         // Arrange
-        var user = new User
-        {
-            Id = 2,
-            TelegramId = 987654321,
-            Username = null,
-            FirstName = "Jane",
-            LastName = null,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        var user = EntityBuilder.CreateUser(
+            telegramId: 987654321,
+            username: null,
+            firstName: "Jane",
+            lastName: null
+        );
+        user.SetId(2);
+        user.SetCreatedAt(DateTime.UtcNow);
+        user.SetUpdatedAt(DateTime.UtcNow);
 
         // Act
         var dto = _mapper.Map<UserDto>(user);

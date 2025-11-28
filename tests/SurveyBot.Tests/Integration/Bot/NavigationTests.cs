@@ -6,6 +6,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using AutoMapper;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,8 +17,10 @@ using SurveyBot.Bot.Handlers;
 using SurveyBot.Bot.Handlers.Questions;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
+using SurveyBot.Bot.Utilities;
 using SurveyBot.Bot.Validators;
 using SurveyBot.Core.DTOs.Question;
+using SurveyBot.Core.Interfaces;
 using SurveyBot.Tests.Fixtures;
 using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
@@ -117,23 +120,30 @@ public class NavigationTests : IClassFixture<BotTestFixture>
         // Create question handlers
         var validator = new AnswerValidator(Mock.Of<ILogger<AnswerValidator>>());
         var errorHandler = new QuestionErrorHandler(_fixture.MockBotService.Object, Mock.Of<ILogger<QuestionErrorHandler>>());
+        var mockMediaService = new Mock<ITelegramMediaService>();
+        var mediaConfig = Options.Create(new BotConfiguration { ApiBaseUrl = "http://localhost:5000" });
+        var mediaHelper = new QuestionMediaHelper(mockMediaService.Object, mediaConfig, Mock.Of<ILogger<QuestionMediaHelper>>());
 
         var questionHandlers = new List<IQuestionHandler>
         {
-            new TextQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<TextQuestionHandler>>()),
-            new SingleChoiceQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<SingleChoiceQuestionHandler>>()),
-            new MultipleChoiceQuestionHandler(_fixture.MockBotService.Object, _fixture.StateManager, validator, errorHandler, Mock.Of<ILogger<MultipleChoiceQuestionHandler>>()),
-            new RatingQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, Mock.Of<ILogger<RatingQuestionHandler>>())
+            new TextQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, mediaHelper, Mock.Of<ILogger<TextQuestionHandler>>()),
+            new SingleChoiceQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, mediaHelper, Mock.Of<ILogger<SingleChoiceQuestionHandler>>()),
+            new MultipleChoiceQuestionHandler(_fixture.MockBotService.Object, _fixture.StateManager, validator, errorHandler, mediaHelper, Mock.Of<ILogger<MultipleChoiceQuestionHandler>>()),
+            new RatingQuestionHandler(_fixture.MockBotService.Object, validator, errorHandler, mediaHelper, Mock.Of<ILogger<RatingQuestionHandler>>())
         };
 
         var botConfig = Options.Create(new BotConfiguration { ApiBaseUrl = "http://localhost:5000" });
         var performanceMonitor = new BotPerformanceMonitor(Mock.Of<ILogger<BotPerformanceMonitor>>());
         var surveyCache = new SurveyCache(Mock.Of<ILogger<SurveyCache>>());
+        var mockSurveyRepo = new Mock<ISurveyRepository>();
+        var mockMapper = new Mock<IMapper>();
 
         _navigationHandler = new NavigationHandler(
             _fixture.MockBotService.Object,
             _fixture.StateManager,
             questionHandlers,
+            mockSurveyRepo.Object,
+            mockMapper.Object,
             _httpClient,
             botConfig,
             performanceMonitor,

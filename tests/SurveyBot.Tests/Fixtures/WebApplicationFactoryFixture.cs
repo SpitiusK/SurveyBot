@@ -148,8 +148,7 @@ public class WebApplicationFactoryFixture<TProgram> : WebApplicationFactory<TPro
                 logging.SetMinimumLevel(LogLevel.Warning);
             });
 
-            // Note: Database creation happens automatically on first use
-            // due to EnsureCreated() being called by in-memory provider
+            // Note: Database is created on demand by the InMemory provider
         });
     }
 

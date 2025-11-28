@@ -55,7 +55,7 @@ public class UserService : IUserService
             registerDto.LastName);
 
         // Update last login timestamp
-        user.LastLoginAt = DateTime.UtcNow;
+        user.UpdateLastLogin();
         await _userRepository.UpdateAsync(user);
 
         _logger.LogInformation(
@@ -140,15 +140,13 @@ public class UserService : IUserService
 
         // Update fields if provided
         if (updateDto.Username != null)
-            user.Username = updateDto.Username;
+            user.SetUsername(updateDto.Username);
 
         if (updateDto.FirstName != null)
-            user.FirstName = updateDto.FirstName;
+            user.SetFirstName(updateDto.FirstName);
 
         if (updateDto.LastName != null)
-            user.LastName = updateDto.LastName;
-
-        user.UpdatedAt = DateTime.UtcNow;
+            user.SetLastName(updateDto.LastName);
 
         await _userRepository.UpdateAsync(user);
 
@@ -228,7 +226,7 @@ public class UserService : IUserService
             throw new KeyNotFoundException($"User with ID {userId} not found");
         }
 
-        user.LastLoginAt = DateTime.UtcNow;
+        user.UpdateLastLogin();
         await _userRepository.UpdateAsync(user);
 
         _logger.LogDebug("Last login timestamp updated for user: {UserId}", userId);

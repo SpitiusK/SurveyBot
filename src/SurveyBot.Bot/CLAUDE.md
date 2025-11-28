@@ -1,6 +1,6 @@
 # SurveyBot.Bot - Telegram Bot Layer
 
-**Version**: 1.4.0 | **Framework**: .NET 8.0 | **Telegram.Bot**: 22.7.4
+**Version**: 1.5.0 | **Framework**: .NET 8.0 | **Telegram.Bot**: 22.7.4
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [API Layer](../SurveyBot.API/CLAUDE.md)
@@ -17,7 +17,7 @@ Bot layer provides Telegram interface for survey management. **Depends on Core l
 
 **13 Command Handlers**: Start, Help, Surveys, MySurveys, Survey, Cancel, CreateSurvey, ListSurveys, Activate, Deactivate, Stats, AdminHelp, AllResponses
 
-**4 Question Handlers**: Text, SingleChoice, MultipleChoice, Rating (all with multimedia support)
+**5 Question Handlers**: Text, SingleChoice, MultipleChoice, Rating, Location (all with multimedia support)
 
 **3 Specialized Handlers**: NavigationHandler (back/skip), SurveyResponseHandler (answer processing), CompletionHandler
 
@@ -314,6 +314,14 @@ public interface IQuestionHandler
 - Answer format: `{"rating": 4}`
 - Validation: Rating 1-5
 
+**LocationQuestionHandler** (`QuestionType.Location`) - NEW in v1.5.0:
+- Input: ReplyKeyboardMarkup with location request button
+- User taps "Share Location" button to send GPS coordinates
+- **Multimedia display**: Shows attached media before location request
+- Answer format: `{"latitude": 40.7128, "longitude": -74.0060}`
+- Validation: Latitude -90 to 90, Longitude -180 to 180
+- Privacy-preserving logging (coordinate ranges, not exact values)
+
 ### Multimedia Support (NEW in v1.3.0)
 
 **Question Media Display**:
@@ -608,6 +616,7 @@ QuestionType.Text => {"text": ""}
 QuestionType.SingleChoice => {"selectedOption": ""}
 QuestionType.MultipleChoice => {"selectedOptions": []}
 QuestionType.Rating => {"rating": null}
+QuestionType.Location => {"latitude": null, "longitude": null}
 ```
 
 ### SurveyNavigationHelper (NEW in v1.4.0)

@@ -52,13 +52,7 @@ public class CancellationTests : IClassFixture<BotTestFixture>
         var surveyId = _fixture.TestSurvey.Id;
 
         // Create response
-        var response = new Response
-        {
-            SurveyId = surveyId,
-            RespondentTelegramId = TestUserId,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow
-        };
+        var response = EntityBuilder.CreateResponse(surveyId, TestUserId, false);
         await _fixture.DbContext.Responses.AddAsync(response);
         await _fixture.DbContext.SaveChangesAsync();
 
@@ -114,13 +108,7 @@ public class CancellationTests : IClassFixture<BotTestFixture>
         // Arrange
         var surveyId = _fixture.TestSurvey.Id;
 
-        var response = new Response
-        {
-            SurveyId = surveyId,
-            RespondentTelegramId = TestUserId + 1,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow
-        };
+        var response = EntityBuilder.CreateResponse(surveyId, TestUserId + 1, false);
         await _fixture.DbContext.Responses.AddAsync(response);
         await _fixture.DbContext.SaveChangesAsync();
 
@@ -185,32 +173,16 @@ public class CancellationTests : IClassFixture<BotTestFixture>
         // Arrange
         var surveyId = _fixture.TestSurvey.Id;
 
-        var response = new Response
-        {
-            SurveyId = surveyId,
-            RespondentTelegramId = TestUserId + 3,
-            IsComplete = false,
-            StartedAt = DateTime.UtcNow
-        };
+        var response = EntityBuilder.CreateResponse(surveyId, TestUserId + 3, false);
         await _fixture.DbContext.Responses.AddAsync(response);
         await _fixture.DbContext.SaveChangesAsync();
 
         // Add some answers
-        var answer1 = new Answer
-        {
-            ResponseId = response.Id,
-            QuestionId = _fixture.TestQuestions[0].Id,
-            AnswerJson = "{\"text\":\"Answer 1\"}",
-            CreatedAt = DateTime.UtcNow
-        };
+        var answer1 = EntityBuilder.CreateAnswer(response.Id, _fixture.TestQuestions[0].Id, "Answer 1");
+        answer1.SetAnswerJson("{\"text\":\"Answer 1\"}");
 
-        var answer2 = new Answer
-        {
-            ResponseId = response.Id,
-            QuestionId = _fixture.TestQuestions[1].Id,
-            AnswerJson = "{\"selectedOption\":\"Blue\"}",
-            CreatedAt = DateTime.UtcNow
-        };
+        var answer2 = EntityBuilder.CreateAnswer(response.Id, _fixture.TestQuestions[1].Id, "Blue");
+        answer2.SetAnswerJson("{\"selectedOption\":\"Blue\"}");
 
         await _fixture.DbContext.Answers.AddRangeAsync(answer1, answer2);
         await _fixture.DbContext.SaveChangesAsync();

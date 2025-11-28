@@ -1,6 +1,6 @@
 # SurveyBot - Project Documentation
 
-**Version**: 1.4.1 | **Framework**: .NET 8.0 | **Status**: Active Development
+**Version**: 1.5.0 | **Framework**: .NET 8.0 | **Status**: Active Development
 
 ---
 
@@ -27,7 +27,9 @@
 - **Multimedia Support** - Images (JPG, PNG), videos (MP4), audio (MP3, OGG), documents (PDF)
 - **Real-time Analytics** - Statistics, charts, CSV export
 - **JWT Authentication** - Secure token-based auth
-- **Value Object Pattern** - Type-safe domain modeling with DDD principles (v1.4.0)
+- **Value Object Pattern** - Type-safe domain modeling with DDD principles (v1.5.0 - complete)
+- **Factory Methods** - Entity creation with validation and encapsulation (v1.5.0)
+- **Domain Encapsulation** - Private setters with controlled modification (v1.5.0)
 - **Clean Architecture** - Maintainable, testable, scalable with zero-dependency core
 
 ### Technology Stack
@@ -131,13 +133,14 @@ dotnet run
 
 ### Layer Descriptions
 
-**[SurveyBot.Core](src/SurveyBot.Core/CLAUDE.md) v1.4.0** - Domain Layer (ZERO dependencies)
+**[SurveyBot.Core](src/SurveyBot.Core/CLAUDE.md) v1.5.0** - Domain Layer (ZERO dependencies)
 - **Entities**: User, Survey, Question (with DefaultNext), QuestionOption (NEW), Response (with VisitedQuestionIds), Answer, MediaFile
-- **Value Objects**: NextQuestionDeterminant (type-safe conditional logic - NEW)
-- **Interfaces**: 16 repository/service contracts including ISurveyValidationService (NEW)
+- **DDD Patterns**: Private setters, factory methods, value objects (v1.5.0)
+- **Value Objects**: NextQuestionDeterminant, AnswerValue hierarchy (polymorphic - NEW v1.5.0)
+- **Interfaces**: 16 repository/service contracts including ISurveyValidationService
 - **DTOs**: 42+ data transfer objects with nested structures
-- **Exceptions**: Domain-specific exceptions + SurveyCycleException (NEW)
-- **Utilities**: SurveyCodeGenerator, QuestionType/MediaType enums
+- **Exceptions**: Domain-specific exceptions + SurveyCycleException
+- **Utilities**: SurveyCodeGenerator, AnswerValueFactory (NEW v1.5.0)
 
 **[SurveyBot.Infrastructure](src/SurveyBot.Infrastructure/CLAUDE.md) v1.4.1** - Data Access & Business Logic
 - **DbContext**: PostgreSQL with EF Core 9.0, owned type configurations (NextQuestionDeterminant)
@@ -161,28 +164,63 @@ dotnet run
 - **JWT Authentication**: Token-based security with role support
 - **Swagger**: OpenAPI documentation with auth UI
 
-### Architectural Patterns (v1.4.0+)
+### Architectural Patterns (v1.5.0+)
 
-SurveyBot implements 8 core design patterns for maintainability and scalability:
+SurveyBot implements 10 core design patterns for maintainability and scalability:
 
 1. **Clean Architecture** - Zero-dependency core, onion-style layers
 2. **Repository Pattern** - Generic + specialized repositories with Include support
 3. **Service Layer Pattern** - Business logic encapsulation (QuestionService, ResponseService, SurveyValidationService)
 4. **DTO Pattern** - 42+ DTOs for API contracts and data transfer
-5. **Value Object Pattern** - NextQuestionDeterminant (type-safe, immutable, equality-based)
-6. **Owned Entity Types** - EF Core owned types for value objects (prevents magic values)
-7. **Graph Algorithms** - DFS-based cycle detection for survey flow validation
-8. **Strategy Pattern** - Polymorphic question handling (Text, SingleChoice, MultipleChoice, Rating)
+5. **Value Object Pattern** - NextQuestionDeterminant, AnswerValue hierarchy (type-safe, immutable, equality-based)
+6. **Factory Method Pattern** - Entity.Create() methods with validation (v1.5.0)
+7. **Owned Entity Types** - EF Core owned types for value objects (prevents magic values)
+8. **Encapsulation Pattern** - Private setters with controlled modification methods (v1.5.0)
+9. **Graph Algorithms** - DFS-based cycle detection for survey flow validation
+10. **Polymorphic Value Objects** - AnswerValue hierarchy with JSON discriminators (v1.5.0)
 
-**Key DDD Principles**:
-- Aggregates: Survey is aggregate root containing Questions/QuestionOptions
-- Value Objects: NextQuestionDeterminant eliminates primitive obsession
-- Domain Services: SurveyValidationService for complex validation logic
-- Domain Exceptions: SurveyCycleException for business rule violations
+**Key DDD Principles** (Enhanced in v1.5.0):
+- **Encapsulation**: All entities have private setters, modification through methods
+- **Factory Methods**: Centralized entity creation with validation (Survey.Create(), Question.Create(), etc.)
+- **Value Objects**: NextQuestionDeterminant + AnswerValue hierarchy eliminate primitive obsession
+- **Aggregates**: Survey is aggregate root containing Questions/QuestionOptions
+- **Domain Services**: SurveyValidationService for complex validation logic
+- **Domain Exceptions**: Strongly-typed exceptions for business rule violations
+- **Immutability**: Value objects are immutable with value semantics
 
 **See**: [Architecture Documentation](documentation/architecture/ARCHITECTURE.md) for detailed pattern descriptions.
 
-### Recent Changes (v1.4.x)
+### Recent Changes (v1.5.x)
+
+**v1.5.0 (DDD Architecture Enhancements - Complete)**:
+- **Private Setters (ARCH-001)**: All entities now enforce encapsulation with private setters
+  - Properties exposed as `{ get; private set; }`
+  - Collections use backing fields with IReadOnlyCollection exposure
+  - Modification through dedicated setter methods (SetTitle(), SetCode(), etc.)
+  - Internal methods for EF Core compatibility (AddQuestionInternal(), etc.)
+- **Factory Methods (ARCH-002)**: Centralized entity creation with validation
+  - All entities have static Create() factory methods
+  - Private constructors prevent direct instantiation
+  - Validation at construction time (title length, non-null IDs, etc.)
+  - Auto-generation of defaults (timestamps, codes) in factory
+- **AnswerValue Value Object (ARCH-003)**: ✅ **COMPLETE** - Polymorphic answer type system
+  - Abstract AnswerValue base class with [JsonDerivedType] for polymorphic JSON serialization
+  - Five concrete value objects: TextAnswerValue, SingleChoiceAnswerValue, MultipleChoiceAnswerValue, RatingAnswerValue, LocationAnswerValue
+  - AnswerValueFactory utility class: Parse(), TryParse(), CreateFromInput(), ParseWithTypeDiscriminator(), ConvertFromLegacy()
+  - Answer entity: New Value property (AnswerValue?) alongside legacy AnswerText/AnswerJson for backward compatibility
+  - EF Core owned type configuration: Stored as JSONB in answer_value_json column with type discriminator
+  - Migration 20251127104737_AddAnswerValueJsonColumn: Preserves existing data, adds new column
+  - Eliminates string parsing across all layers (ResponseService, SurveyService, API controllers)
+  - Provides compile-time type safety, validation at value object creation, no runtime JSON errors
+
+**v1.4.2 (Complete Value Object Migration)**:
+- **Completed Answer entity migration** to NextQuestionDeterminant value object
+- Eliminated the last magic value (0) in conditional flow system
+- Updated ResponseService with renamed methods for value object consistency
+- Added comprehensive owned type configuration for Answer.Next
+- Created migration with data preservation (0 → EndSurvey, >0 → GoToQuestion)
+- Added CHECK constraints for database-level invariant enforcement
+- Complete type safety achieved across all conditional flow entities
 
 **v1.4.1 (Infrastructure Refactoring)**:
 - Implemented EF Core owned types for NextQuestionDeterminant
@@ -199,6 +237,16 @@ SurveyBot implements 8 core design patterns for maintainability and scalability:
 - Added SurveyValidationService with DFS-based cycle prevention
 - Updated bot handlers for conditional navigation
 - Implemented SurveyNavigationHelper utility
+
+**Breaking Changes v1.5.0**:
+- **Entity Creation**: Must use factory methods (Survey.Create(), Answer.CreateWithValue(), etc.) - new keyword no longer recommended
+- **Entity Modification**: Direct property setting no longer possible - use setter methods (survey.SetTitle(), answer.UpdateValue())
+- **Answer Value** (ARCH-003):
+  - New Value property (AnswerValue?) is the preferred way to access answer content
+  - Legacy AnswerText/AnswerJson properties maintained for backward compatibility
+  - Recommended: Use Answer.CreateWithValue() instead of CreateTextAnswer()/CreateJsonAnswer()
+  - Services should use AnswerValue for type-safe answer handling, not string parsing
+  - AutoMapper profiles simplified - no more JSON parsing in mapping code
 
 **Breaking Changes v1.4.0**:
 - QuestionOption now uses NextQuestionDeterminant value object instead of nullable int
@@ -494,7 +542,7 @@ User (1) ──creates──> Survey (*) ──contains──> Question (*)
 
 **See** [Core Layer Documentation](src/SurveyBot.Core/CLAUDE.md) for detailed entity descriptions.
 
-**Question Types**: Text, SingleChoice, MultipleChoice, Rating
+**Question Types**: Text, SingleChoice, MultipleChoice, Rating, Location (NEW v1.5.0)
 
 **Media Types**: Image (JPG, PNG), Video (MP4), Audio (MP3, OGG), Document (PDF)
 
@@ -659,12 +707,13 @@ documentation/
 
 ## Summary for AI Assistants
 
-**SurveyBot v1.4.1** is a .NET 8.0 Telegram bot with React admin panel following Clean Architecture and DDD principles.
+**SurveyBot v1.5.0** is a .NET 8.0 Telegram bot with React admin panel following Clean Architecture and DDD principles with comprehensive value object implementation.
 
 **Key Points**:
-1. **Version**: v1.4.1 (Infrastructure), v1.4.0 (Core/API/Bot) - Conditional question flow enabled
-2. **Architecture**: Clean Architecture with 8 design patterns, ZERO-dependency core
-3. **NEW Features**: Conditional branching, cycle detection (DFS), value objects, owned types
+1. **Version**: v1.5.0 (Core DDD enhancements complete) - Enhanced encapsulation, factory methods, polymorphic value objects
+2. **Architecture**: Clean Architecture with 10 design patterns, ZERO-dependency core
+3. **NEW in v1.5.0**: Private setters, factory methods, AnswerValue polymorphic hierarchy
+4. **Features v1.4.x**: Conditional branching, cycle detection (DFS), value objects, owned types
 4. **Config files**: Base (appsettings.json) + Development (appsettings.Development.json) overrides
 5. **Bot modes**: Polling (local dev) vs Webhook (prod with HTTPS)
 6. **Database**: PostgreSQL via Docker, EF Core 9.0 with owned type migrations
@@ -673,27 +722,40 @@ documentation/
 9. **File paths**: Always use absolute paths (e.g., C:\Users\User\Desktop\SurveyBot\...)
 10. **Documentation**: Centralized in `documentation/` + layer-specific CLAUDE.md files
 
-**Architectural Highlights v1.4.0+**:
-- **7 Entities**: User, Survey, Question, QuestionOption (NEW), Response, Answer, MediaFile
-- **Value Objects**: NextQuestionDeterminant (immutable, type-safe, owned type)
+**Architectural Highlights v1.5.0**:
+- **7 Entities**: User, Survey, Question, QuestionOption, Response, Answer, MediaFile (all with private setters + factory methods)
+- **Value Objects**:
+  - NextQuestionDeterminant (conditional flow navigation - v1.4.0)
+  - AnswerValue hierarchy (polymorphic answer types - v1.5.0)
+- **Encapsulation**: All entities use private setters with modification methods
+- **Factory Methods**: Survey.Create(), Question.Create(), Answer.CreateWithValue(), etc.
 - **Graph Validation**: DFS-based cycle detection in SurveyValidationService
-- **Conditional Flow**: DefaultNextQuestionId + per-option NextQuestionId
+- **Conditional Flow**: Type-safe navigation throughout with value object enforcement
 - **Response Tracking**: VisitedQuestionIds (List<int>) for cycle prevention
-- **10 Controllers**: Including new QuestionFlowController for flow configuration
+- **10 Controllers**: Including QuestionFlowController for flow configuration
 - **42+ DTOs**: Nested structures with AutoMapper value object support
 
-**Breaking Changes v1.4.0** (IMPORTANT):
-- QuestionOption uses NextQuestionDeterminant value object (not nullable int)
-- Response requires VisitedQuestionIds property
-- Question.Options collection required for choice questions
-- AutoMapper profiles need value object mappings
+**Breaking Changes v1.5.0** (IMPORTANT):
+- **Entity Creation**: Use factory methods (Survey.Create(), not new Survey())
+- **Entity Modification**: Use setter methods (survey.SetTitle(), not survey.Title = ...)
+- **Answer Value**: New AnswerValue polymorphic hierarchy alongside legacy fields
+- **Collections**: Exposed as IReadOnlyCollection, modify through Add/Remove methods
+
+**Breaking Changes v1.4.2**:
+- **Answer entity**: `NextQuestionId` removed, replaced with `Next` (NextQuestionDeterminant value object)
+- **QuestionOption**: Uses NextQuestionDeterminant value object (not nullable int)
+- **Question**: DefaultNext is NextQuestionDeterminant value object
+- **Response**: Requires VisitedQuestionIds property
+- **AutoMapper**: Profiles updated for value object mappings
+- **No more magic values**: 0 no longer means "end survey" - use `NextQuestionDeterminant.End()`
 
 **Quick Setup**: Docker PostgreSQL → Configure bot token → Apply migrations → Run API → Access Swagger
 
 **Documentation Hub**:
 - **Start Here**: [Documentation Index](documentation/INDEX.md) | [Navigation Guide](documentation/NAVIGATION.md)
-- **Layer Documentation**: [Core v1.4.0](src/SurveyBot.Core/CLAUDE.md) | [Infrastructure v1.4.1](src/SurveyBot.Infrastructure/CLAUDE.md) | [Bot v1.4.0](src/SurveyBot.Bot/CLAUDE.md) | [API v1.4.0](src/SurveyBot.API/CLAUDE.md)
+- **Layer Documentation**: [Core v1.5.0](src/SurveyBot.Core/CLAUDE.md) | [Infrastructure v1.4.1](src/SurveyBot.Infrastructure/CLAUDE.md) | [Bot v1.4.0](src/SurveyBot.Bot/CLAUDE.md) | [API v1.4.0](src/SurveyBot.API/CLAUDE.md)
 - **Architecture**: [Architecture Overview](documentation/architecture/ARCHITECTURE.md) - Design patterns and principles
+- **Architecture Improvements**: [Priority Architecture Tasks](documentation/features/!PRIORITY_ARCHITECTURE_IMPROVEMENTS.md) - DDD enhancements
 - **Quick References**: [API](documentation/api/QUICK-REFERENCE.md) | [Bot Commands](documentation/bot/BOT_COMMAND_REFERENCE.md) | [Database](documentation/database/QUICK-START-DATABASE.md)
 
 **Common Tasks**:
@@ -709,12 +771,14 @@ documentation/
 1. Clean Architecture - Layers and dependencies
 2. Repository Pattern - [Infrastructure CLAUDE.md](src/SurveyBot.Infrastructure/CLAUDE.md#repositories)
 3. Value Objects - [Core CLAUDE.md](src/SurveyBot.Core/CLAUDE.md#value-objects)
-4. Owned Types - [Infrastructure CLAUDE.md](src/SurveyBot.Infrastructure/CLAUDE.md#owned-types)
-5. DFS Cycle Detection - [SurveyValidationService](src/SurveyBot.Infrastructure/CLAUDE.md#survey-validation)
-6. Conditional Flow - All layer documentation sections
-7. AutoMapper - [API CLAUDE.md](src/SurveyBot.API/CLAUDE.md#automapper)
-8. Strategy Pattern - Question type handling across layers
+4. Factory Methods - [Core CLAUDE.md](src/SurveyBot.Core/CLAUDE.md#factory-methods)
+5. Encapsulation - [Core CLAUDE.md](src/SurveyBot.Core/CLAUDE.md#encapsulation)
+6. Polymorphic Value Objects - [AnswerValue Hierarchy](src/SurveyBot.Core/CLAUDE.md#answervalue-hierarchy)
+7. Owned Types - [Infrastructure CLAUDE.md](src/SurveyBot.Infrastructure/CLAUDE.md#owned-types)
+8. DFS Cycle Detection - [SurveyValidationService](src/SurveyBot.Infrastructure/CLAUDE.md#survey-validation)
+9. Conditional Flow - All layer documentation sections
+10. AutoMapper - [API CLAUDE.md](src/SurveyBot.API/CLAUDE.md#automapper)
 
 ---
 
-**Last Updated**: 2025-11-25 | **Version**: 1.4.1 | **Target Framework**: .NET 8.0
+**Last Updated**: 2025-11-27 | **Version**: 1.5.0 | **Target Framework**: .NET 8.0

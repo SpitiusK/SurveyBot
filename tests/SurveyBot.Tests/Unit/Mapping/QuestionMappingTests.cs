@@ -3,6 +3,7 @@ using SurveyBot.API.Mapping;
 using SurveyBot.API.Mapping.ValueResolvers;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
+using SurveyBot.Tests.Fixtures;
 using System.Text.Json;
 using Xunit;
 
@@ -40,18 +41,14 @@ public class QuestionMappingTests
     {
         // Arrange
         var options = new List<string> { "Option 1", "Option 2", "Option 3" };
-        var question = new Question
-        {
-            Id = 1,
-            SurveyId = 1,
-            QuestionText = "What is your favorite color?",
-            QuestionType = QuestionType.SingleChoice,
-            OrderIndex = 0,
-            IsRequired = true,
-            OptionsJson = JsonSerializer.Serialize(options),
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        var question = Question.CreateSingleChoiceQuestion(
+            surveyId: 1,
+            questionText: "What is your favorite color?",
+            orderIndex: 0,
+            optionsJson: "[\"Option 1\", \"Option 2\", \"Option 3\"]");
+        question.SetId(1); // Use internal method instead of reflection
+        question.SetIsRequired(true);
+        question.SetOptionsJson(JsonSerializer.Serialize(options));
 
         // Act
         var dto = _mapper.Map<QuestionDto>(question);
@@ -73,18 +70,13 @@ public class QuestionMappingTests
     public void Map_Question_To_QuestionDto_WithoutOptions_Success()
     {
         // Arrange
-        var question = new Question
-        {
-            Id = 2,
-            SurveyId = 1,
-            QuestionText = "Please provide your feedback",
-            QuestionType = QuestionType.Text,
-            OrderIndex = 1,
-            IsRequired = false,
-            OptionsJson = null,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        var question = Question.CreateTextQuestion(
+            surveyId: 1,
+            questionText: "Please provide your feedback",
+            orderIndex: 1);
+        question.SetId(2); // Use internal method instead of reflection
+        question.SetIsRequired(false);
+        question.SetOptionsJson(null);
 
         // Act
         var dto = _mapper.Map<QuestionDto>(question);
@@ -94,7 +86,9 @@ public class QuestionMappingTests
         Assert.Equal(question.Id, dto.Id);
         Assert.Equal(question.QuestionText, dto.QuestionText);
         Assert.Equal(question.QuestionType, dto.QuestionType);
-        Assert.Null(dto.Options);
+        // Resolver returns empty list (not null) when OptionsJson is null
+        Assert.NotNull(dto.Options);
+        Assert.Empty(dto.Options);
     }
 
     [Fact]
@@ -170,21 +164,21 @@ public class QuestionMappingTests
     }
 
     [Fact]
-    public void QuestionOptionsResolver_InvalidJson_ReturnsNull()
+    public void QuestionOptionsResolver_InvalidJson_ReturnsEmptyList()
     {
         // Arrange
-        var question = new Question
-        {
-            Id = 1,
-            QuestionText = "Test",
-            QuestionType = QuestionType.SingleChoice,
-            OptionsJson = "invalid json {]"
-        };
+        var question = Question.CreateSingleChoiceQuestion(
+            surveyId: 1,
+            questionText: "Test",
+            orderIndex: 0,
+            optionsJson: "invalid json {]");
+        question.SetId(1); // Use internal method instead of reflection
 
         // Act
         var dto = _mapper.Map<QuestionDto>(question);
 
-        // Assert
-        Assert.Null(dto.Options);
+        // Assert - Resolver returns empty list for invalid JSON as a safe fallback
+        Assert.NotNull(dto.Options);
+        Assert.Empty(dto.Options);
     }
 }

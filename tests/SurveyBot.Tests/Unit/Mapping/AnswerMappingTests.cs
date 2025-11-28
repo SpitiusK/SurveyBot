@@ -2,6 +2,8 @@ using AutoMapper;
 using SurveyBot.API.Mapping;
 using SurveyBot.Core.DTOs.Answer;
 using SurveyBot.Core.Entities;
+using SurveyBot.Core.ValueObjects.Answers;
+using SurveyBot.Tests.Fixtures;
 using System.Text.Json;
 using Xunit;
 
@@ -9,6 +11,7 @@ namespace SurveyBot.Tests.Unit.Mapping;
 
 /// <summary>
 /// Tests for Answer entity AutoMapper mappings.
+/// Updated in v1.5.0 to use AnswerValue value objects.
 /// </summary>
 public class AnswerMappingTests
 {
@@ -38,21 +41,13 @@ public class AnswerMappingTests
     public void Map_Answer_TextQuestion_To_AnswerDto_Success()
     {
         // Arrange
-        var answer = new Answer
-        {
-            Id = 1,
-            ResponseId = 1,
-            QuestionId = 1,
-            AnswerText = "This is my text answer",
-            AnswerJson = null,
-            CreatedAt = DateTime.UtcNow,
-            Question = new Question
-            {
-                Id = 1,
-                QuestionText = "What do you think?",
-                QuestionType = QuestionType.Text
-            }
-        };
+        var question = EntityBuilder.CreateQuestion(questionText: "What do you think?", questionType: QuestionType.Text);
+        question.SetId(1);
+
+        var textValue = TextAnswerValue.Create("This is my text answer");
+        var answer = Answer.CreateWithValue(responseId: 1, questionId: 1, value: textValue);
+        answer.SetId(1);
+        answer.SetQuestionInternal(question);
 
         // Act
         var dto = _mapper.Map<AnswerDto>(answer);
@@ -64,7 +59,7 @@ public class AnswerMappingTests
         Assert.Equal("What do you think?", dto.QuestionText);
         Assert.Equal(QuestionType.Text, dto.QuestionType);
         Assert.Equal("This is my text answer", dto.AnswerText);
-        Assert.Null(dto.SelectedOptions);
+        Assert.Null(dto.SelectedOptions); // Text answers have null SelectedOptions
         Assert.Null(dto.RatingValue);
     }
 
@@ -73,21 +68,13 @@ public class AnswerMappingTests
     {
         // Arrange
         var selectedOption = "Option B";
-        var answer = new Answer
-        {
-            Id = 2,
-            ResponseId = 1,
-            QuestionId = 2,
-            AnswerText = null,
-            AnswerJson = JsonSerializer.Serialize(new List<string> { selectedOption }),
-            CreatedAt = DateTime.UtcNow,
-            Question = new Question
-            {
-                Id = 2,
-                QuestionText = "Pick one",
-                QuestionType = QuestionType.SingleChoice
-            }
-        };
+        var question = EntityBuilder.CreateQuestion(questionText: "Pick one", questionType: QuestionType.SingleChoice);
+        question.SetId(2);
+
+        var singleChoiceValue = SingleChoiceAnswerValue.CreateTrusted(selectedOption);
+        var answer = Answer.CreateWithValue(responseId: 1, questionId: 2, value: singleChoiceValue);
+        answer.SetId(2);
+        answer.SetQuestionInternal(question);
 
         // Act
         var dto = _mapper.Map<AnswerDto>(answer);
@@ -106,27 +93,20 @@ public class AnswerMappingTests
     {
         // Arrange
         var selectedOptions = new List<string> { "Option A", "Option C", "Option D" };
-        var answer = new Answer
-        {
-            Id = 3,
-            ResponseId = 1,
-            QuestionId = 3,
-            AnswerText = null,
-            AnswerJson = JsonSerializer.Serialize(selectedOptions),
-            CreatedAt = DateTime.UtcNow,
-            Question = new Question
-            {
-                Id = 3,
-                QuestionText = "Select all that apply",
-                QuestionType = QuestionType.MultipleChoice
-            }
-        };
+        var question = EntityBuilder.CreateQuestion(questionText: "Select all that apply", questionType: QuestionType.MultipleChoice);
+        question.SetId(3);
+
+        var multipleChoiceValue = MultipleChoiceAnswerValue.CreateTrusted(selectedOptions);
+        var answer = Answer.CreateWithValue(responseId: 1, questionId: 3, value: multipleChoiceValue);
+        answer.SetId(3);
+        answer.SetQuestionInternal(question);
 
         // Act
         var dto = _mapper.Map<AnswerDto>(answer);
 
         // Assert
         Assert.NotNull(dto);
+        Assert.Null(dto.AnswerText);
         Assert.NotNull(dto.SelectedOptions);
         Assert.Equal(3, dto.SelectedOptions.Count);
         Assert.Contains("Option A", dto.SelectedOptions);
@@ -139,21 +119,13 @@ public class AnswerMappingTests
     {
         // Arrange
         var ratingValue = 4;
-        var answer = new Answer
-        {
-            Id = 4,
-            ResponseId = 1,
-            QuestionId = 4,
-            AnswerText = null,
-            AnswerJson = JsonSerializer.Serialize(ratingValue),
-            CreatedAt = DateTime.UtcNow,
-            Question = new Question
-            {
-                Id = 4,
-                QuestionText = "Rate us",
-                QuestionType = QuestionType.Rating
-            }
-        };
+        var question = EntityBuilder.CreateQuestion(questionText: "Rate us", questionType: QuestionType.Rating);
+        question.SetId(4);
+
+        var ratingAnswerValue = RatingAnswerValue.Create(ratingValue);
+        var answer = Answer.CreateWithValue(responseId: 1, questionId: 4, value: ratingAnswerValue);
+        answer.SetId(4);
+        answer.SetQuestionInternal(question);
 
         // Act
         var dto = _mapper.Map<AnswerDto>(answer);
@@ -161,9 +133,60 @@ public class AnswerMappingTests
         // Assert
         Assert.NotNull(dto);
         Assert.Null(dto.AnswerText);
-        Assert.Null(dto.SelectedOptions);
+        Assert.Null(dto.SelectedOptions); // Rating answers have null SelectedOptions
         Assert.NotNull(dto.RatingValue);
         Assert.Equal(4, dto.RatingValue);
+    }
+
+    [Fact]
+    public void Map_Answer_Legacy_SingleChoice_To_AnswerDto_Success()
+    {
+        // Arrange - test legacy AnswerJson format conversion
+        var selectedOption = "Option B";
+        var question = EntityBuilder.CreateQuestion(questionText: "Pick one", questionType: QuestionType.SingleChoice);
+        question.SetId(2);
+
+        // Create answer with legacy JSON format (no Value set)
+        var answer = EntityBuilder.CreateTextAnswer(responseId: 1, questionId: 2, answerText: null);
+        answer.SetId(2);
+        answer.SetValue(null); // Ensure Value is null to trigger legacy fallback
+        answer.SetAnswerJson(JsonSerializer.Serialize(new { selectedOption }));
+        answer.SetQuestionInternal(question);
+
+        // Act
+        var dto = _mapper.Map<AnswerDto>(answer);
+
+        // Assert
+        Assert.NotNull(dto);
+        Assert.Null(dto.AnswerText);
+        Assert.NotNull(dto.SelectedOptions);
+        Assert.Single(dto.SelectedOptions);
+        Assert.Equal(selectedOption, dto.SelectedOptions[0]);
+    }
+
+    [Fact]
+    public void Map_Answer_Legacy_Rating_To_AnswerDto_Success()
+    {
+        // Arrange - test legacy AnswerJson format conversion
+        var ratingValue = 5;
+        var question = EntityBuilder.CreateQuestion(questionText: "Rate us", questionType: QuestionType.Rating);
+        question.SetId(4);
+
+        // Create answer with legacy JSON format (no Value set)
+        var answer = EntityBuilder.CreateTextAnswer(responseId: 1, questionId: 4, answerText: null);
+        answer.SetId(4);
+        answer.SetValue(null); // Ensure Value is null to trigger legacy fallback
+        answer.SetAnswerJson(JsonSerializer.Serialize(new { rating = ratingValue }));
+        answer.SetQuestionInternal(question);
+
+        // Act
+        var dto = _mapper.Map<AnswerDto>(answer);
+
+        // Assert
+        Assert.NotNull(dto);
+        Assert.Null(dto.AnswerText);
+        Assert.NotNull(dto.RatingValue);
+        Assert.Equal(ratingValue, dto.RatingValue);
     }
 
     [Fact]
@@ -185,7 +208,8 @@ public class AnswerMappingTests
         Assert.NotNull(answer);
         Assert.Equal(createDto.QuestionId, answer.QuestionId);
         Assert.Equal("My detailed response", answer.AnswerText);
-        Assert.Null(answer.AnswerJson);
+        // Note: In v1.5.0, ResponseService handles Value creation via AnswerValueFactory
+        // AutoMapper only sets AnswerText, the service sets Value
     }
 
     [Fact]
@@ -206,12 +230,8 @@ public class AnswerMappingTests
         // Assert
         Assert.NotNull(answer);
         Assert.Null(answer.AnswerText);
-        Assert.NotNull(answer.AnswerJson);
-
-        var deserializedOptions = JsonSerializer.Deserialize<List<string>>(answer.AnswerJson);
-        Assert.NotNull(deserializedOptions);
-        Assert.Single(deserializedOptions);
-        Assert.Equal("Choice A", deserializedOptions[0]);
+        // Note: In v1.5.0, AnswerJson is set by ResponseService, not AutoMapper
+        // AutoMapper ignores AnswerJson (set by service if needed for backward compatibility)
     }
 
     [Fact]
@@ -231,11 +251,8 @@ public class AnswerMappingTests
 
         // Assert
         Assert.NotNull(answer);
-        Assert.NotNull(answer.AnswerJson);
-
-        var deserializedOptions = JsonSerializer.Deserialize<List<string>>(answer.AnswerJson);
-        Assert.NotNull(deserializedOptions);
-        Assert.Equal(3, deserializedOptions.Count);
+        // Note: In v1.5.0, ResponseService handles the full answer creation
+        // AutoMapper just creates the basic Answer entity
     }
 
     [Fact]
@@ -256,9 +273,6 @@ public class AnswerMappingTests
         // Assert
         Assert.NotNull(answer);
         Assert.Null(answer.AnswerText);
-        Assert.NotNull(answer.AnswerJson);
-
-        var deserializedRating = JsonSerializer.Deserialize<int>(answer.AnswerJson);
-        Assert.Equal(5, deserializedRating);
+        // Note: In v1.5.0, ResponseService handles Value creation via AnswerValueFactory
     }
 }

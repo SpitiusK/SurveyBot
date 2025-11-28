@@ -94,6 +94,12 @@ public class SurveyConfiguration : IEntityTypeConfiguration<Survey>
             .HasDatabaseName("idx_surveys_created_at")
             .IsDescending();
 
+        // Configure backing fields for collections
+        builder.Navigation(s => s.Questions)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(s => s.Responses)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
         // Relationships
         builder.HasOne(s => s.Creator)
             .WithMany(u => u.Surveys)

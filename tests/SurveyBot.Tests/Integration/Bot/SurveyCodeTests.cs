@@ -137,37 +137,18 @@ public class SurveyCodeTests : IClassFixture<BotTestFixture>
     public async Task StartSurvey_ActiveVsInactive_OnlyStartsActiveOnes()
     {
         // Arrange - Create both active and inactive surveys
-        var activeSurvey = new Survey
-        {
-            Title = "Active Survey",
-            CreatorId = _fixture.TestUser.Id,
-            IsActive = true,
-            AllowMultipleResponses = true,
-            CreatedAt = DateTime.UtcNow
-        };
+        var activeSurvey = EntityBuilder.CreateSurvey("Active Survey", null, _fixture.TestUser.Id, true);
+        activeSurvey.SetAllowMultipleResponses(true);
 
-        var inactiveSurvey = new Survey
-        {
-            Title = "Inactive Survey",
-            CreatorId = _fixture.TestUser.Id,
-            IsActive = false,
-            AllowMultipleResponses = true,
-            CreatedAt = DateTime.UtcNow
-        };
+        var inactiveSurvey = EntityBuilder.CreateSurvey("Inactive Survey", null, _fixture.TestUser.Id, false);
+        inactiveSurvey.SetAllowMultipleResponses(true);
 
         await _fixture.DbContext.Surveys.AddRangeAsync(activeSurvey, inactiveSurvey);
         await _fixture.DbContext.SaveChangesAsync();
 
         // Add at least one question to active survey
-        await _fixture.DbContext.Questions.AddAsync(new Question
-        {
-            SurveyId = activeSurvey.Id,
-            QuestionText = "Test?",
-            QuestionType = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            CreatedAt = DateTime.UtcNow
-        });
+        var question = EntityBuilder.CreateQuestion(activeSurvey.Id, "Test?", QuestionType.Text, 0, true);
+        await _fixture.DbContext.Questions.AddAsync(question);
         await _fixture.DbContext.SaveChangesAsync();
 
         // Act - Try active survey

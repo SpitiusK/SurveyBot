@@ -3,7 +3,9 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using SurveyBot.API.Mapping;
 using SurveyBot.Core.Entities;
+using SurveyBot.Core.Enums;
 using SurveyBot.Core.Exceptions;
+using SurveyBot.Core.ValueObjects;
 using SurveyBot.Infrastructure.Data;
 using SurveyBot.Infrastructure.Repositories;
 using SurveyBot.Infrastructure.Services;
@@ -66,6 +68,7 @@ public class QuestionFlowIntegrationTests : IAsyncLifetime
             _answerRepository,
             _surveyRepository,
             _questionRepository,
+            _context,
             _mapper,
             Mock.Of<ILogger<ResponseService>>());
 
@@ -85,142 +88,119 @@ public class QuestionFlowIntegrationTests : IAsyncLifetime
         await _context.SaveChangesAsync();
 
         // Create test survey
-        _testSurvey = new Survey
-        {
-            Title = "Conditional Flow Test Survey",
-            Description = "Testing branching and linear question flow",
-            Code = "TEST01",
-            CreatorId = _testUser.Id,
-            IsActive = true,
-            AllowMultipleResponses = false,
-            ShowResults = true
-        };
+        _testSurvey = Survey.Create(
+            title: "Conditional Flow Test Survey",
+            creatorId: _testUser.Id,
+            description: "Testing branching and linear question flow",
+            code: "TEST01",
+            isActive: true,
+            allowMultipleResponses: false,
+            showResults: true);
         await _context.Surveys.AddAsync(_testSurvey);
         await _context.SaveChangesAsync();
 
         // Question 1: Text (non-branching) → Q2
-        _q1_text = new Question
-        {
-            SurveyId = _testSurvey.Id,
-            QuestionText = "What is your name?",
-            QuestionType = QuestionType.Text,
-            OrderIndex = 0,
-            DefaultNextQuestionId = null, // Will be set after Q2 is created
-            IsRequired = true
-        };
+        _q1_text = Question.CreateTextQuestion(
+            surveyId: _testSurvey.Id,
+            questionText: "What is your name?",
+            orderIndex: 0,
+            isRequired: true);
+        // DefaultNextQuestionId will be set after Q2 is created
         await _context.Questions.AddAsync(_q1_text);
         await _context.SaveChangesAsync();
 
         // Question 2: SingleChoice (branching) - "Yes" → Q3, "No" → END
-        _q2_singleChoice = new Question
-        {
-            SurveyId = _testSurvey.Id,
-            QuestionText = "Do you like surveys?",
-            QuestionType = QuestionType.SingleChoice,
-            OrderIndex = 1,
-            IsRequired = true
-        };
+        _q2_singleChoice = Question.CreateSingleChoiceQuestion(
+            surveyId: _testSurvey.Id,
+            questionText: "Do you like surveys?",
+            orderIndex: 1,
+            optionsJson: "[\"Yes\", \"No\"]",
+            isRequired: true);
         await _context.Questions.AddAsync(_q2_singleChoice);
         await _context.SaveChangesAsync();
 
         // Question 3: Rating (branching) - 1-3 → Q4, 4-5 → Q5
-        _q3_rating = new Question
-        {
-            SurveyId = _testSurvey.Id,
-            QuestionText = "How satisfied are you?",
-            QuestionType = QuestionType.Rating,
-            OrderIndex = 2,
-            IsRequired = true
-        };
+        _q3_rating = Question.CreateRatingQuestion(
+            surveyId: _testSurvey.Id,
+            questionText: "How satisfied are you?",
+            orderIndex: 2,
+            isRequired: true);
         await _context.Questions.AddAsync(_q3_rating);
         await _context.SaveChangesAsync();
 
         // Question 4: MultipleChoice (non-branching) → Q5
-        _q4_multipleChoice = new Question
-        {
-            SurveyId = _testSurvey.Id,
-            QuestionText = "What features do you like? (Select all)",
-            QuestionType = QuestionType.MultipleChoice,
-            OrderIndex = 3,
-            DefaultNextQuestionId = null, // Will be set after Q5 is created
-            IsRequired = true,
-            OptionsJson = "[\"Feature A\", \"Feature B\", \"Feature C\"]"
-        };
+        _q4_multipleChoice = Question.CreateMultipleChoiceQuestion(
+            surveyId: _testSurvey.Id,
+            questionText: "What features do you like? (Select all)",
+            orderIndex: 3,
+            optionsJson: "[\"Feature A\", \"Feature B\", \"Feature C\"]",
+            isRequired: true);
+        // DefaultNextQuestionId will be set after Q5 is created
         await _context.Questions.AddAsync(_q4_multipleChoice);
         await _context.SaveChangesAsync();
 
         // Question 5: Text (non-branching) → END
-        _q5_text = new Question
-        {
-            SurveyId = _testSurvey.Id,
-            QuestionText = "Any additional comments?",
-            QuestionType = QuestionType.Text,
-            OrderIndex = 4,
-            DefaultNextQuestionId = null, // NULL = end of survey
-            IsRequired = false
-        };
+        _q5_text = Question.CreateTextQuestion(
+            surveyId: _testSurvey.Id,
+            questionText: "Any additional comments?",
+            orderIndex: 4,
+            isRequired: false);
+        // DefaultNextQuestionId = null (end of survey)
         await _context.Questions.AddAsync(_q5_text);
         await _context.SaveChangesAsync();
 
         // Update Q1 and Q4 to point to next questions
-        _q1_text.DefaultNextQuestionId = _q2_singleChoice.Id;
-        _q4_multipleChoice.DefaultNextQuestionId = _q5_text.Id;
+        _q1_text.SetDefaultNext(NextQuestionDeterminant.ToQuestion(_q2_singleChoice.Id));
+        _q4_multipleChoice.SetDefaultNext(NextQuestionDeterminant.ToQuestion(_q5_text.Id));
         await _context.SaveChangesAsync();
 
         // Create options for Q2 (SingleChoice)
-        _q2_opt1 = new QuestionOption
-        {
-            QuestionId = _q2_singleChoice.Id,
-            Text = "Yes",
-            OrderIndex = 0,
-            NextQuestionId = _q3_rating.Id  // Yes → Q3
-        };
-        _q2_opt2 = new QuestionOption
-        {
-            QuestionId = _q2_singleChoice.Id,
-            Text = "No",
-            OrderIndex = 1,
-            NextQuestionId = null  // No → END
-        };
+        _q2_opt1 = QuestionOption.Create(
+            questionId: _q2_singleChoice.Id,
+            text: "Yes",
+            orderIndex: 0,
+            next: NextQuestionDeterminant.ToQuestion(_q3_rating.Id));  // Yes → Q3
+
+        _q2_opt2 = QuestionOption.Create(
+            questionId: _q2_singleChoice.Id,
+            text: "No",
+            orderIndex: 1,
+            next: NextQuestionDeterminant.End());  // No → END
+
         await _context.QuestionOptions.AddRangeAsync(_q2_opt1, _q2_opt2);
         await _context.SaveChangesAsync();
 
         // Create options for Q3 (Rating) - ratings 1-5
-        _q3_opt1 = new QuestionOption
-        {
-            QuestionId = _q3_rating.Id,
-            Text = "1",
-            OrderIndex = 0,
-            NextQuestionId = _q4_multipleChoice.Id  // Low rating → Q4
-        };
-        _q3_opt2 = new QuestionOption
-        {
-            QuestionId = _q3_rating.Id,
-            Text = "2",
-            OrderIndex = 1,
-            NextQuestionId = _q4_multipleChoice.Id
-        };
-        _q3_opt3 = new QuestionOption
-        {
-            QuestionId = _q3_rating.Id,
-            Text = "3",
-            OrderIndex = 2,
-            NextQuestionId = _q4_multipleChoice.Id
-        };
-        _q3_opt4 = new QuestionOption
-        {
-            QuestionId = _q3_rating.Id,
-            Text = "4",
-            OrderIndex = 3,
-            NextQuestionId = _q5_text.Id  // High rating → Q5 (skip Q4)
-        };
-        _q3_opt5 = new QuestionOption
-        {
-            QuestionId = _q3_rating.Id,
-            Text = "5",
-            OrderIndex = 4,
-            NextQuestionId = _q5_text.Id
-        };
+        _q3_opt1 = QuestionOption.Create(
+            questionId: _q3_rating.Id,
+            text: "1",
+            orderIndex: 0,
+            next: NextQuestionDeterminant.ToQuestion(_q4_multipleChoice.Id));  // Low rating → Q4
+
+        _q3_opt2 = QuestionOption.Create(
+            questionId: _q3_rating.Id,
+            text: "2",
+            orderIndex: 1,
+            next: NextQuestionDeterminant.ToQuestion(_q4_multipleChoice.Id));
+
+        _q3_opt3 = QuestionOption.Create(
+            questionId: _q3_rating.Id,
+            text: "3",
+            orderIndex: 2,
+            next: NextQuestionDeterminant.ToQuestion(_q4_multipleChoice.Id));
+
+        _q3_opt4 = QuestionOption.Create(
+            questionId: _q3_rating.Id,
+            text: "4",
+            orderIndex: 3,
+            next: NextQuestionDeterminant.ToQuestion(_q5_text.Id));  // High rating → Q5 (skip Q4)
+
+        _q3_opt5 = QuestionOption.Create(
+            questionId: _q3_rating.Id,
+            text: "5",
+            orderIndex: 4,
+            next: NextQuestionDeterminant.ToQuestion(_q5_text.Id));
+
         await _context.QuestionOptions.AddRangeAsync(_q3_opt1, _q3_opt2, _q3_opt3, _q3_opt4, _q3_opt5);
         await _context.SaveChangesAsync();
     }
@@ -261,13 +241,11 @@ public class QuestionFlowIntegrationTests : IAsyncLifetime
     public async Task StartSurvey_InactiveSurvey_ThrowsSurveyOperationException()
     {
         // Arrange
-        var inactiveSurvey = new Survey
-        {
-            Title = "Inactive Survey",
-            Code = "INACT1",
-            CreatorId = _testUser.Id,
-            IsActive = false  // Not active
-        };
+        var inactiveSurvey = Survey.Create(
+            title: "Inactive Survey",
+            creatorId: _testUser.Id,
+            code: "INACT1",
+            isActive: false);  // Not active
         await _context.Surveys.AddAsync(inactiveSurvey);
         await _context.SaveChangesAsync();
 
@@ -327,63 +305,54 @@ public class QuestionFlowIntegrationTests : IAsyncLifetime
         Assert.NotNull(nextQuestionId);
         Assert.Equal(_q2_singleChoice.Id, nextQuestionId);
 
-        // Verify answer was saved with NextQuestionId
+        // Verify answer was saved with Next value object
         var savedAnswer = await _answerRepository.GetByResponseAndQuestionAsync(response.Id, _q1_text.Id);
         Assert.NotNull(savedAnswer);
-        Assert.Equal(_q2_singleChoice.Id, savedAnswer.NextQuestionId);
+        Assert.NotNull(savedAnswer.Next);
+        Assert.Equal(NextStepType.GoToQuestion, savedAnswer.Next.Type);
+        Assert.Equal(_q2_singleChoice.Id, savedAnswer.Next.NextQuestionId);
     }
 
     [Fact]
     public async Task LinearFlow_MultipleNonBranchingQuestions_FollowsChain()
     {
         // Arrange - Create simple linear survey: Q1 → Q2 → Q3 → END
-        var linearSurvey = new Survey
-        {
-            Title = "Linear Survey",
-            Code = "LIN001",
-            CreatorId = _testUser.Id,
-            IsActive = true
-        };
+        var linearSurvey = Survey.Create(
+            title: "Linear Survey",
+            creatorId: _testUser.Id,
+            code: "LIN001",
+            isActive: true);
         await _context.Surveys.AddAsync(linearSurvey);
         await _context.SaveChangesAsync();
 
-        var q1 = new Question
-        {
-            SurveyId = linearSurvey.Id,
-            QuestionText = "Question 1",
-            QuestionType = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true
-        };
+        var q1 = Question.CreateTextQuestion(
+            surveyId: linearSurvey.Id,
+            questionText: "Question 1",
+            orderIndex: 0,
+            isRequired: true);
         await _context.Questions.AddAsync(q1);
         await _context.SaveChangesAsync();
 
-        var q2 = new Question
-        {
-            SurveyId = linearSurvey.Id,
-            QuestionText = "Question 2",
-            QuestionType = QuestionType.Text,
-            OrderIndex = 1,
-            IsRequired = true
-        };
+        var q2 = Question.CreateTextQuestion(
+            surveyId: linearSurvey.Id,
+            questionText: "Question 2",
+            orderIndex: 1,
+            isRequired: true);
         await _context.Questions.AddAsync(q2);
         await _context.SaveChangesAsync();
 
-        var q3 = new Question
-        {
-            SurveyId = linearSurvey.Id,
-            QuestionText = "Question 3",
-            QuestionType = QuestionType.Text,
-            OrderIndex = 2,
-            DefaultNextQuestionId = null,  // END
-            IsRequired = true
-        };
+        var q3 = Question.CreateTextQuestion(
+            surveyId: linearSurvey.Id,
+            questionText: "Question 3",
+            orderIndex: 2,
+            isRequired: true);
+        // DefaultNextQuestionId = null (END)
         await _context.Questions.AddAsync(q3);
         await _context.SaveChangesAsync();
 
         // Set up chain: Q1 → Q2 → Q3 → END
-        q1.DefaultNextQuestionId = q2.Id;
-        q2.DefaultNextQuestionId = q3.Id;
+        q1.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q2.Id));
+        q2.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q3.Id));
         await _context.SaveChangesAsync();
 
         var userId = 222333444L;
@@ -729,26 +698,24 @@ public class QuestionFlowIntegrationTests : IAsyncLifetime
     public async Task ErrorHandling_InvalidNextQuestionId_GracefullyHandles()
     {
         // Arrange - Create question with invalid next question ID
-        var invalidSurvey = new Survey
-        {
-            Title = "Invalid Flow Survey",
-            Code = "INV001",
-            CreatorId = _testUser.Id,
-            IsActive = true
-        };
+        var invalidSurvey = Survey.Create(
+            title: "Invalid Flow Survey",
+            creatorId: _testUser.Id,
+            code: "INV001",
+            isActive: true);
         await _context.Surveys.AddAsync(invalidSurvey);
         await _context.SaveChangesAsync();
 
-        var questionWithInvalidNext = new Question
-        {
-            SurveyId = invalidSurvey.Id,
-            QuestionText = "Question with invalid next",
-            QuestionType = QuestionType.Text,
-            OrderIndex = 0,
-            DefaultNextQuestionId = 99999,  // Non-existent question
-            IsRequired = true
-        };
+        var questionWithInvalidNext = Question.CreateTextQuestion(
+            surveyId: invalidSurvey.Id,
+            questionText: "Question with invalid next",
+            orderIndex: 0,
+            isRequired: true);
         await _context.Questions.AddAsync(questionWithInvalidNext);
+        await _context.SaveChangesAsync();
+
+        // Set invalid next question after creation
+        questionWithInvalidNext.SetDefaultNext(NextQuestionDeterminant.ToQuestion(99999));  // Non-existent question
         await _context.SaveChangesAsync();
 
         var userId = 601602603L;

@@ -61,12 +61,13 @@ public class BotTestFixture : IDisposable
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((SendMessageRequest request, CancellationToken ct) =>
             {
-                var message = new Message();
-                var messageIdProperty = typeof(Message).GetProperty("MessageId");
-                var chatProperty = typeof(Message).GetProperty("Chat");
-                messageIdProperty?.SetValue(message, Random.Shared.Next(1000, 9999));
-                chatProperty?.SetValue(message, new Chat { Id = request.ChatId.Identifier ?? 0 });
-                return message;
+                // Telegram.Bot 22.x renamed MessageId to Id
+                return new Message
+                {
+                    Id = Random.Shared.Next(1000, 9999),
+                    Chat = new Chat { Id = request.ChatId.Identifier ?? 0, Type = Telegram.Bot.Types.Enums.ChatType.Private },
+                    Date = DateTime.UtcNow
+                };
             });
 
         // Setup mock for AnswerCallbackQueryRequest
@@ -83,16 +84,14 @@ public class BotTestFixture : IDisposable
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync((EditMessageTextRequest request, CancellationToken ct) =>
             {
-                var message = new Message();
-                var messageIdProperty = typeof(Message).GetProperty("MessageId");
-                var chatProperty = typeof(Message).GetProperty("Chat");
-                var textProperty = typeof(Message).GetProperty("Text");
-
-                messageIdProperty?.SetValue(message, request.MessageId);
-                chatProperty?.SetValue(message, new Chat { Id = request.ChatId.Identifier ?? 0 });
-                textProperty?.SetValue(message, request.Text);
-
-                return message;
+                // Telegram.Bot 22.x renamed MessageId to Id
+                return new Message
+                {
+                    Id = request.MessageId,
+                    Chat = new Chat { Id = request.ChatId.Identifier ?? 0, Type = Telegram.Bot.Types.Enums.ChatType.Private },
+                    Text = request.Text,
+                    Date = DateTime.UtcNow
+                };
             });
 
         // Create mock IBotService
@@ -109,74 +108,70 @@ public class BotTestFixture : IDisposable
 
     private async Task SeedTestData()
     {
-        // Create test user
-        TestUser = new User
-        {
-            TelegramId = 123456789,
-            Username = "testuser",
-            FirstName = "Test",
-            LastName = "User",
-            CreatedAt = DateTime.UtcNow
-        };
+        // Create test user using EntityBuilder
+        TestUser = EntityBuilder.CreateUser(
+            telegramId: 123456789,
+            username: "testuser",
+            firstName: "Test",
+            lastName: "User"
+        );
         await DbContext.Users.AddAsync(TestUser);
         await DbContext.SaveChangesAsync();
 
-        // Create test survey
-        TestSurvey = new Survey
-        {
-            Title = "Test Survey",
-            Description = "A test survey for integration testing",
-            CreatorId = TestUser.Id,
-            IsActive = true,
-            AllowMultipleResponses = false,
-            ShowResults = true,
-            CreatedAt = DateTime.UtcNow
-        };
+        // Create test survey using EntityBuilder
+        TestSurvey = EntityBuilder.CreateSurvey(
+            title: "Test Survey",
+            description: "A test survey for integration testing",
+            creatorId: TestUser.Id,
+            isActive: true
+        );
         await DbContext.Surveys.AddAsync(TestSurvey);
         await DbContext.SaveChangesAsync();
 
         // Create test questions
-        TestQuestions = new List<Question>
-        {
-            new Question
-            {
-                SurveyId = TestSurvey.Id,
-                QuestionText = "What is your name?",
-                QuestionType = QuestionType.Text,
-                OrderIndex = 0,
-                IsRequired = true,
-                CreatedAt = DateTime.UtcNow
-            },
-            new Question
-            {
-                SurveyId = TestSurvey.Id,
-                QuestionText = "What is your favorite color?",
-                QuestionType = QuestionType.SingleChoice,
-                OrderIndex = 1,
-                IsRequired = true,
-                OptionsJson = System.Text.Json.JsonSerializer.Serialize(new[] { "Red", "Blue", "Green", "Yellow" }),
-                CreatedAt = DateTime.UtcNow
-            },
-            new Question
-            {
-                SurveyId = TestSurvey.Id,
-                QuestionText = "Which programming languages do you know?",
-                QuestionType = QuestionType.MultipleChoice,
-                OrderIndex = 2,
-                IsRequired = false,
-                OptionsJson = System.Text.Json.JsonSerializer.Serialize(new[] { "C#", "Python", "JavaScript", "Java" }),
-                CreatedAt = DateTime.UtcNow
-            },
-            new Question
-            {
-                SurveyId = TestSurvey.Id,
-                QuestionText = "Rate your experience",
-                QuestionType = QuestionType.Rating,
-                OrderIndex = 3,
-                IsRequired = true,
-                CreatedAt = DateTime.UtcNow
-            }
-        };
+        TestQuestions = new List<Question>();
+
+        // Question 1: Text question
+        var question1 = EntityBuilder.CreateQuestion(
+            surveyId: TestSurvey.Id,
+            questionText: "What is your name?",
+            questionType: QuestionType.Text,
+            orderIndex: 0,
+            isRequired: true
+        );
+        TestQuestions.Add(question1);
+
+        // Question 2: SingleChoice question
+        var question2 = EntityBuilder.CreateQuestion(
+            surveyId: TestSurvey.Id,
+            questionText: "What is your favorite color?",
+            questionType: QuestionType.SingleChoice,
+            orderIndex: 1,
+            isRequired: true
+        );
+        question2.SetOptionsJson(System.Text.Json.JsonSerializer.Serialize(new[] { "Red", "Blue", "Green", "Yellow" }));
+        TestQuestions.Add(question2);
+
+        // Question 3: MultipleChoice question
+        var question3 = EntityBuilder.CreateQuestion(
+            surveyId: TestSurvey.Id,
+            questionText: "Which programming languages do you know?",
+            questionType: QuestionType.MultipleChoice,
+            orderIndex: 2,
+            isRequired: false
+        );
+        question3.SetOptionsJson(System.Text.Json.JsonSerializer.Serialize(new[] { "C#", "Python", "JavaScript", "Java" }));
+        TestQuestions.Add(question3);
+
+        // Question 4: Rating question
+        var question4 = EntityBuilder.CreateQuestion(
+            surveyId: TestSurvey.Id,
+            questionText: "Rate your experience",
+            questionType: QuestionType.Rating,
+            orderIndex: 3,
+            isRequired: true
+        );
+        TestQuestions.Add(question4);
 
         await DbContext.Questions.AddRangeAsync(TestQuestions);
         await DbContext.SaveChangesAsync();
@@ -184,42 +179,34 @@ public class BotTestFixture : IDisposable
 
     public Message CreateTestMessage(long userId, long chatId, string text)
     {
-        var message = new Message();
-        var messageIdProperty = typeof(Message).GetProperty("MessageId");
-        var fromProperty = typeof(Message).GetProperty("From");
-        var chatProperty = typeof(Message).GetProperty("Chat");
-        var textProperty = typeof(Message).GetProperty("Text");
-        var dateProperty = typeof(Message).GetProperty("Date");
-
-        messageIdProperty?.SetValue(message, Random.Shared.Next(1000, 9999));
-        fromProperty?.SetValue(message, new Telegram.Bot.Types.User { Id = userId, Username = "testuser" });
-        chatProperty?.SetValue(message, new Chat { Id = chatId });
-        textProperty?.SetValue(message, text);
-        dateProperty?.SetValue(message, DateTime.UtcNow);
-
-        return message;
+        // Telegram.Bot 22.x renamed MessageId to Id
+        return new Message
+        {
+            Id = Random.Shared.Next(1000, 9999),
+            From = new Telegram.Bot.Types.User { Id = userId, Username = "testuser", FirstName = "Test", IsBot = false },
+            Chat = new Chat { Id = chatId, Type = Telegram.Bot.Types.Enums.ChatType.Private },
+            Text = text,
+            Date = DateTime.UtcNow
+        };
     }
 
     public CallbackQuery CreateTestCallbackQuery(long userId, long chatId, string data)
     {
-        var innerMessage = new Message();
-        var messageIdProperty = typeof(Message).GetProperty("MessageId");
-        var chatProperty = typeof(Message).GetProperty("Chat");
-        messageIdProperty?.SetValue(innerMessage, Random.Shared.Next(1000, 9999));
-        chatProperty?.SetValue(innerMessage, new Chat { Id = chatId });
+        // Telegram.Bot 22.x renamed MessageId to Id
+        var innerMessage = new Message
+        {
+            Id = Random.Shared.Next(1000, 9999),
+            Chat = new Chat { Id = chatId, Type = Telegram.Bot.Types.Enums.ChatType.Private },
+            Date = DateTime.UtcNow
+        };
 
-        var callbackQuery = new CallbackQuery();
-        var idProperty = typeof(CallbackQuery).GetProperty("Id");
-        var fromProperty = typeof(CallbackQuery).GetProperty("From");
-        var messageProperty = typeof(CallbackQuery).GetProperty("Message");
-        var dataProperty = typeof(CallbackQuery).GetProperty("Data");
-
-        idProperty?.SetValue(callbackQuery, Guid.NewGuid().ToString());
-        fromProperty?.SetValue(callbackQuery, new Telegram.Bot.Types.User { Id = userId, Username = "testuser" });
-        messageProperty?.SetValue(callbackQuery, innerMessage);
-        dataProperty?.SetValue(callbackQuery, data);
-
-        return callbackQuery;
+        return new CallbackQuery
+        {
+            Id = Guid.NewGuid().ToString(),
+            From = new Telegram.Bot.Types.User { Id = userId, Username = "testuser", FirstName = "Test", IsBot = false },
+            Message = innerMessage,
+            Data = data
+        };
     }
 
     public void Dispose()

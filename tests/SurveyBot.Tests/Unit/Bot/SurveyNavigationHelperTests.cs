@@ -81,13 +81,16 @@ public class SurveyNavigationHelperTests : IDisposable
             QuestionType = QuestionType.Text,
             IsRequired = true,
             OrderIndex = 1,
-            Options = new List<QuestionOptionDto>()
+            Options = new List<string>()
         };
 
+        // API returns ApiResponse<QuestionDto> wrapper
         var apiResponse = new
         {
-            IsComplete = false,
-            NextQuestion = nextQuestion
+            Success = true,
+            Data = nextQuestion,
+            Message = (string?)null,
+            Timestamp = DateTime.UtcNow
         };
 
         SetupHttpResponse(
@@ -127,7 +130,8 @@ public class SurveyNavigationHelperTests : IDisposable
             QuestionType = QuestionType.SingleChoice,
             IsRequired = true,
             OrderIndex = 1,
-            Options = new List<QuestionOptionDto>
+            Options = new List<string> { "Option A", "Option B", "Option C" },
+            OptionDetails = new List<QuestionOptionDto>
             {
                 new QuestionOptionDto { Id = 1, Text = "Option A", OrderIndex = 0 },
                 new QuestionOptionDto { Id = 2, Text = "Option B", OrderIndex = 1 },
@@ -135,10 +139,13 @@ public class SurveyNavigationHelperTests : IDisposable
             }
         };
 
+        // API returns ApiResponse<QuestionDto> wrapper
         var apiResponse = new
         {
-            IsComplete = false,
-            NextQuestion = nextQuestion
+            Success = true,
+            Data = nextQuestion,
+            Message = (string?)null,
+            Timestamp = DateTime.UtcNow
         };
 
         SetupHttpResponse(
@@ -158,8 +165,8 @@ public class SurveyNavigationHelperTests : IDisposable
         result.IsComplete.Should().BeFalse();
         result.NextQuestion.Should().NotBeNull();
         result.NextQuestion!.QuestionType.Should().Be(QuestionType.SingleChoice);
-        result.NextQuestion.Options.Should().HaveCount(3);
-        result.NextQuestion.Options[0].Text.Should().Be("Option A");
+        result.NextQuestion.OptionDetails.Should().HaveCount(3);
+        result.NextQuestion.OptionDetails![0].Text.Should().Be("Option A");
     }
 
     #endregion
@@ -174,16 +181,17 @@ public class SurveyNavigationHelperTests : IDisposable
         var currentQuestionId = 5; // Last question
         var answerText = "{\"text\":\"Final answer\"}";
 
-        var apiResponse = new
-        {
-            IsComplete = true,
-            NextQuestion = (QuestionDto?)null
-        };
+        // API returns 204 No Content when survey is complete (no body)
+        var responseMessage = new HttpResponseMessage(HttpStatusCode.NoContent);
 
-        SetupHttpResponse(
-            $"/api/responses/{responseId}/next-question?currentQuestionId={currentQuestionId}",
-            HttpStatusCode.OK,
-            apiResponse);
+        _mockHttpMessageHandler
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.Is<HttpRequestMessage>(req =>
+                    req.RequestUri!.PathAndQuery.Contains($"/api/responses/{responseId}/next-question?currentQuestionId={currentQuestionId}")),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(responseMessage);
 
         // Act
         var result = await _helper.GetNextQuestionAsync(

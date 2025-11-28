@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Microsoft.Extensions.Options;
+using SurveyBot.Bot.Configuration;
 using SurveyBot.Bot.Handlers.Commands;
 using SurveyBot.Bot.Handlers.Questions;
 using SurveyBot.Bot.Interfaces;
@@ -44,16 +46,24 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         _validator = new AnswerValidator(Mock.Of<ILogger<AnswerValidator>>());
         _errorHandler = new QuestionErrorHandler(_fixture.MockBotService.Object, Mock.Of<ILogger<QuestionErrorHandler>>());
 
+        // Create QuestionMediaHelper with mocked dependencies
+        var mediaHelper = new QuestionMediaHelper(
+            Mock.Of<ITelegramMediaService>(),
+            Options.Create(new BotConfiguration { ApiBaseUrl = "http://localhost:5000" }),
+            Mock.Of<ILogger<QuestionMediaHelper>>());
+
         _textHandler = new TextQuestionHandler(
             _fixture.MockBotService.Object,
             _validator,
             _errorHandler,
+            mediaHelper,
             Mock.Of<ILogger<TextQuestionHandler>>());
 
         _singleChoiceHandler = new SingleChoiceQuestionHandler(
             _fixture.MockBotService.Object,
             _validator,
             _errorHandler,
+            mediaHelper,
             Mock.Of<ILogger<SingleChoiceQuestionHandler>>());
 
         // Create mock for IResponseService
@@ -252,15 +262,8 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
     public async Task StartSurvey_InactiveSurvey_SendsErrorMessage()
     {
         // Arrange - Create inactive survey
-        var inactiveSurvey = new Survey
-        {
-            Title = "Inactive Survey",
-            Description = "This is inactive",
-            CreatorId = _fixture.TestUser.Id,
-            IsActive = false,
-            AllowMultipleResponses = false,
-            CreatedAt = DateTime.UtcNow
-        };
+        var inactiveSurvey = EntityBuilder.CreateSurvey("Inactive Survey", "This is inactive", _fixture.TestUser.Id, false);
+        inactiveSurvey.SetAllowMultipleResponses(false);
         await _fixture.DbContext.Surveys.AddAsync(inactiveSurvey);
         await _fixture.DbContext.SaveChangesAsync();
 
@@ -287,27 +290,14 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
     public async Task StartSurvey_DuplicateResponse_SendsErrorWhenNotAllowed()
     {
         // Arrange - Create survey that doesn't allow multiple responses
-        var singleResponseSurvey = new Survey
-        {
-            Title = "Single Response Survey",
-            Description = "Only one response allowed",
-            CreatorId = _fixture.TestUser.Id,
-            IsActive = true,
-            AllowMultipleResponses = false,
-            CreatedAt = DateTime.UtcNow
-        };
+        var singleResponseSurvey = EntityBuilder.CreateSurvey("Single Response Survey", "Only one response allowed", _fixture.TestUser.Id, true);
+        singleResponseSurvey.SetAllowMultipleResponses(false);
         await _fixture.DbContext.Surveys.AddAsync(singleResponseSurvey);
         await _fixture.DbContext.SaveChangesAsync();
 
         // Create completed response
-        var existingResponse = new Response
-        {
-            SurveyId = singleResponseSurvey.Id,
-            RespondentTelegramId = TestUserId + 7,
-            IsComplete = true,
-            StartedAt = DateTime.UtcNow.AddHours(-1),
-            SubmittedAt = DateTime.UtcNow
-        };
+        var existingResponse = EntityBuilder.CreateResponse(singleResponseSurvey.Id, TestUserId + 7, true);
+        existingResponse.MarkAsComplete();
         await _fixture.DbContext.Responses.AddAsync(existingResponse);
         await _fixture.DbContext.SaveChangesAsync();
 

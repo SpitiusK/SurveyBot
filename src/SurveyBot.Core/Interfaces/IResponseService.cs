@@ -33,6 +33,7 @@ public interface IResponseService
     /// <param name="selectedOptions">The selected options (for SingleChoice/MultipleChoice questions).</param>
     /// <param name="ratingValue">The rating value (for Rating questions).</param>
     /// <param name="userId">The ID of the user making the request (for authorization).</param>
+    /// <param name="answerJson">The JSON answer (for Location questions).</param>
     /// <returns>The updated response DTO.</returns>
     /// <exception cref="Exceptions.ResponseNotFoundException">Thrown when the response is not found.</exception>
     /// <exception cref="Exceptions.QuestionNotFoundException">Thrown when the question is not found.</exception>
@@ -44,7 +45,8 @@ public interface IResponseService
         string? answerText = null,
         List<string>? selectedOptions = null,
         int? ratingValue = null,
-        int? userId = null);
+        int? userId = null,
+        string? answerJson = null);
 
     /// <summary>
     /// Marks a response as completed with the current timestamp.
@@ -96,13 +98,15 @@ public interface IResponseService
     /// <param name="answerText">The text answer (for Text questions).</param>
     /// <param name="selectedOptions">The selected options (for SingleChoice/MultipleChoice questions).</param>
     /// <param name="ratingValue">The rating value (for Rating questions).</param>
+    /// <param name="answerJson">The JSON answer (for Location questions).</param>
     /// <returns>A validation result indicating success or failure with error message.</returns>
     /// <exception cref="Exceptions.QuestionNotFoundException">Thrown when the question is not found.</exception>
     Task<ValidationResult> ValidateAnswerFormatAsync(
         int questionId,
         string? answerText = null,
         List<string>? selectedOptions = null,
-        int? ratingValue = null);
+        int? ratingValue = null,
+        string? answerJson = null);
 
     /// <summary>
     /// Resumes an incomplete response for a user and survey.

@@ -113,8 +113,8 @@ public class ResponseRepository : GenericRepository<Response>, IResponseReposito
             return false;
         }
 
-        response.IsComplete = true;
-        response.SubmittedAt = DateTime.UtcNow;
+        response.SetIsComplete(true);
+        response.SetSubmittedAt(DateTime.UtcNow);
 
         await _context.SaveChangesAsync();
 

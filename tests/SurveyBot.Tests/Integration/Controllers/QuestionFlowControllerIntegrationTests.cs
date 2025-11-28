@@ -9,6 +9,7 @@ using SurveyBot.Core.DTOs.Auth;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.DTOs.Survey;
 using SurveyBot.Core.Entities;
+using SurveyBot.Core.ValueObjects;
 using SurveyBot.Tests.Fixtures;
 
 namespace SurveyBot.Tests.Integration.Controllers;
@@ -69,74 +70,59 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
             surveyId = survey.Id;
 
             // Create branching SingleChoice question (Q1)
-            var q1 = new Question
-            {
-                SurveyId = survey.Id,
-                QuestionText = "Do you like this feature?",
-                QuestionType = QuestionType.SingleChoice,
-                OrderIndex = 0,
-                IsRequired = true,
-                OptionsJson = "[\"Yes\", \"No\"]"
-            };
+            var q1 = Question.CreateSingleChoiceQuestion(
+                surveyId: survey.Id,
+                questionText: "Do you like this feature?",
+                orderIndex: 0,
+                optionsJson: "[\"Yes\", \"No\"]",
+                isRequired: true);
             db.Questions.Add(q1);
             db.SaveChanges();
             q1Id = q1.Id;
 
             // Create follow-up question for "Yes" (Q2)
-            var q2 = new Question
-            {
-                SurveyId = survey.Id,
-                QuestionText = "What do you like most?",
-                QuestionType = QuestionType.Text,
-                OrderIndex = 1,
-                IsRequired = true
-            };
+            var q2 = Question.CreateTextQuestion(
+                surveyId: survey.Id,
+                questionText: "What do you like most?",
+                orderIndex: 1,
+                isRequired: true);
             db.Questions.Add(q2);
             db.SaveChanges();
             q2Id = q2.Id;
 
             // Create follow-up question for "No" (Q3)
-            var q3 = new Question
-            {
-                SurveyId = survey.Id,
-                QuestionText = "What would you improve?",
-                QuestionType = QuestionType.Text,
-                OrderIndex = 2,
-                IsRequired = true
-            };
+            var q3 = Question.CreateTextQuestion(
+                surveyId: survey.Id,
+                questionText: "What would you improve?",
+                orderIndex: 2,
+                isRequired: true);
             db.Questions.Add(q3);
             db.SaveChanges();
             q3Id = q3.Id;
 
             // Create final question (Q4)
-            var q4 = new Question
-            {
-                SurveyId = survey.Id,
-                QuestionText = "Any additional comments?",
-                QuestionType = QuestionType.Text,
-                OrderIndex = 3,
-                IsRequired = false,
-                DefaultNextQuestionId = null // End of survey
-            };
+            var q4 = Question.CreateTextQuestion(
+                surveyId: survey.Id,
+                questionText: "Any additional comments?",
+                orderIndex: 3,
+                isRequired: false);
             db.Questions.Add(q4);
             db.SaveChanges();
             q4Id = q4.Id;
 
             // Set up question options with flow
-            var option1 = new QuestionOption
-            {
-                QuestionId = q1.Id,
-                Text = "Yes",
-                OrderIndex = 0,
-                NextQuestionId = q2.Id
-            };
-            var option2 = new QuestionOption
-            {
-                QuestionId = q1.Id,
-                Text = "No",
-                OrderIndex = 1,
-                NextQuestionId = q3.Id
-            };
+            var option1 = QuestionOption.Create(
+                questionId: q1.Id,
+                text: "Yes",
+                orderIndex: 0,
+                next: NextQuestionDeterminant.ToQuestion(q2.Id));
+
+            var option2 = QuestionOption.Create(
+                questionId: q1.Id,
+                text: "No",
+                orderIndex: 1,
+                next: NextQuestionDeterminant.ToQuestion(q3.Id));
+
             db.QuestionOptions.Add(option1);
             db.QuestionOptions.Add(option2);
             db.SaveChanges();
@@ -167,34 +153,28 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
             surveyId = survey.Id;
 
             // Q1 -> Q2
-            var q1 = new Question
-            {
-                SurveyId = survey.Id,
-                QuestionText = "Question 1",
-                QuestionType = QuestionType.Text,
-                OrderIndex = 0,
-                IsRequired = true
-            };
+            var q1 = Question.CreateTextQuestion(
+                surveyId: survey.Id,
+                questionText: "Question 1",
+                orderIndex: 0,
+                isRequired: true);
             db.Questions.Add(q1);
             db.SaveChanges();
             q1Id = q1.Id;
 
             // Q2 -> Q1 (creates cycle)
-            var q2 = new Question
-            {
-                SurveyId = survey.Id,
-                QuestionText = "Question 2",
-                QuestionType = QuestionType.Text,
-                OrderIndex = 1,
-                IsRequired = true,
-                DefaultNextQuestionId = q1.Id // Points back to Q1
-            };
+            var q2 = Question.CreateTextQuestion(
+                surveyId: survey.Id,
+                questionText: "Question 2",
+                orderIndex: 1,
+                isRequired: true);
             db.Questions.Add(q2);
             db.SaveChanges();
             q2Id = q2.Id;
 
-            // Update Q1 to point to Q2
-            q1.DefaultNextQuestionId = q2.Id;
+            // Update Q1 to point to Q2, and Q2 to point to Q1 (creates cycle)
+            q1.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q2.Id));
+            q2.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q1.Id)); // Points back to Q1
             db.SaveChanges();
         });
 
@@ -287,10 +267,10 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         // Update branching flow: Option 0 -> Q2, Option 1 -> Q4 (skip Q3)
         var updateDto = new UpdateQuestionFlowDto
         {
-            OptionNextQuestions = new Dictionary<int, int>
+            OptionNextDeterminants = new Dictionary<int, NextQuestionDeterminantDto>
             {
-                { 0, q2Id }, // "Yes" -> Q2
-                { 1, q4Id }  // "No" -> Q4 (changed from Q3)
+                { 0, NextQuestionDeterminantDto.ToQuestion(q2Id) }, // "Yes" -> Q2
+                { 1, NextQuestionDeterminantDto.ToQuestion(q4Id) }  // "No" -> Q4 (changed from Q3)
             }
         };
 
@@ -311,11 +291,11 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         // Verify option flows updated
         var option1Flow = content.Data.OptionFlows.FirstOrDefault(o => o.OptionId == 0);
         option1Flow.Should().NotBeNull();
-        option1Flow!.NextQuestionId.Should().Be(q2Id);
+        option1Flow!.Next.NextQuestionId.Should().Be(q2Id);
 
         var option2Flow = content.Data.OptionFlows.FirstOrDefault(o => o.OptionId == 1);
         option2Flow.Should().NotBeNull();
-        option2Flow!.NextQuestionId.Should().Be(q4Id); // Changed
+        option2Flow!.Next.NextQuestionId.Should().Be(q4Id); // Changed
     }
 
     [Fact]
@@ -331,7 +311,7 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         // Update non-branching text question (Q2) to point to Q4
         var updateDto = new UpdateQuestionFlowDto
         {
-            DefaultNextQuestionId = q4Id // Skip Q3
+            DefaultNext = NextQuestionDeterminantDto.ToQuestion(q4Id) // Skip Q3
         };
 
         // Act
@@ -346,7 +326,8 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         content.Should().NotBeNull();
         content!.Success.Should().BeTrue();
         content.Data.Should().NotBeNull();
-        content.Data!.DefaultNextQuestionId.Should().Be(q4Id);
+        content.Data!.DefaultNext.Should().NotBeNull();
+        content.Data.DefaultNext!.NextQuestionId.Should().Be(q4Id);
     }
 
     [Fact]
@@ -362,7 +343,7 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         // Create cycle: Q2 -> Q1 (Q1 already points to Q2 via branching)
         var updateDto = new UpdateQuestionFlowDto
         {
-            DefaultNextQuestionId = q1Id // Points back to Q1
+            DefaultNext = NextQuestionDeterminantDto.ToQuestion(q1Id) // Points back to Q1
         };
 
         // Act
@@ -466,13 +447,7 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         // Seed a response
         _factory.SeedDatabase(db =>
         {
-            var response = new Response
-            {
-                SurveyId = surveyId,
-                RespondentTelegramId = 987654321,
-                IsComplete = false,
-                StartedAt = DateTime.UtcNow
-            };
+            var response = Response.Start(surveyId: surveyId, respondentTelegramId: 987654321);
             db.Responses.Add(response);
             db.SaveChanges();
             responseId = response.Id;
@@ -506,37 +481,32 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         // Seed a completed response with all answers
         _factory.SeedDatabase(db =>
         {
-            var response = new Response
-            {
-                SurveyId = surveyId,
-                RespondentTelegramId = 987654321,
-                IsComplete = true,
-                StartedAt = DateTime.UtcNow,
-                SubmittedAt = DateTime.UtcNow
-            };
+            var response = Response.Start(surveyId: surveyId, respondentTelegramId: 987654321);
+            response.SetIsComplete(true);
+            response.SetSubmittedAt(DateTime.UtcNow);
             db.Responses.Add(response);
             db.SaveChanges();
             responseId = response.Id;
 
             // Add answers to all questions
-            db.Answers.Add(new Answer
-            {
-                ResponseId = response.Id,
-                QuestionId = q1Id,
-                AnswerJson = "{\"selectedOption\": \"Yes\"}"
-            });
-            db.Answers.Add(new Answer
-            {
-                ResponseId = response.Id,
-                QuestionId = q2Id,
-                AnswerText = "Great feature!"
-            });
-            db.Answers.Add(new Answer
-            {
-                ResponseId = response.Id,
-                QuestionId = q4Id,
-                AnswerText = "No additional comments"
-            });
+            var answer1 = Answer.CreateJsonAnswer(
+                responseId: response.Id,
+                questionId: q1Id,
+                answerJson: "{\"selectedOption\": \"Yes\"}");
+            db.Answers.Add(answer1);
+
+            var answer2 = Answer.CreateTextAnswer(
+                responseId: response.Id,
+                questionId: q2Id,
+                answerText: "Great feature!");
+            db.Answers.Add(answer2);
+
+            var answer3 = Answer.CreateTextAnswer(
+                responseId: response.Id,
+                questionId: q4Id,
+                answerText: "No additional comments");
+            db.Answers.Add(answer3);
+
             db.SaveChanges();
         });
 

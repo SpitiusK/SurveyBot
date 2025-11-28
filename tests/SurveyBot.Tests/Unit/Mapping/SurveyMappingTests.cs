@@ -18,6 +18,10 @@ public class SurveyMappingTests
         var config = new MapperConfiguration(cfg =>
         {
             cfg.AddProfile<SurveyMappingProfile>();
+            cfg.AddProfile<QuestionMappingProfile>();
+            cfg.AddProfile<ResponseMappingProfile>();
+            cfg.AddProfile<AnswerMappingProfile>();
+            cfg.AddProfile<UserMappingProfile>();
         });
         _mapper = config.CreateMapper();
     }
@@ -29,6 +33,10 @@ public class SurveyMappingTests
         var config = new MapperConfiguration(cfg =>
         {
             cfg.AddProfile<SurveyMappingProfile>();
+            cfg.AddProfile<QuestionMappingProfile>();
+            cfg.AddProfile<ResponseMappingProfile>();
+            cfg.AddProfile<AnswerMappingProfile>();
+            cfg.AddProfile<UserMappingProfile>();
         });
         config.AssertConfigurationIsValid();
     }
@@ -37,29 +45,37 @@ public class SurveyMappingTests
     public void Map_Survey_To_SurveyDto_Success()
     {
         // Arrange
-        var survey = new Survey
-        {
-            Id = 1,
-            Title = "Customer Satisfaction Survey",
-            Description = "Please rate our service",
-            CreatorId = 100,
-            IsActive = true,
-            AllowMultipleResponses = false,
-            ShowResults = true,
-            CreatedAt = DateTime.UtcNow.AddDays(-10),
-            UpdatedAt = DateTime.UtcNow,
-            Questions = new List<Question>
-            {
-                new Question { Id = 1, QuestionText = "How satisfied are you?" },
-                new Question { Id = 2, QuestionText = "Would you recommend us?" }
-            },
-            Responses = new List<Response>
-            {
-                new Response { Id = 1, IsComplete = true },
-                new Response { Id = 2, IsComplete = false },
-                new Response { Id = 3, IsComplete = true }
-            }
-        };
+        var survey = Survey.Create(
+            title: "Customer Satisfaction Survey",
+            creatorId: 100,
+            description: "Please rate our service",
+            code: null,
+            isActive: true,
+            allowMultipleResponses: false,
+            showResults: true);
+        survey.SetId(1);
+
+        var question1 = Question.CreateTextQuestion(1, "How satisfied are you?", 0, true);
+        question1.SetId(1);
+
+        var question2 = Question.CreateTextQuestion(1, "Would you recommend us?", 1, true);
+        question2.SetId(2);
+
+        survey.AddQuestionInternal(question1);
+        survey.AddQuestionInternal(question2);
+
+        var response1 = Response.Create(1, 123456, DateTime.UtcNow, true, DateTime.UtcNow);
+        response1.SetId(1);
+
+        var response2 = Response.Create(1, 234567, DateTime.UtcNow, false, null);
+        response2.SetId(2);
+
+        var response3 = Response.Create(1, 345678, DateTime.UtcNow, true, DateTime.UtcNow);
+        response3.SetId(3);
+
+        survey.AddResponseInternal(response1);
+        survey.AddResponseInternal(response2);
+        survey.AddResponseInternal(response3);
 
         // Act
         var dto = _mapper.Map<SurveyDto>(survey);
@@ -82,26 +98,37 @@ public class SurveyMappingTests
     public void Map_Survey_To_SurveyListDto_Success()
     {
         // Arrange
-        var survey = new Survey
-        {
-            Id = 1,
-            Title = "Product Feedback",
-            Description = "Help us improve",
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow.AddDays(-5),
-            UpdatedAt = DateTime.UtcNow,
-            Questions = new List<Question>
-            {
-                new Question { Id = 1 },
-                new Question { Id = 2 },
-                new Question { Id = 3 }
-            },
-            Responses = new List<Response>
-            {
-                new Response { Id = 1, IsComplete = true },
-                new Response { Id = 2, IsComplete = true }
-            }
-        };
+        var survey = Survey.Create(
+            title: "Product Feedback",
+            creatorId: 1,
+            description: "Help us improve",
+            code: null,
+            isActive: true,
+            allowMultipleResponses: false,
+            showResults: true);
+        survey.SetId(1);
+
+        var question1 = Question.CreateTextQuestion(1, "Question 1", 0, true);
+        question1.SetId(1);
+
+        var question2 = Question.CreateTextQuestion(1, "Question 2", 1, true);
+        question2.SetId(2);
+
+        var question3 = Question.CreateTextQuestion(1, "Question 3", 2, true);
+        question3.SetId(3);
+
+        survey.AddQuestionInternal(question1);
+        survey.AddQuestionInternal(question2);
+        survey.AddQuestionInternal(question3);
+
+        var response1 = Response.Create(1, 123456, DateTime.UtcNow, true, DateTime.UtcNow);
+        response1.SetId(1);
+
+        var response2 = Response.Create(1, 234567, DateTime.UtcNow, true, DateTime.UtcNow);
+        response2.SetId(2);
+
+        survey.AddResponseInternal(response1);
+        survey.AddResponseInternal(response2);
 
         // Act
         var dto = _mapper.Map<SurveyListDto>(survey);
@@ -168,13 +195,15 @@ public class SurveyMappingTests
     public void Map_Survey_With_No_Responses_Success()
     {
         // Arrange
-        var survey = new Survey
-        {
-            Id = 1,
-            Title = "New Survey",
-            IsActive = true,
-            Responses = new List<Response>()
-        };
+        var survey = Survey.Create(
+            title: "New Survey",
+            creatorId: 1,
+            description: null,
+            code: null,
+            isActive: true,
+            allowMultipleResponses: false,
+            showResults: true);
+        survey.SetId(1);
 
         // Act
         var dto = _mapper.Map<SurveyDto>(survey);

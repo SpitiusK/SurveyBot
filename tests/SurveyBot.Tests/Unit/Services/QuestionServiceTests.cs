@@ -6,6 +6,7 @@ using SurveyBot.Core.Entities;
 using SurveyBot.Core.Exceptions;
 using SurveyBot.Core.Interfaces;
 using SurveyBot.Infrastructure.Services;
+using SurveyBot.Tests.Fixtures;
 using Xunit;
 
 namespace SurveyBot.Tests.Unit.Services;
@@ -51,16 +52,16 @@ public class QuestionServiceTests
             Options = null
         };
 
-        var survey = CreateTestSurvey(surveyId, userId);
-        var question = new Question
-        {
-            Id = 1,
-            SurveyId = surveyId,
-            QuestionText = dto.QuestionText,
-            QuestionType = dto.QuestionType,
-            IsRequired = dto.IsRequired,
-            OrderIndex = 0
-        };
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(surveyId);
+
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: surveyId,
+            questionText: dto.QuestionText,
+            questionType: dto.QuestionType,
+            orderIndex: 0,
+            isRequired: dto.IsRequired);
+        question.SetId(1);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId))
             .ReturnsAsync(survey);
@@ -98,17 +99,17 @@ public class QuestionServiceTests
             Options = new List<string> { "Red", "Blue", "Green" }
         };
 
-        var survey = CreateTestSurvey(surveyId, userId);
-        var question = new Question
-        {
-            Id = 1,
-            SurveyId = surveyId,
-            QuestionText = dto.QuestionText,
-            QuestionType = dto.QuestionType,
-            IsRequired = dto.IsRequired,
-            OrderIndex = 0,
-            OptionsJson = "[\"Red\",\"Blue\",\"Green\"]"
-        };
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(surveyId);
+
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: surveyId,
+            questionText: dto.QuestionText,
+            questionType: dto.QuestionType,
+            orderIndex: 0,
+            isRequired: dto.IsRequired);
+        question.SetId(1);
+        question.SetOptionsJson("[\"Red\",\"Blue\",\"Green\"]");
 
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId))
             .ReturnsAsync(survey);
@@ -146,16 +147,16 @@ public class QuestionServiceTests
             Options = null
         };
 
-        var survey = CreateTestSurvey(surveyId, userId);
-        var question = new Question
-        {
-            Id = 1,
-            SurveyId = surveyId,
-            QuestionText = dto.QuestionText,
-            QuestionType = dto.QuestionType,
-            IsRequired = dto.IsRequired,
-            OrderIndex = 0
-        };
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(surveyId);
+
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: surveyId,
+            questionText: dto.QuestionText,
+            questionType: dto.QuestionType,
+            orderIndex: 0,
+            isRequired: dto.IsRequired);
+        question.SetId(1);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId))
             .ReturnsAsync(survey);
@@ -212,7 +213,8 @@ public class QuestionServiceTests
             IsRequired = true
         };
 
-        var survey = CreateTestSurvey(surveyId, 1); // Owned by user 1
+        var survey = EntityBuilder.CreateSurvey(creatorId: 1); // Owned by user 1
+        survey.SetId(surveyId);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId))
             .ReturnsAsync(survey);
@@ -235,7 +237,8 @@ public class QuestionServiceTests
             IsRequired = true
         };
 
-        var survey = CreateTestSurvey(surveyId, userId);
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(surveyId);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId))
             .ReturnsAsync(survey);
@@ -261,7 +264,8 @@ public class QuestionServiceTests
             Options = null
         };
 
-        var survey = CreateTestSurvey(surveyId, userId);
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(surveyId);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId))
             .ReturnsAsync(survey);
@@ -287,7 +291,8 @@ public class QuestionServiceTests
             Options = new List<string> { "Option1", "Option2" }
         };
 
-        var survey = CreateTestSurvey(surveyId, userId);
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(surveyId);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId))
             .ReturnsAsync(survey);
@@ -316,23 +321,25 @@ public class QuestionServiceTests
             IsRequired = false
         };
 
-        var question = new Question
-        {
-            Id = questionId,
-            SurveyId = 1,
-            QuestionText = "Old question text",
-            QuestionType = QuestionType.Text,
-            IsRequired = true
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Old question text",
+            questionType: QuestionType.Text,
+            isRequired: true);
+        question.SetId(questionId);
 
-        var survey = CreateTestSurvey(1, userId);
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(1);
+
+        var questionWithAnswers = EntityBuilder.CreateQuestion(surveyId: 1);
+        questionWithAnswers.SetId(questionId);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId))
             .ReturnsAsync(question);
         _surveyRepositoryMock.Setup(r => r.GetByIdAsync(1))
             .ReturnsAsync(survey);
         _questionRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(questionId))
-            .ReturnsAsync(new Question { Id = questionId, Answers = new List<Answer>() });
+            .ReturnsAsync(questionWithAnswers);
         _questionRepositoryMock.Setup(r => r.UpdateAsync(It.IsAny<Question>()))
             .ReturnsAsync((Question q) => q);
 
@@ -381,21 +388,20 @@ public class QuestionServiceTests
             IsRequired = true
         };
 
-        var question = new Question
-        {
-            Id = questionId,
-            SurveyId = 1,
-            QuestionText = "Old question",
-            QuestionType = QuestionType.Text
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Old question",
+            questionType: QuestionType.Text);
+        question.SetId(questionId);
 
-        var survey = CreateTestSurvey(1, userId);
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(1);
 
-        var questionWithAnswers = new Question
-        {
-            Id = questionId,
-            Answers = new List<Answer> { new Answer { Id = 1 } }
-        };
+        var questionWithAnswers = EntityBuilder.CreateQuestion(surveyId: 1);
+        questionWithAnswers.SetId(questionId);
+        var answer = EntityBuilder.CreateAnswer(questionId: questionId);
+        answer.SetId(1);
+        questionWithAnswers.AddAnswerInternal(answer);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId))
             .ReturnsAsync(question);
@@ -420,22 +426,24 @@ public class QuestionServiceTests
         var questionId = 1;
         var userId = 1;
 
-        var question = new Question
-        {
-            Id = questionId,
-            SurveyId = 1,
-            QuestionText = "Test question",
-            QuestionType = QuestionType.Text
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Test question",
+            questionType: QuestionType.Text);
+        question.SetId(questionId);
 
-        var survey = CreateTestSurvey(1, userId);
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(1);
+
+        var questionWithAnswers = EntityBuilder.CreateQuestion(surveyId: 1);
+        questionWithAnswers.SetId(questionId);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId))
             .ReturnsAsync(question);
         _surveyRepositoryMock.Setup(r => r.GetByIdAsync(1))
             .ReturnsAsync(survey);
         _questionRepositoryMock.Setup(r => r.GetByIdWithAnswersAsync(questionId))
-            .ReturnsAsync(new Question { Id = questionId, Answers = new List<Answer>() });
+            .ReturnsAsync(questionWithAnswers);
         _questionRepositoryMock.Setup(r => r.DeleteAsync(questionId))
             .ReturnsAsync(true);
 
@@ -469,21 +477,20 @@ public class QuestionServiceTests
         var questionId = 1;
         var userId = 1;
 
-        var question = new Question
-        {
-            Id = questionId,
-            SurveyId = 1,
-            QuestionText = "Test question",
-            QuestionType = QuestionType.Text
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Test question",
+            questionType: QuestionType.Text);
+        question.SetId(questionId);
 
-        var survey = CreateTestSurvey(1, userId);
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(1);
 
-        var questionWithAnswers = new Question
-        {
-            Id = questionId,
-            Answers = new List<Answer> { new Answer { Id = 1 } }
-        };
+        var questionWithAnswers = EntityBuilder.CreateQuestion(surveyId: 1);
+        questionWithAnswers.SetId(questionId);
+        var answer = EntityBuilder.CreateAnswer(questionId: questionId);
+        answer.SetId(1);
+        questionWithAnswers.AddAnswerInternal(answer);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId))
             .ReturnsAsync(question);
@@ -506,17 +513,13 @@ public class QuestionServiceTests
     {
         // Arrange
         var questionId = 1;
-        var question = new Question
-        {
-            Id = questionId,
-            SurveyId = 1,
-            QuestionText = "Test question",
-            QuestionType = QuestionType.Text,
-            OrderIndex = 0,
-            IsRequired = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: 1,
+            questionText: "Test question",
+            questionType: QuestionType.Text,
+            orderIndex: 0,
+            isRequired: true);
+        question.SetId(questionId);
 
         _questionRepositoryMock.Setup(r => r.GetByIdAsync(questionId))
             .ReturnsAsync(question);
@@ -553,12 +556,17 @@ public class QuestionServiceTests
     {
         // Arrange
         var surveyId = 1;
-        var questions = new List<Question>
-        {
-            new Question { Id = 1, SurveyId = surveyId, QuestionText = "Q1", OrderIndex = 0, QuestionType = QuestionType.Text },
-            new Question { Id = 2, SurveyId = surveyId, QuestionText = "Q2", OrderIndex = 1, QuestionType = QuestionType.Text },
-            new Question { Id = 3, SurveyId = surveyId, QuestionText = "Q3", OrderIndex = 2, QuestionType = QuestionType.Text }
-        };
+
+        var q1 = EntityBuilder.CreateQuestion(surveyId: surveyId, questionText: "Q1", orderIndex: 0);
+        q1.SetId(1);
+
+        var q2 = EntityBuilder.CreateQuestion(surveyId: surveyId, questionText: "Q2", orderIndex: 1);
+        q2.SetId(2);
+
+        var q3 = EntityBuilder.CreateQuestion(surveyId: surveyId, questionText: "Q3", orderIndex: 2);
+        q3.SetId(3);
+
+        var questions = new List<Question> { q1, q2, q3 };
 
         _questionRepositoryMock.Setup(r => r.GetBySurveyIdAsync(surveyId))
             .ReturnsAsync(questions);
@@ -586,13 +594,21 @@ public class QuestionServiceTests
         var userId = 1;
         var questionIds = new int[] { 3, 1, 2 };
 
-        var survey = CreateTestSurvey(surveyId, userId);
-        survey.Questions = new List<Question>
-        {
-            new Question { Id = 1, SurveyId = surveyId, OrderIndex = 0 },
-            new Question { Id = 2, SurveyId = surveyId, OrderIndex = 1 },
-            new Question { Id = 3, SurveyId = surveyId, OrderIndex = 2 }
-        };
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(surveyId);
+
+        var q1 = EntityBuilder.CreateQuestion(surveyId: surveyId, orderIndex: 0);
+        q1.SetId(1);
+
+        var q2 = EntityBuilder.CreateQuestion(surveyId: surveyId, orderIndex: 1);
+        q2.SetId(2);
+
+        var q3 = EntityBuilder.CreateQuestion(surveyId: surveyId, orderIndex: 2);
+        q3.SetId(3);
+
+        survey.AddQuestionInternal(q1);
+        survey.AddQuestionInternal(q2);
+        survey.AddQuestionInternal(q3);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId))
             .ReturnsAsync(survey);
@@ -617,12 +633,17 @@ public class QuestionServiceTests
         var userId = 1;
         var questionIds = new int[] { 1, 2, 999 }; // 999 doesn't belong to survey
 
-        var survey = CreateTestSurvey(surveyId, userId);
-        survey.Questions = new List<Question>
-        {
-            new Question { Id = 1, SurveyId = surveyId, OrderIndex = 0 },
-            new Question { Id = 2, SurveyId = surveyId, OrderIndex = 1 }
-        };
+        var survey = EntityBuilder.CreateSurvey(creatorId: userId);
+        survey.SetId(surveyId);
+
+        var q1 = EntityBuilder.CreateQuestion(surveyId: surveyId, orderIndex: 0);
+        q1.SetId(1);
+
+        var q2 = EntityBuilder.CreateQuestion(surveyId: surveyId, orderIndex: 1);
+        q2.SetId(2);
+
+        survey.AddQuestionInternal(q1);
+        survey.AddQuestionInternal(q2);
 
         _surveyRepositoryMock.Setup(r => r.GetByIdWithQuestionsAsync(surveyId))
             .ReturnsAsync(survey);
@@ -764,23 +785,6 @@ public class QuestionServiceTests
         Assert.False((bool)result["requiresOptions"]);
         Assert.Equal(1, result["minRating"]);
         Assert.Equal(5, result["maxRating"]);
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    private Survey CreateTestSurvey(int id, int creatorId)
-    {
-        return new Survey
-        {
-            Id = id,
-            Title = "Test Survey",
-            Description = "Test Description",
-            CreatorId = creatorId,
-            IsActive = true,
-            Questions = new List<Question>()
-        };
     }
 
     #endregion

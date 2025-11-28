@@ -78,6 +78,10 @@ public class ResponseConfiguration : IEntityTypeConfiguration<Response>
             .HasDatabaseName("idx_responses_visited_question_ids")
             .HasMethod("gin");
 
+        // Configure backing field for Answers collection
+        builder.Navigation(r => r.Answers)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
         // Relationships
         builder.HasOne(r => r.Survey)
             .WithMany(s => s.Responses)

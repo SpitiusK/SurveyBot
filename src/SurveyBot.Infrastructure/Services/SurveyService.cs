@@ -8,6 +8,7 @@ using SurveyBot.Core.Entities;
 using SurveyBot.Core.Exceptions;
 using SurveyBot.Core.Interfaces;
 using SurveyBot.Core.Utilities;
+using SurveyBot.Core.ValueObjects.Answers;
 using System.Text.Json;
 
 namespace SurveyBot.Infrastructure.Services;
@@ -53,12 +54,13 @@ public class SurveyService : ISurveyService
 
         // Create survey entity
         var survey = _mapper.Map<Survey>(dto);
-        survey.CreatorId = userId;
-        survey.IsActive = false; // Always create as inactive, user must explicitly activate
+        survey.SetCreatorId(userId);
+        survey.SetIsActive(false); // Always create as inactive, user must explicitly activate
 
         // Generate unique survey code
-        survey.Code = await SurveyCodeGenerator.GenerateUniqueCodeAsync(
+        var code = await SurveyCodeGenerator.GenerateUniqueCodeAsync(
             _surveyRepository.CodeExistsAsync);
+        survey.SetCode(code);
 
         _logger.LogInformation("Generated unique code {Code} for survey", survey.Code);
 
@@ -106,11 +108,10 @@ public class SurveyService : ISurveyService
         }
 
         // Update survey properties
-        survey.Title = dto.Title;
-        survey.Description = dto.Description;
-        survey.AllowMultipleResponses = dto.AllowMultipleResponses;
-        survey.ShowResults = dto.ShowResults;
-        survey.UpdatedAt = DateTime.UtcNow;
+        survey.SetTitle(dto.Title);
+        survey.SetDescription(dto.Description);
+        survey.SetAllowMultipleResponses(dto.AllowMultipleResponses);
+        survey.SetShowResults(dto.ShowResults);
 
         // Save changes
         await _surveyRepository.UpdateAsync(survey);
@@ -297,8 +298,7 @@ public class SurveyService : ISurveyService
         }
 
         // Activate survey
-        survey.IsActive = true;
-        survey.UpdatedAt = DateTime.UtcNow;
+        survey.Activate();
 
         await _surveyRepository.UpdateAsync(survey);
 
@@ -340,8 +340,7 @@ public class SurveyService : ISurveyService
         }
 
         // Deactivate survey
-        survey.IsActive = false;
-        survey.UpdatedAt = DateTime.UtcNow;
+        survey.Deactivate();
 
         await _surveyRepository.UpdateAsync(survey);
 
@@ -596,51 +595,67 @@ public class SurveyService : ISurveyService
                 choiceCounts[option] = 0;
             }
 
-            // Count selections
+            // Count selections using answer.Value pattern matching (no JSON parsing!)
             foreach (var answer in answers)
             {
-                if (string.IsNullOrWhiteSpace(answer.AnswerJson)) continue;
-
-                try
+                switch (answer.Value)
                 {
-                    // Parse answer JSON
-                    // Single choice format: {"selectedOption": "Option 2"}
-                    // Multiple choice format: {"selectedOptions": ["Option 1", "Option 3"]}
-                    var answerData = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
-
-                    // Try to get selectedOptions (multiple choice)
-                    if (answerData.TryGetProperty("selectedOptions", out var selectedOptionsElement) &&
-                        selectedOptionsElement.ValueKind == JsonValueKind.Array)
-                    {
-                        // Multiple choice
-                        foreach (var item in selectedOptionsElement.EnumerateArray())
+                    case SingleChoiceAnswerValue singleChoice:
+                        if (choiceCounts.ContainsKey(singleChoice.SelectedOption))
                         {
-                            var choice = item.GetString();
-                            if (choice != null && choiceCounts.ContainsKey(choice))
+                            choiceCounts[singleChoice.SelectedOption]++;
+                        }
+                        break;
+
+                    case MultipleChoiceAnswerValue multipleChoice:
+                        foreach (var selectedOption in multipleChoice.SelectedOptions)
+                        {
+                            if (choiceCounts.ContainsKey(selectedOption))
                             {
-                                choiceCounts[choice]++;
+                                choiceCounts[selectedOption]++;
                             }
                         }
-                    }
-                    // Try to get selectedOption (single choice)
-                    else if (answerData.TryGetProperty("selectedOption", out var selectedOptionElement))
-                    {
-                        // Single choice
-                        var choice = selectedOptionElement.GetString();
-                        if (choice != null && choiceCounts.ContainsKey(choice))
+                        break;
+
+                    case null:
+                        // Legacy fallback: try to parse AnswerJson
+                        if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
                         {
-                            choiceCounts[choice]++;
+                            try
+                            {
+                                var answerData = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+                                if (answerData.TryGetProperty("selectedOptions", out var selectedOptionsElement) &&
+                                    selectedOptionsElement.ValueKind == JsonValueKind.Array)
+                                {
+                                    foreach (var item in selectedOptionsElement.EnumerateArray())
+                                    {
+                                        var choice = item.GetString();
+                                        if (choice != null && choiceCounts.ContainsKey(choice))
+                                        {
+                                            choiceCounts[choice]++;
+                                        }
+                                    }
+                                }
+                                else if (answerData.TryGetProperty("selectedOption", out var selectedOptionElement))
+                                {
+                                    var choice = selectedOptionElement.GetString();
+                                    if (choice != null && choiceCounts.ContainsKey(choice))
+                                    {
+                                        choiceCounts[choice]++;
+                                    }
+                                }
+                            }
+                            catch (JsonException ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to parse legacy answer JSON for answer {AnswerId}", answer.Id);
+                            }
                         }
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Answer {AnswerId} has unexpected JSON format: {Json}",
-                            answer.Id, answer.AnswerJson);
-                    }
-                }
-                catch (JsonException ex)
-                {
-                    _logger.LogWarning(ex, "Failed to parse answer JSON for answer {AnswerId}", answer.Id);
+                        break;
+
+                    default:
+                        _logger.LogWarning("Answer {AnswerId} has unexpected Value type: {Type}",
+                            answer.Id, answer.Value?.GetType().Name);
+                        break;
                 }
             }
 
@@ -675,26 +690,40 @@ public class SurveyService : ISurveyService
 
         foreach (var answer in answers)
         {
-            if (string.IsNullOrWhiteSpace(answer.AnswerJson)) continue;
-
-            try
+            // Use pattern matching on answer.Value (no JSON parsing!)
+            switch (answer.Value)
             {
-                // Parse the answer JSON which is in format: {"rating": 4}
-                var answerData = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+                case RatingAnswerValue ratingValue:
+                    ratings.Add(ratingValue.Rating);
+                    break;
 
-                if (answerData.TryGetProperty("rating", out var ratingElement))
-                {
-                    var rating = ratingElement.GetInt32();
-                    ratings.Add(rating);
-                }
-                else
-                {
-                    _logger.LogWarning("Rating property not found in answer {AnswerId}", answer.Id);
-                }
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning(ex, "Failed to parse rating for answer {AnswerId}", answer.Id);
+                case null:
+                    // Legacy fallback: try to parse AnswerJson
+                    if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
+                    {
+                        try
+                        {
+                            var answerData = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+                            if (answerData.TryGetProperty("rating", out var ratingElement))
+                            {
+                                ratings.Add(ratingElement.GetInt32());
+                            }
+                            else if (answerData.TryGetProperty("ratingValue", out var ratingValueElement))
+                            {
+                                ratings.Add(ratingValueElement.GetInt32());
+                            }
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to parse legacy rating for answer {AnswerId}", answer.Id);
+                        }
+                    }
+                    break;
+
+                default:
+                    _logger.LogWarning("Answer {AnswerId} has unexpected Value type for rating: {Type}",
+                        answer.Id, answer.Value?.GetType().Name);
+                    break;
             }
         }
 
@@ -733,9 +762,11 @@ public class SurveyService : ISurveyService
     /// </summary>
     private TextStatisticsDto CalculateTextStatistics(List<Answer> answers)
     {
+        // Use answer.Value pattern matching with fallback to legacy AnswerText
         var textAnswers = answers
-            .Where(a => !string.IsNullOrWhiteSpace(a.AnswerText))
-            .Select(a => a.AnswerText!)
+            .Select(a => a.Value is TextAnswerValue textValue ? textValue.Text : a.AnswerText)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Cast<string>()
             .ToList();
 
         if (!textAnswers.Any())
@@ -892,6 +923,7 @@ public class SurveyService : ISurveyService
 
     /// <summary>
     /// Formats an answer for CSV export based on question type.
+    /// Uses answer.Value pattern matching with legacy fallback.
     /// </summary>
     private string FormatAnswerForCSV(Answer? answer, Question question)
     {
@@ -900,16 +932,21 @@ public class SurveyService : ISurveyService
             return ""; // No answer provided
         }
 
+        // Use answer.Value.DisplayValue if available - simplest approach!
+        if (answer.Value != null)
+        {
+            return answer.Value.DisplayValue;
+        }
+
+        // Legacy fallback for old data without Value
         try
         {
             switch (question.QuestionType)
             {
                 case QuestionType.Text:
-                    // Return text answer directly
                     return answer.AnswerText ?? "";
 
                 case QuestionType.SingleChoice:
-                    // Parse JSON and return selected option
                     if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
                     {
                         var singleChoice = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
@@ -921,7 +958,6 @@ public class SurveyService : ISurveyService
                     return "";
 
                 case QuestionType.MultipleChoice:
-                    // Parse JSON and return comma-separated options
                     if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
                     {
                         var multipleChoice = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
@@ -943,13 +979,28 @@ public class SurveyService : ISurveyService
                     return "";
 
                 case QuestionType.Rating:
-                    // Parse JSON and return rating value
                     if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
                     {
                         var rating = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
                         if (rating.TryGetProperty("rating", out var ratingValue))
                         {
                             return ratingValue.GetInt32().ToString();
+                        }
+                        if (rating.TryGetProperty("ratingValue", out var ratingVal))
+                        {
+                            return ratingVal.GetInt32().ToString();
+                        }
+                    }
+                    return "";
+
+                case QuestionType.Location:
+                    if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
+                    {
+                        var location = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+                        if (location.TryGetProperty("latitude", out var lat) &&
+                            location.TryGetProperty("longitude", out var lon))
+                        {
+                            return $"{lat.GetDouble():F6}, {lon.GetDouble():F6}";
                         }
                     }
                     return "";
@@ -962,7 +1013,7 @@ public class SurveyService : ISurveyService
         }
         catch (JsonException ex)
         {
-            _logger.LogWarning(ex, "Failed to parse answer JSON for answer {AnswerId}", answer.Id);
+            _logger.LogWarning(ex, "Failed to parse legacy answer JSON for answer {AnswerId}", answer.Id);
             return "";
         }
     }
