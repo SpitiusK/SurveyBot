@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
+using SurveyBot.Bot.Utilities;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 using Telegram.Bot;
@@ -71,8 +72,11 @@ public class SingleChoiceQuestionHandler : IQuestionHandler
         var progressText = $"Question {currentIndex + 1} of {totalQuestions}";
         var requiredText = question.IsRequired ? "(Required)" : "(Optional)";
 
+        // Convert ReactQuill HTML to Telegram-compatible HTML
+        var questionText = HtmlToTelegramConverter.Convert(question.QuestionText);
+
         var message = $"{progressText}\n\n" +
-                      $"*{question.QuestionText}*\n\n" +
+                      $"<b>{questionText}</b>\n\n" +
                       $"{requiredText}\n" +
                       $"Select one option:";
 
@@ -88,7 +92,7 @@ public class SingleChoiceQuestionHandler : IQuestionHandler
         var sentMessage = await _botService.Client.SendMessage(
             chatId: chatId,
             text: message,
-            parseMode: ParseMode.Markdown,
+            parseMode: ParseMode.Html,
             replyMarkup: keyboard,
             cancellationToken: cancellationToken);
 
@@ -187,11 +191,13 @@ public class SingleChoiceQuestionHandler : IQuestionHandler
         {
             try
             {
+                // Escape selectedOption for HTML to prevent parsing issues
+                var escapedOption = HtmlToTelegramConverter.EscapeHtml(selectedOption);
                 await _botService.Client.EditMessageText(
                     chatId: callbackQuery.Message.Chat.Id,
                     messageId: callbackQuery.Message.MessageId,
-                    text: $"{callbackQuery.Message.Text}\n\n✓ Your answer: *{selectedOption}*",
-                    parseMode: ParseMode.Markdown,
+                    text: $"{callbackQuery.Message.Text}\n\n✓ Your answer: <b>{escapedOption}</b>",
+                    parseMode: ParseMode.Html,
                     cancellationToken: cancellationToken);
             }
             catch (Exception ex)

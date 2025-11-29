@@ -64,14 +64,13 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   };
 
   // Custom toolbar module with media button handler
+  // Only includes Telegram-supported HTML formatting (bold, italic, underline, strikethrough, links)
+  // Removed: blockquote, code-block, headers (h1-h6), lists (ordered, bullet)
   const modules = useMemo(
     () => ({
       toolbar: {
         container: [
           ['bold', 'italic', 'underline', 'strike'],
-          ['blockquote', 'code-block'],
-          [{ header: 1 }, { header: 2 }],
-          [{ list: 'ordered' }, { list: 'bullet' }],
           ['link'],
           ...(readOnly ? [] : [['insertMedia']]),
           ['clean'],
@@ -88,15 +87,12 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     [readOnly]
   );
 
+  // Only include formats supported by Telegram HTML mode
   const formats = [
     'bold',
     'italic',
     'underline',
     'strike',
-    'blockquote',
-    'code-block',
-    'header',
-    'list',
     'link',
   ];
 

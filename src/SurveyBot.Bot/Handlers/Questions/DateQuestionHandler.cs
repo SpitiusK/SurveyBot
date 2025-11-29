@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
+using SurveyBot.Bot.Utilities;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 using SurveyBot.Core.ValueObjects.Answers;
@@ -74,8 +75,11 @@ public class DateQuestionHandler : IQuestionHandler
         var todayExample = DateTime.Today.ToString(DateAnswerValue.DateFormat, CultureInfo.InvariantCulture);
         var formatHint = $"(Please answer in DD.MM.YYYY format, e.g., {todayExample})";
 
+        // Convert ReactQuill HTML to Telegram-compatible HTML
+        var questionText = HtmlToTelegramConverter.Convert(question.QuestionText);
+
         var message = $"{progressText}\n\n" +
-                      $"*{question.QuestionText}*\n" +
+                      $"<b>{questionText}</b>\n" +
                       $"{formatHint}\n\n" +
                       $"{requiredText}\n" +
                       $"{validationHint}" +
@@ -89,7 +93,7 @@ public class DateQuestionHandler : IQuestionHandler
         var sentMessage = await _botService.Client.SendMessage(
             chatId: chatId,
             text: message,
-            parseMode: ParseMode.Markdown,
+            parseMode: ParseMode.Html,
             cancellationToken: cancellationToken);
 
         return sentMessage.MessageId;

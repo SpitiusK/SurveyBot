@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
+using SurveyBot.Bot.Utilities;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 using SurveyBot.Core.ValueObjects.Answers;
@@ -66,8 +67,11 @@ public class LocationQuestionHandler : IQuestionHandler
             navigationHelp += "\nType /skip to skip this question";
         }
 
+        // Convert ReactQuill HTML to Telegram-compatible HTML
+        var questionText = HtmlToTelegramConverter.Convert(question.QuestionText);
+
         var message = $"{progressText}\n\n" +
-                      $"*{question.QuestionText}*\n\n" +
+                      $"<b>{questionText}</b>\n\n" +
                       $"{requiredText}\n\n" +
                       $"Please share your location using the button below:{navigationHelp}";
 
@@ -82,7 +86,7 @@ public class LocationQuestionHandler : IQuestionHandler
         var sentMessage = await _botService.Client.SendMessage(
             chatId: chatId,
             text: message,
-            parseMode: ParseMode.Markdown,
+            parseMode: ParseMode.Html,
             replyMarkup: keyboard,
             cancellationToken: cancellationToken);
 

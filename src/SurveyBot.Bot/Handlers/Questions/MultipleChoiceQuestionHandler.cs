@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
+using SurveyBot.Bot.Utilities;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 using Telegram.Bot;
@@ -74,8 +75,11 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
         var progressText = $"Question {currentIndex + 1} of {totalQuestions}";
         var requiredText = question.IsRequired ? "(Required - select at least one)" : "(Optional)";
 
+        // Convert ReactQuill HTML to Telegram-compatible HTML
+        var questionText = HtmlToTelegramConverter.Convert(question.QuestionText);
+
         var message = $"{progressText}\n\n" +
-                      $"*{question.QuestionText}*\n\n" +
+                      $"<b>{questionText}</b>\n\n" +
                       $"{requiredText}\n" +
                       $"Select all that apply, then click Done:";
 
@@ -95,7 +99,7 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
         var sentMessage = await _botService.Client.SendMessage(
             chatId: chatId,
             text: message,
-            parseMode: ParseMode.Markdown,
+            parseMode: ParseMode.Html,
             replyMarkup: keyboard,
             cancellationToken: cancellationToken);
 
@@ -377,12 +381,12 @@ public class MultipleChoiceQuestionHandler : IQuestionHandler
         {
             try
             {
-                var selectionText = string.Join("\n", selectedOptions.Select(o => $"  • {o}"));
+                var selectionText = string.Join("\n", selectedOptions.Select(o => $"  • {HtmlToTelegramConverter.EscapeHtml(o)}"));
                 await _botService.Client.EditMessageText(
                     chatId: callbackQuery.Message.Chat.Id,
                     messageId: callbackQuery.Message.MessageId,
                     text: $"{callbackQuery.Message.Text}\n\n✓ Your answers:\n{selectionText}",
-                    parseMode: ParseMode.Markdown,
+                    parseMode: ParseMode.Html,
                     cancellationToken: cancellationToken);
             }
             catch (Exception ex)
