@@ -472,8 +472,10 @@ public class SurveyResponseHandler
             // Parse answer JSON to extract the appropriate field based on answer structure
             var answer = JsonSerializer.Deserialize<JsonElement>(answerJson);
 
-            // Determine if this is a location answer
+            // Determine answer type based on JSON structure
             bool isLocationAnswer = answer.TryGetProperty("latitude", out _);
+            bool isNumberAnswer = answer.TryGetProperty("number", out _);
+            bool isDateAnswer = answer.TryGetProperty("date", out _);
 
             // Create submit DTO with the correct structure (wrapped in "answer" property)
             var submitDto = new
@@ -481,7 +483,18 @@ public class SurveyResponseHandler
                 answer = new
                 {
                     questionId = questionId,
-                    answerText = answer.TryGetProperty("text", out var text) ? text.GetString() : null,
+                    // Extract answerText based on answer type
+                    // - Text questions: Extract from "text" property
+                    // - Number questions: Extract from "number" property and convert to string
+                    // - Date questions: Extract from "date" property
+                    // - Other types (choice, rating, location): Don't need answerText
+                    answerText = answer.TryGetProperty("text", out var text)
+                        ? text.GetString()
+                        : answer.TryGetProperty("number", out var number)
+                            ? number.GetDecimal().ToString(System.Globalization.CultureInfo.InvariantCulture)
+                            : answer.TryGetProperty("date", out var date)
+                                ? date.GetString()
+                                : null,
                     selectedOptions = answer.TryGetProperty("selectedOptions", out var options)
                         ? options.EnumerateArray().Select(e => e.GetString()).ToList()
                         : (answer.TryGetProperty("selectedOption", out var option)
@@ -490,9 +503,9 @@ public class SurveyResponseHandler
                     ratingValue = answer.TryGetProperty("rating", out var rating) && rating.ValueKind != JsonValueKind.Null
                         ? rating.GetInt32()
                         : (int?)null,
-                    // For location answers, include the entire JSON in answerJson field
-                    // This contains the latitude and longitude that the API validation expects
-                    answerJson = isLocationAnswer ? answerJson : null
+                    // For location, number, and date answers, include the entire JSON in answerJson field
+                    // This contains the structured data that the API validation expects
+                    answerJson = (isLocationAnswer || isNumberAnswer || isDateAnswer) ? answerJson : null
                 }
             };
 

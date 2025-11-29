@@ -1,0 +1,733 @@
+# Frontend Number and Date Question Types - Task Plan
+# Version: 1.0
+# Date: 2025-11-28
+# Status: Ready for Implementation
+# Estimated Total: 2-3 hours
+
+feature:
+  name: "Add Number and Date Question Types to Frontend"
+  version: "1.5.1"
+  status: "planned"
+  estimated_total_hours: 3
+  priority: "high"
+  description: |
+    Update React frontend to support Number and Date question types that are
+    already implemented in the backend. This includes TypeScript type definitions,
+    UI components, icons, descriptions, and validation.
+
+  backend_status: "✅ Complete"
+  backend_components:
+    - "QuestionType enum (Number=5, Date=6)"
+    - "NumberAnswerValue and DateAnswerValue value objects"
+    - "NumberQuestionHandler and DateQuestionHandler"
+    - "API endpoints support Number/Date"
+    - "Database migrations complete"
+    - "Unit tests passing"
+
+  frontend_gap: "Frontend TypeScript enum and UI components missing Number/Date"
+
+phases:
+  - id: "PHASE-1"
+    name: "Critical Type Definitions"
+    description: "Update TypeScript type definitions to recognize Number and Date"
+    estimated_hours: 0.5
+    priority: "CRITICAL"
+    status: "pending"
+    tasks:
+      - id: "TYPES-001"
+        name: "Update QuestionType enum in types/index.ts"
+        description: |
+          Add Number = 5 and Date = 6 to the QuestionType const object.
+          This is the foundation - nothing works without this.
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/types/index.ts"
+        lines: "33-41"
+        action: "MODIFY"
+        estimated_hours: 0.25
+        status: "pending"
+        priority: "CRITICAL"
+        dependencies: []
+        acceptance_criteria:
+          - "QuestionType.Number = 5 added"
+          - "QuestionType.Date = 6 added"
+          - "TypeScript compiles without errors"
+          - "Type inference works correctly"
+        code_changes:
+          before: |
+            export const QuestionType = {
+              Text: 0,
+              SingleChoice: 1,
+              MultipleChoice: 2,
+              Rating: 3,
+              Location: 4,
+            } as const;
+          after: |
+            export const QuestionType = {
+              Text: 0,
+              SingleChoice: 1,
+              MultipleChoice: 2,
+              Rating: 3,
+              Location: 4,
+              Number: 5,    // ✅ ADD
+              Date: 6,      // ✅ ADD
+            } as const;
+        verification:
+          - "Run npm run type-check"
+          - "Verify QuestionType.Number resolves to 5"
+          - "Verify QuestionType.Date resolves to 6"
+
+      - id: "TYPES-002"
+        name: "Verify type exports and usage"
+        description: |
+          Ensure the updated QuestionType is properly exported and
+          imported throughout the application.
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/types/index.ts"
+        action: "VERIFY"
+        estimated_hours: 0.25
+        status: "pending"
+        dependencies: ["TYPES-001"]
+        acceptance_criteria:
+          - "Export statement includes Number and Date"
+          - "No TypeScript errors in consuming files"
+          - "Type guards work correctly"
+        verification:
+          - "Search for QuestionType usage across codebase"
+          - "Verify no compilation errors"
+          - "Check type narrowing works in switch statements"
+
+  - id: "PHASE-2"
+    name: "QuestionEditor Component Updates"
+    description: "Update the main question creation/editing component"
+    estimated_hours: 1.5
+    priority: "CRITICAL"
+    status: "pending"
+    dependencies: ["PHASE-1"]
+    tasks:
+      - id: "EDITOR-001"
+        name: "Add Number and Date to type selector array"
+        description: |
+          Update the hardcoded array in the RadioGroup to include
+          Number and Date question types.
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionEditor.tsx"
+        lines: "385-391"
+        action: "MODIFY"
+        estimated_hours: 0.1
+        status: "pending"
+        dependencies: ["TYPES-001"]
+        acceptance_criteria:
+          - "Number appears in type dropdown"
+          - "Date appears in type dropdown"
+          - "Order is logical (after Location)"
+        code_changes:
+          array_update: |
+            {[
+              QuestionType.Text,
+              QuestionType.SingleChoice,
+              QuestionType.MultipleChoice,
+              QuestionType.Rating,
+              QuestionType.Location,
+              QuestionType.Number,    // ✅ ADD
+              QuestionType.Date,      // ✅ ADD
+            ].map((type) => ( ... ))}
+
+      - id: "EDITOR-002"
+        name: "Import Material-UI icons for Number and Date"
+        description: |
+          Add Numbers and CalendarToday icons from @mui/icons-material
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionEditor.tsx"
+        lines: "1-30"
+        action: "MODIFY"
+        estimated_hours: 0.1
+        status: "pending"
+        dependencies: ["EDITOR-001"]
+        acceptance_criteria:
+          - "Numbers icon imported"
+          - "CalendarToday icon imported"
+          - "No import errors"
+        code_changes:
+          import_statement: |
+            import {
+              TextFields as TextIcon,
+              RadioButtonChecked as SingleChoiceIcon,
+              CheckBox as MultipleChoiceIcon,
+              Star as RatingIcon,
+              LocationOn as LocationIcon,
+              Numbers as NumberIcon,         // ✅ ADD
+              CalendarToday as DateIcon,     // ✅ ADD
+            } from '@mui/icons-material';
+
+      - id: "EDITOR-003"
+        name: "Update getQuestionTypeIcon function"
+        description: |
+          Add Number and Date cases to icon mapping switch statement
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionEditor.tsx"
+        lines: "270-283"
+        action: "MODIFY"
+        estimated_hours: 0.1
+        status: "pending"
+        dependencies: ["EDITOR-002"]
+        acceptance_criteria:
+          - "Number case returns NumberIcon"
+          - "Date case returns DateIcon"
+          - "Icons display correctly in UI"
+        code_changes:
+          add_cases: |
+            case QuestionType.Number:
+              return <NumberIcon />;
+            case QuestionType.Date:
+              return <DateIcon />;
+
+      - id: "EDITOR-004"
+        name: "Update getQuestionTypeDescription function"
+        description: |
+          Add helpful descriptions for Number and Date question types
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionEditor.tsx"
+        lines: "285-298"
+        action: "MODIFY"
+        estimated_hours: 0.1
+        status: "pending"
+        dependencies: ["EDITOR-003"]
+        acceptance_criteria:
+          - "Number description explains numeric input"
+          - "Date description explains DD.MM.YYYY format"
+          - "Descriptions are user-friendly"
+        code_changes:
+          add_cases: |
+            case QuestionType.Number:
+              return 'Respondents can enter a numeric value (integer or decimal)';
+            case QuestionType.Date:
+              return 'Respondents can enter a date in DD.MM.YYYY format';
+
+      - id: "EDITOR-005"
+        name: "Update type label rendering"
+        description: |
+          Add display labels for Number and Date in the type selector
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionEditor.tsx"
+        lines: "423-430"
+        action: "MODIFY"
+        estimated_hours: 0.1
+        status: "pending"
+        dependencies: ["EDITOR-004"]
+        acceptance_criteria:
+          - "Number shows as 'Number'"
+          - "Date shows as 'Date'"
+          - "Labels are consistent with other types"
+        code_changes:
+          add_labels: |
+            {type === QuestionType.Number && 'Number'}
+            {type === QuestionType.Date && 'Date'}
+
+      - id: "EDITOR-006"
+        name: "Update handleQuestionTypeChange function"
+        description: |
+          Ensure Number and Date types handle conditional flow correctly
+          (use defaultNextQuestionId, not option-based flow)
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionEditor.tsx"
+        lines: "254-268"
+        action: "MODIFY"
+        estimated_hours: 0.2
+        status: "pending"
+        dependencies: ["EDITOR-005"]
+        acceptance_criteria:
+          - "Number type clears optionNextQuestions"
+          - "Date type clears optionNextQuestions"
+          - "Both types use defaultNextQuestionId for flow"
+        code_changes:
+          update_logic: |
+            // Clear conditional flow fields for types that don't use option-based flow
+            if (newType === QuestionType.Text ||
+                newType === QuestionType.MultipleChoice ||
+                newType === QuestionType.Location ||
+                newType === QuestionType.Number ||    // ✅ ADD
+                newType === QuestionType.Date) {      // ✅ ADD
+              setValue('optionNextQuestions', {}, { shouldDirty: true });
+            }
+
+      - id: "EDITOR-007"
+        name: "Update conditional flow UI section"
+        description: |
+          Add Number and Date to the types that show defaultNextQuestionId UI
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionEditor.tsx"
+        lines: "665-712"
+        action: "MODIFY"
+        estimated_hours: 0.2
+        status: "pending"
+        dependencies: ["EDITOR-006"]
+        acceptance_criteria:
+          - "Number questions show 'Next Question' section"
+          - "Date questions show 'Next Question' section"
+          - "UI matches Text/Location pattern"
+        code_changes:
+          update_condition: |
+            {(questionType === QuestionType.Text ||
+              questionType === QuestionType.MultipleChoice ||
+              questionType === QuestionType.Location ||
+              questionType === QuestionType.Number ||    // ✅ ADD
+              questionType === QuestionType.Date) && (   // ✅ ADD
+              <>
+                <Divider />
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    Next Question
+                  </Typography>
+                  {/* ... UI for defaultNextQuestionId ... */}
+                </Box>
+              </>
+            )}
+
+      - id: "EDITOR-008"
+        name: "Add info alerts for Number and Date"
+        description: |
+          Add helpful Alert components explaining Number and Date behavior
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionEditor.tsx"
+        lines: "728+"
+        action: "ADD"
+        estimated_hours: 0.2
+        status: "pending"
+        dependencies: ["EDITOR-007"]
+        acceptance_criteria:
+          - "Number info alert displays when Number type selected"
+          - "Date info alert displays when Date type selected"
+          - "Alerts explain expected input format"
+        code_changes:
+          add_alerts: |
+            {/* Number Info */}
+            {questionType === QuestionType.Number && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                This question will accept numeric input (integers or decimals).
+                Respondents can enter values with optional decimal places.
+              </Alert>
+            )}
+
+            {/* Date Info */}
+            {questionType === QuestionType.Date && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                This question will prompt respondents to enter a date in DD.MM.YYYY format.
+                The bot will provide calendar suggestions for easy date selection.
+              </Alert>
+            )}
+
+  - id: "PHASE-3"
+    name: "QuestionPreview Component Updates"
+    description: "Update question preview to display Number/Date correctly"
+    estimated_hours: 0.5
+    priority: "HIGH"
+    status: "pending"
+    dependencies: ["PHASE-2"]
+    tasks:
+      - id: "PREVIEW-001"
+        name: "Import icons for QuestionPreview"
+        description: |
+          Add Numbers and CalendarToday icons to QuestionPreview imports
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionPreview.tsx"
+        lines: "13-20"
+        action: "MODIFY"
+        estimated_hours: 0.05
+        status: "pending"
+        dependencies: ["EDITOR-008"]
+        code_changes:
+          import_statement: |
+            import {
+              TextFields as TextIcon,
+              RadioButtonChecked as SingleChoiceIcon,
+              CheckBox as MultipleChoiceIcon,
+              Star as RatingIcon,
+              Image as ImageIcon,
+              LocationOn as LocationIcon,
+              Numbers as NumberIcon,         // ✅ ADD
+              CalendarToday as DateIcon,     // ✅ ADD
+            } from '@mui/icons-material';
+
+      - id: "PREVIEW-002"
+        name: "Update getQuestionTypeIcon in QuestionPreview"
+        description: |
+          Add Number and Date cases to icon mapping
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionPreview.tsx"
+        lines: "31-46"
+        action: "MODIFY"
+        estimated_hours: 0.1
+        status: "pending"
+        dependencies: ["PREVIEW-001"]
+        code_changes:
+          add_cases: |
+            case QuestionType.Number:
+              return <NumberIcon fontSize="small" />;
+            case QuestionType.Date:
+              return <DateIcon fontSize="small" />;
+
+      - id: "PREVIEW-003"
+        name: "Update getQuestionTypeLabel in QuestionPreview"
+        description: |
+          Add Number and Date labels
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionPreview.tsx"
+        lines: "48-63"
+        action: "MODIFY"
+        estimated_hours: 0.1
+        status: "pending"
+        dependencies: ["PREVIEW-002"]
+        code_changes:
+          add_cases: |
+            case QuestionType.Number:
+              return 'Number';
+            case QuestionType.Date:
+              return 'Date';
+
+      - id: "PREVIEW-004"
+        name: "Update getQuestionTypeColor in QuestionPreview"
+        description: |
+          Add color mapping for Number and Date badges
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionPreview.tsx"
+        lines: "65-80"
+        action: "MODIFY"
+        estimated_hours: 0.05
+        status: "pending"
+        dependencies: ["PREVIEW-003"]
+        code_changes:
+          add_cases: |
+            case QuestionType.Number:
+              return 'error';        // Red/pink badge
+            case QuestionType.Date:
+              return 'default';      // Gray badge
+
+      - id: "PREVIEW-005"
+        name: "Add preview sections for Number and Date"
+        description: |
+          Add visual preview sections explaining Number/Date input
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionPreview.tsx"
+        lines: "337+"
+        action: "ADD"
+        estimated_hours: 0.2
+        status: "pending"
+        dependencies: ["PREVIEW-004"]
+        code_changes:
+          add_sections: |
+            {/* Number Question Preview */}
+            {question.questionType === QuestionType.Number && (
+              <Box
+                sx={{
+                  pl: 2,
+                  borderLeft: 2,
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  Respondents will provide numeric input (integers or decimals)
+                </Typography>
+              </Box>
+            )}
+
+            {/* Date Question Preview */}
+            {question.questionType === QuestionType.Date && (
+              <Box
+                sx={{
+                  pl: 2,
+                  borderLeft: 2,
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  Respondents will enter a date in DD.MM.YYYY format
+                </Typography>
+              </Box>
+            )}
+
+  - id: "PHASE-4"
+    name: "Other UI Components"
+    description: "Update QuestionCard and Statistics components"
+    estimated_hours: 0.5
+    priority: "MEDIUM"
+    status: "pending"
+    dependencies: ["PHASE-3"]
+    tasks:
+      - id: "UI-001"
+        name: "Update QuestionCard component"
+        description: |
+          Similar updates to QuestionCard for survey builder list view
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/SurveyBuilder/QuestionCard.tsx"
+        action: "MODIFY"
+        estimated_hours: 0.25
+        status: "pending"
+        dependencies: ["PREVIEW-005"]
+        acceptance_criteria:
+          - "Number questions display with correct icon"
+          - "Date questions display with correct icon"
+          - "Labels and colors consistent with QuestionPreview"
+        updates_needed:
+          - "Import NumberIcon and DateIcon"
+          - "Add cases to getQuestionTypeIcon"
+          - "Add cases to getQuestionTypeLabel"
+          - "Add cases to getQuestionTypeColor"
+
+      - id: "UI-002"
+        name: "Update Statistics QuestionCard"
+        description: |
+          Update statistics display to handle Number and Date question types
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/components/Statistics/QuestionCard.tsx"
+        action: "MODIFY"
+        estimated_hours: 0.25
+        status: "pending"
+        dependencies: ["UI-001"]
+        acceptance_criteria:
+          - "Number statistics display correctly"
+          - "Date statistics display correctly"
+          - "Matches backend NumberStatisticsDto and DateStatisticsDto"
+        notes: |
+          This may require coordination with backend to ensure DTO structure
+          matches what frontend expects. Backend has:
+          - NumberStatisticsDto: Minimum, Maximum, Average, Median, StandardDeviation, Count
+          - DateStatisticsDto: EarliestDate, LatestDate, DateDistribution, Count
+
+  - id: "PHASE-5"
+    name: "Validation Schemas (Optional Enhancement)"
+    description: "Add type-specific validation schemas for Number and Date"
+    estimated_hours: 0.25
+    priority: "LOW"
+    status: "pending"
+    dependencies: ["PHASE-2"]
+    tasks:
+      - id: "SCHEMA-001"
+        name: "Add numberQuestionSchema"
+        description: |
+          Create Zod schema for Number question validation
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/schemas/questionSchemas.ts"
+        lines: "99+"
+        action: "ADD"
+        estimated_hours: 0.1
+        status: "pending"
+        dependencies: ["EDITOR-008"]
+        code_changes:
+          add_schema: |
+            // Number question schema
+            export const numberQuestionSchema = baseQuestionSchema.extend({
+              questionType: z.literal(QuestionType.Number),
+              options: z
+                .array(z.string())
+                .length(0)
+                .optional()
+                .or(z.undefined()),
+            });
+
+      - id: "SCHEMA-002"
+        name: "Add dateQuestionSchema"
+        description: |
+          Create Zod schema for Date question validation
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/schemas/questionSchemas.ts"
+        lines: "99+"
+        action: "ADD"
+        estimated_hours: 0.1
+        status: "pending"
+        dependencies: ["SCHEMA-001"]
+        code_changes:
+          add_schema: |
+            // Date question schema
+            export const dateQuestionSchema = baseQuestionSchema.extend({
+              questionType: z.literal(QuestionType.Date),
+              options: z
+                .array(z.string())
+                .length(0)
+                .optional()
+                .or(z.undefined()),
+            });
+
+      - id: "SCHEMA-003"
+        name: "Update discriminated union"
+        description: |
+          Add numberQuestionSchema and dateQuestionSchema to union
+        file_path: "C:/Users/User/Desktop/SurveyBot/frontend/src/schemas/questionSchemas.ts"
+        lines: "102"
+        action: "MODIFY"
+        estimated_hours: 0.05
+        status: "pending"
+        dependencies: ["SCHEMA-002"]
+        code_changes:
+          update_union: |
+            export const questionSchema = z.discriminatedUnion('questionType', [
+              textQuestionSchema,
+              singleChoiceQuestionSchema,
+              multipleChoiceQuestionSchema,
+              ratingQuestionSchema,
+              numberQuestionSchema,    // ✅ ADD
+              dateQuestionSchema,      // ✅ ADD
+            ]);
+
+  - id: "PHASE-6"
+    name: "Testing & Verification"
+    description: "Comprehensive testing of Number and Date question types"
+    estimated_hours: 0.5
+    priority: "HIGH"
+    status: "pending"
+    dependencies: ["PHASE-2", "PHASE-3", "PHASE-4"]
+    tasks:
+      - id: "TEST-001"
+        name: "TypeScript compilation check"
+        description: |
+          Verify no TypeScript errors after all changes
+        action: "VERIFY"
+        estimated_hours: 0.05
+        status: "pending"
+        dependencies: ["UI-002"]
+        verification_steps:
+          - "Run: npm run type-check"
+          - "Verify: No TypeScript errors"
+          - "Check: QuestionType.Number and QuestionType.Date resolve correctly"
+
+      - id: "TEST-002"
+        name: "Visual verification in browser"
+        description: |
+          Manual testing of UI components with Number and Date types
+        action: "VERIFY"
+        estimated_hours: 0.15
+        status: "pending"
+        dependencies: ["TEST-001"]
+        verification_steps:
+          - "Start dev server: npm run dev"
+          - "Navigate to survey builder"
+          - "Click 'Add Question'"
+          - "Verify Number option appears with correct icon"
+          - "Verify Date option appears with correct icon"
+          - "Select Number type"
+          - "Verify Number icon, description, and info alert display"
+          - "Verify Next Question section appears"
+          - "Select Date type"
+          - "Verify Date icon, description, and info alert display"
+          - "Verify Next Question section appears"
+
+      - id: "TEST-003"
+        name: "Question creation end-to-end test"
+        description: |
+          Test creating and saving Number and Date questions
+        action: "VERIFY"
+        estimated_hours: 0.15
+        status: "pending"
+        dependencies: ["TEST-002"]
+        verification_steps:
+          - "Create survey"
+          - "Add Number question: 'How many hours per week?'"
+          - "Save question"
+          - "Verify question appears in preview"
+          - "Verify question shows Number badge with correct icon"
+          - "Add Date question: 'What is your birthdate?'"
+          - "Save question"
+          - "Verify question appears in preview"
+          - "Verify question shows Date badge with correct icon"
+          - "Save survey"
+          - "Verify survey saves successfully"
+
+      - id: "TEST-004"
+        name: "Backend integration verification"
+        description: |
+          Verify frontend correctly sends Number/Date to API
+        action: "VERIFY"
+        estimated_hours: 0.15
+        status: "pending"
+        dependencies: ["TEST-003"]
+        verification_steps:
+          - "Open browser DevTools Network tab"
+          - "Create Number question"
+          - "Save question"
+          - "Inspect POST /api/surveys/{id}/questions request"
+          - "Verify questionType: 5 in payload"
+          - "Create Date question"
+          - "Save question"
+          - "Inspect POST /api/surveys/{id}/questions request"
+          - "Verify questionType: 6 in payload"
+          - "Verify API responds with 200 OK"
+          - "Verify questions persist in database"
+
+verification_checklist:
+  typescript:
+    - "✅ QuestionType.Number = 5 defined"
+    - "✅ QuestionType.Date = 6 defined"
+    - "✅ No TypeScript compilation errors"
+    - "✅ Type inference works in all components"
+
+  ui_components:
+    - "✅ Number option appears in QuestionEditor dropdown"
+    - "✅ Date option appears in QuestionEditor dropdown"
+    - "✅ Correct icons display (Numbers, CalendarToday)"
+    - "✅ Correct descriptions display"
+    - "✅ Info alerts display for Number and Date"
+    - "✅ Next Question section appears (not option-based flow)"
+    - "✅ QuestionPreview shows correct badges and labels"
+    - "✅ QuestionCard displays correctly in list"
+
+  functionality:
+    - "✅ Can create Number questions"
+    - "✅ Can create Date questions"
+    - "✅ Questions save to backend correctly"
+    - "✅ questionType: 5 sent to API for Number"
+    - "✅ questionType: 6 sent to API for Date"
+    - "✅ Questions display in survey builder"
+    - "✅ Questions preview correctly"
+    - "✅ Conditional flow works (defaultNextQuestionId)"
+
+  edge_cases:
+    - "✅ Switching from Number to other types clears options"
+    - "✅ Switching from Date to other types clears options"
+    - "✅ Validation prevents saving empty question text"
+    - "✅ Unknown question types handled gracefully"
+
+integration_points:
+  backend:
+    - "POST /api/surveys/{id}/questions accepts questionType: 5 (Number)"
+    - "POST /api/surveys/{id}/questions accepts questionType: 6 (Date)"
+    - "GET /api/surveys/{id}/questions returns Number/Date questions"
+    - "GET /api/surveys/{id}/statistics returns NumberStatisticsDto/DateStatisticsDto"
+
+  bot:
+    - "NumberQuestionHandler processes Number questions from surveys created via frontend"
+    - "DateQuestionHandler processes Date questions from surveys created via frontend"
+
+rollback_plan:
+  condition: "If frontend implementation breaks existing functionality"
+  steps:
+    - "Revert commits in reverse order (Phase 5 → 4 → 3 → 2 → 1)"
+    - "Verify existing question types (Text, SingleChoice, etc.) still work"
+    - "Run regression tests on survey creation flow"
+    - "Deploy previous version to production if necessary"
+
+notes:
+  - "All changes are additive - no breaking changes to existing code"
+  - "Backend implementation is complete and tested"
+  - "Frontend changes are purely UI/UX enhancements"
+  - "No database migrations needed (already done in backend)"
+  - "Statistics display (PHASE-4) may need backend DTO verification"
+  - "Validation schemas (PHASE-5) are optional - generic validation works"
+  - "Follow Material-UI theming for consistent look and feel"
+  - "Test in both light and dark modes"
+
+estimated_timeline:
+  total_hours: 3
+  breakdown:
+    phase_1: 0.5  # Critical type definitions
+    phase_2: 1.5  # QuestionEditor updates (most complex)
+    phase_3: 0.5  # QuestionPreview updates
+    phase_4: 0.5  # Other UI components
+    phase_5: 0.25 # Validation schemas (optional)
+    phase_6: 0.5  # Testing and verification
+
+  suggested_session:
+    session_1:
+      duration: "1-2 hours"
+      phases: ["PHASE-1", "PHASE-2"]
+      goal: "Critical functionality - can select Number/Date in dropdown"
+
+    session_2:
+      duration: "1 hour"
+      phases: ["PHASE-3", "PHASE-4", "PHASE-6"]
+      goal: "Complete UI polish and testing"
+
+    session_3:
+      duration: "15 minutes (optional)"
+      phases: ["PHASE-5"]
+      goal: "Add validation schemas"
+
+success_criteria:
+  - "✅ Users can select Number question type from dropdown"
+  - "✅ Users can select Date question type from dropdown"
+  - "✅ Correct icons and descriptions display"
+  - "✅ Questions save to backend with correct questionType value"
+  - "✅ Questions display correctly in preview and list"
+  - "✅ No TypeScript compilation errors"
+  - "✅ No runtime errors in browser console"
+  - "✅ Backend integration works end-to-end"
+  - "✅ Existing question types not affected"

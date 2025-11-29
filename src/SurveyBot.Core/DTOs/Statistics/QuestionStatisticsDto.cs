@@ -53,4 +53,16 @@ public class QuestionStatisticsDto
     /// Gets or sets text answer statistics for text questions.
     /// </summary>
     public TextStatisticsDto? TextStatistics { get; set; }
+
+    /// <summary>
+    /// Gets or sets number statistics for number questions.
+    /// Includes min, max, average, median, sum, and standard deviation.
+    /// </summary>
+    public NumberStatisticsDto? NumberStatistics { get; set; }
+
+    /// <summary>
+    /// Gets or sets date statistics for date questions.
+    /// Includes earliest, latest, and date distribution.
+    /// </summary>
+    public DateStatisticsDto? DateStatistics { get; set; }
 }

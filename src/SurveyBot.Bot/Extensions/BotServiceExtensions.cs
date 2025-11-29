@@ -56,12 +56,14 @@ public static class BotServiceExtensions
         services.AddScoped<ICommandHandler, StatsCommandHandler>();
         services.AddScoped<ICommandHandler, AdminHelpCommandHandler>();
 
-        // Register question handlers
+        // Register question handlers (7 total - one per QuestionType)
         services.AddScoped<IQuestionHandler, TextQuestionHandler>();
         services.AddScoped<IQuestionHandler, SingleChoiceQuestionHandler>();
         services.AddScoped<IQuestionHandler, MultipleChoiceQuestionHandler>();
         services.AddScoped<IQuestionHandler, RatingQuestionHandler>();
         services.AddScoped<IQuestionHandler, LocationQuestionHandler>();
+        services.AddScoped<IQuestionHandler, NumberQuestionHandler>();
+        services.AddScoped<IQuestionHandler, DateQuestionHandler>();
 
         // Register completion handler
         services.AddScoped<CompletionHandler>();

@@ -17,10 +17,13 @@ import {
   Star as RatingIcon,
   Image as ImageIcon,
   LocationOn as LocationIcon,
+  Numbers as NumberIcon,
+  CalendarToday as DateIcon,
 } from '@mui/icons-material';
 import { QuestionType } from '@/types';
 import type { QuestionDraft } from '@/schemas/questionSchemas';
 import type { MediaItemDto } from '@/types/media';
+import { stripHtml } from '@/utils/stringUtils';
 
 interface QuestionPreviewProps {
   question: QuestionDraft;
@@ -40,6 +43,10 @@ const QuestionPreview: React.FC<QuestionPreviewProps> = ({ question, index }) =>
         return <RatingIcon fontSize="small" />;
       case QuestionType.Location:
         return <LocationIcon fontSize="small" />;
+      case QuestionType.Number:
+        return <NumberIcon fontSize="small" />;
+      case QuestionType.Date:
+        return <DateIcon fontSize="small" />;
       default:
         return null;
     }
@@ -57,6 +64,10 @@ const QuestionPreview: React.FC<QuestionPreviewProps> = ({ question, index }) =>
         return 'Rating (1-5)';
       case QuestionType.Location:
         return 'Location';
+      case QuestionType.Number:
+        return 'Number';
+      case QuestionType.Date:
+        return 'Date';
       default:
         return 'Unknown';
     }
@@ -74,6 +85,10 @@ const QuestionPreview: React.FC<QuestionPreviewProps> = ({ question, index }) =>
         return 'secondary';
       case QuestionType.Location:
         return 'primary';
+      case QuestionType.Number:
+        return 'error';
+      case QuestionType.Date:
+        return 'default';
       default:
         return 'default';
     }
@@ -136,7 +151,7 @@ const QuestionPreview: React.FC<QuestionPreviewProps> = ({ question, index }) =>
             </Stack>
 
             <Typography variant="body1" fontWeight={500} sx={{ mb: 1.5 }}>
-              {question.questionText}
+              {stripHtml(question.questionText)}
             </Typography>
 
             {/* Media Preview */}
@@ -332,6 +347,36 @@ const QuestionPreview: React.FC<QuestionPreviewProps> = ({ question, index }) =>
               >
                 <Typography variant="caption" color="text.secondary">
                   Respondents will share their GPS location
+                </Typography>
+              </Box>
+            )}
+
+            {/* Number Question Preview */}
+            {question.questionType === QuestionType.Number && (
+              <Box
+                sx={{
+                  pl: 2,
+                  borderLeft: 2,
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  Respondents will provide numeric input (integers or decimals)
+                </Typography>
+              </Box>
+            )}
+
+            {/* Date Question Preview */}
+            {question.questionType === QuestionType.Date && (
+              <Box
+                sx={{
+                  pl: 2,
+                  borderLeft: 2,
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  Respondents will enter a date in DD.MM.YYYY format
                 </Typography>
               </Box>
             )}

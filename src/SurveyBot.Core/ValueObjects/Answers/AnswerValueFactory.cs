@@ -33,6 +33,8 @@ public static class AnswerValueFactory
             QuestionType.MultipleChoice => MultipleChoiceAnswerValue.FromJson(json),
             QuestionType.Rating => RatingAnswerValue.FromJson(json),
             QuestionType.Location => LocationAnswerValue.FromJson(json),
+            QuestionType.Number => NumberAnswerValue.FromJson(json),
+            QuestionType.Date => DateAnswerValue.FromJson(json),
             _ => throw new InvalidQuestionTypeException(questionType)
         };
     }
@@ -122,6 +124,8 @@ public static class AnswerValueFactory
                     "MultipleChoice" => MultipleChoiceAnswerValue.FromJson(json),
                     "Rating" => RatingAnswerValue.FromJson(json),
                     "Location" => LocationAnswerValue.FromJson(json),
+                    "Number" => NumberAnswerValue.FromJson(json),
+                    "Date" => DateAnswerValue.FromJson(json),
                     _ => throw new InvalidAnswerFormatException($"Unknown answer type: {typeName}")
                 };
             }
@@ -141,6 +145,12 @@ public static class AnswerValueFactory
 
             if (root.TryGetProperty("latitude", out _) && root.TryGetProperty("longitude", out _))
                 return LocationAnswerValue.FromJson(json);
+
+            if (root.TryGetProperty("number", out _))
+                return NumberAnswerValue.FromJson(json);
+
+            if (root.TryGetProperty("date", out _))
+                return DateAnswerValue.FromJson(json);
 
             throw new InvalidAnswerFormatException("Could not determine answer type from JSON content");
         }
@@ -178,6 +188,8 @@ public static class AnswerValueFactory
             QuestionType.Rating => CreateRatingAnswer(ratingValue, question),
             QuestionType.Location => throw new InvalidOperationException(
                 "Use LocationAnswerValue.Create() for location answers"),
+            QuestionType.Number => CreateNumberAnswer(textAnswer, question),
+            QuestionType.Date => CreateDateAnswer(textAnswer, question),
             _ => throw new InvalidQuestionTypeException(questionType)
         };
     }
@@ -242,6 +254,36 @@ public static class AnswerValueFactory
         }
 
         return RatingAnswerValue.Create(ratingValue.Value);
+    }
+
+    private static NumberAnswerValue CreateNumberAnswer(string? textAnswer, Question? question)
+    {
+        if (string.IsNullOrWhiteSpace(textAnswer))
+            throw new InvalidAnswerFormatException(0, QuestionType.Number, "Number value is required");
+
+        if (question != null)
+        {
+            // Parse with question configuration
+            var numberValue = NumberAnswerValue.Parse(textAnswer);
+            return NumberAnswerValue.CreateForQuestion(numberValue.Value, question);
+        }
+
+        return NumberAnswerValue.Parse(textAnswer);
+    }
+
+    private static DateAnswerValue CreateDateAnswer(string? textAnswer, Question? question)
+    {
+        if (string.IsNullOrWhiteSpace(textAnswer))
+            throw new InvalidAnswerFormatException(0, QuestionType.Date, "Date value is required");
+
+        if (question != null)
+        {
+            // Parse with question configuration
+            var dateValue = DateAnswerValue.Parse(textAnswer);
+            return DateAnswerValue.CreateForQuestion(dateValue.Date, question);
+        }
+
+        return DateAnswerValue.Parse(textAnswer);
     }
 
     /// <summary>

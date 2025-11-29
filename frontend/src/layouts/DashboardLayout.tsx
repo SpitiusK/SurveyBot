@@ -1,43 +1,73 @@
-import React from 'react';
-import { Outlet, Link, useNavigate } from 'react-router-dom';
-import authService from '@/services/authService';
+import React, { useState } from 'react';
+import { Outlet } from 'react-router-dom';
+import { Box, Container, Toolbar, Typography } from '@mui/material';
+import { Header } from '@/components/Header';
+import { Sidebar } from '@/components/Sidebar';
 
 const DashboardLayout: React.FC = () => {
-  const navigate = useNavigate();
-  const user = authService.getCurrentUser();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  const handleLogout = () => {
-    authService.logout();
-    navigate('/login');
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
   };
 
   return (
-    <div className="dashboard-layout">
-      <header className="dashboard-header">
-        <div className="header-content">
-          <h1 className="logo">SurveyBot Admin</h1>
-          <nav className="main-nav">
-            <Link to="/dashboard">Dashboard</Link>
-            <Link to="/dashboard/surveys">Surveys</Link>
-            <Link to="/dashboard/surveys/new">Create Survey</Link>
-          </nav>
-          <div className="user-menu">
-            <span>Welcome, {user?.firstName || user?.username || 'User'}</span>
-            <button onClick={handleLogout}>Logout</button>
-          </div>
-        </div>
-      </header>
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Header */}
+      <Header onMenuClick={handleDrawerToggle} title="SurveyBot Admin" />
 
-      <main className="dashboard-main">
-        <div className="container">
+      {/* Sidebar Navigation */}
+      <Sidebar open={mobileOpen} onClose={handleDrawerToggle} />
+
+      {/* Main Content Area */}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          width: { sm: 'calc(100% - 240px)' },
+          backgroundColor: 'background.default',
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Toolbar spacer for fixed AppBar */}
+        <Toolbar />
+
+        {/* Page Content */}
+        <Container
+          maxWidth="xl"
+          sx={{
+            mt: 3,
+            mb: 4,
+            flexGrow: 1,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           <Outlet />
-        </div>
-      </main>
+        </Container>
 
-      <footer className="dashboard-footer">
-        <p>&copy; 2025 SurveyBot. All rights reserved.</p>
-      </footer>
-    </div>
+        {/* Footer */}
+        <Box
+          component="footer"
+          sx={{
+            py: 3,
+            px: 2,
+            mt: 'auto',
+            backgroundColor: 'background.paper',
+            borderTop: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Container maxWidth="xl">
+            <Typography variant="body2" color="text.secondary" align="center">
+              &copy; 2025 SurveyBot. All rights reserved.
+            </Typography>
+          </Container>
+        </Box>
+      </Box>
+    </Box>
   );
 };
 

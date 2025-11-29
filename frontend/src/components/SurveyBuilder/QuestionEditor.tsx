@@ -27,6 +27,8 @@ import {
   CheckBox as MultipleChoiceIcon,
   Star as RatingIcon,
   LocationOn as LocationIcon,
+  Numbers as NumberIcon,
+  CalendarToday as DateIcon,
 } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -39,6 +41,7 @@ import OptionManager from './OptionManager';
 import { RichTextEditor } from '../RichTextEditor';
 import { MediaGallery } from '../MediaGallery';
 import type { MediaContentDto, MediaItemDto } from '../../types/media';
+import { stripHtml, stripHtmlAndTruncate } from '../../utils/stringUtils';
 
 interface QuestionEditorProps {
   open: boolean;
@@ -84,12 +87,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
     },
   });
 
-  // Helper function to strip HTML tags and get actual text content
-  const stripHtml = (html: string): string => {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    return (tmp.textContent || tmp.innerText || '').trim();
-  };
+  // stripHtml is now imported from utils/stringUtils
 
   const questionType = watch('questionType');
   const questionText = watch('questionText');
@@ -146,6 +144,29 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
     }
   }, [open, question, reset]);
 
+  // APPROACH 2: Synchronize optionNextQuestions with options array for SingleChoice
+  useEffect(() => {
+    if (questionType === QuestionType.SingleChoice && options && options.length > 0) {
+      const currentFlow = watch('optionNextQuestions') || {};
+      const updatedFlow: Record<number, string | null> = {};
+
+      // Preserve existing values, initialize missing indices to null
+      options.forEach((_, index) => {
+        updatedFlow[index] = currentFlow[index] !== undefined ? currentFlow[index] : null;
+      });
+
+      // Only update if structure changed (different number of keys)
+      if (Object.keys(updatedFlow).length !== Object.keys(currentFlow).length) {
+        console.log('Synchronizing optionNextQuestions:', {
+          before: currentFlow,
+          after: updatedFlow,
+          optionsCount: options.length,
+        });
+        setValue('optionNextQuestions', updatedFlow, { shouldValidate: true });
+      }
+    }
+  }, [questionType, options, setValue, watch]);
+
   const handleClose = () => {
     if (hasUnsavedChanges) {
       if (
@@ -194,6 +215,18 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
     console.log('Form submitted with data:', data);
     console.log('Current validation errors:', errors);
 
+    // DEBUG: Log optionNextQuestions before save
+    console.log('🔍 DEBUG: optionNextQuestions before save:', {
+      value: data.optionNextQuestions,
+      type: typeof data.optionNextQuestions,
+      keys: Object.keys(data.optionNextQuestions || {}),
+      values: Object.values(data.optionNextQuestions || {}),
+      entries: Object.entries(data.optionNextQuestions || {}),
+      isEmptyObject: data.optionNextQuestions &&
+        typeof data.optionNextQuestions === 'object' &&
+        Object.keys(data.optionNextQuestions).length === 0,
+    });
+
     try {
       setIsSubmitting(true);
 
@@ -224,7 +257,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         optionNextQuestions: data.optionNextQuestions || {},
       };
 
-      console.log('Saving question draft:', questionDraft);
+      console.log('✅ Saving question draft:', questionDraft);
+      console.log('✅ Final optionNextQuestions in draft:', questionDraft.optionNextQuestions);
       onSave(questionDraft);
       setHasUnsavedChanges(false);
       onClose();
@@ -251,15 +285,23 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
     }
 
     // Clear conditional flow fields for question types that don't use option-based flow
-    if (newType === QuestionType.Text || newType === QuestionType.MultipleChoice || newType === QuestionType.Location) {
-      // Text, MultipleChoice, and Location only use defaultNextQuestionId
+    if (newType === QuestionType.Text || newType === QuestionType.MultipleChoice || newType === QuestionType.Location || newType === QuestionType.Number || newType === QuestionType.Date) {
+      // Text, MultipleChoice, Location, Number, and Date only use defaultNextQuestionId
       setValue('optionNextQuestions', {}, { shouldDirty: true });
     } else if (newType === QuestionType.SingleChoice) {
-      // SingleChoice uses optionNextQuestions
-      // Keep existing or initialize to empty object
-      const currentValue = watch('optionNextQuestions');
-      if (!currentValue || typeof currentValue !== 'object') {
-        setValue('optionNextQuestions', {}, { shouldDirty: true });
+      // APPROACH 1: Initialize optionNextQuestions with all option indices
+      const currentOptions = watch('options') || [];
+      if (currentOptions.length > 0) {
+        const initialFlow: Record<number, string | null> = {};
+        currentOptions.forEach((_, index) => {
+          initialFlow[index] = null; // Initialize all to "End Survey"
+        });
+        console.log('Initializing optionNextQuestions on type change:', {
+          questionType: 'SingleChoice',
+          optionsCount: currentOptions.length,
+          initialFlow,
+        });
+        setValue('optionNextQuestions', initialFlow, { shouldDirty: true });
       }
     } else if (newType === QuestionType.Rating) {
       // Rating uses defaultNextQuestionId
@@ -279,6 +321,10 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         return <RatingIcon />;
       case QuestionType.Location:
         return <LocationIcon />;
+      case QuestionType.Number:
+        return <NumberIcon />;
+      case QuestionType.Date:
+        return <DateIcon />;
     }
   };
 
@@ -294,6 +340,10 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         return 'Respondents can rate on a scale of 1-5 stars';
       case QuestionType.Location:
         return 'Respondents can share their GPS location';
+      case QuestionType.Number:
+        return 'Respondents can enter a numeric value (integer or decimal)';
+      case QuestionType.Date:
+        return 'Respondents can enter a date in DD.MM.YYYY format';
     }
   };
 
@@ -388,6 +438,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                     QuestionType.MultipleChoice,
                     QuestionType.Rating,
                     QuestionType.Location,
+                    QuestionType.Number,
+                    QuestionType.Date,
                   ].map((type) => (
                     <Box
                       key={type}
@@ -427,6 +479,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                                   'Multiple Choice'}
                                 {type === QuestionType.Rating && 'Rating'}
                                 {type === QuestionType.Location && 'Location'}
+                                {type === QuestionType.Number && 'Number'}
+                                {type === QuestionType.Date && 'Date'}
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
                                 {getQuestionTypeDescription(type)}
@@ -591,8 +645,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                               render={({ field }) => (
                                 <Select
                                   {...field}
-                                  value={field.value || ''}
-                                  onChange={(e) => field.onChange(e.target.value || null)}
+                                  value={field.value ?? ''}
+                                  onChange={(e) => field.onChange(e.target.value === '' ? null : e.target.value)}
                                   displayEmpty
                                 >
                                   <MenuItem value="">
@@ -600,8 +654,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                                   </MenuItem>
                                   {availableQuestions.map((q) => (
                                     <MenuItem key={q.id} value={q.id}>
-                                      Q{q.orderIndex + 1}: {q.questionText.replace(/<[^>]*>/g, '').substring(0, 50)}
-                                      {q.questionText.length > 50 ? '...' : ''}
+                                      Q{q.orderIndex + 1}: {stripHtmlAndTruncate(q.questionText, 50)}
                                     </MenuItem>
                                   ))}
                                   {availableQuestions.length === 0 && (
@@ -627,8 +680,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                         render={({ field }) => (
                           <Select
                             {...field}
-                            value={field.value || ''}
-                            onChange={(e) => field.onChange(e.target.value || null)}
+                            value={field.value ?? ''}
+                            onChange={(e) => field.onChange(e.target.value === '' ? null : e.target.value)}
                             displayEmpty
                           >
                             <MenuItem value="">
@@ -636,8 +689,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                             </MenuItem>
                             {availableQuestions.map((q) => (
                               <MenuItem key={q.id} value={q.id}>
-                                Q{q.orderIndex + 1}: {q.questionText.replace(/<[^>]*>/g, '').substring(0, 50)}
-                                {q.questionText.length > 50 ? '...' : ''}
+                                Q{q.orderIndex + 1}: {stripHtmlAndTruncate(q.questionText, 50)}
                               </MenuItem>
                             ))}
                             {availableQuestions.length === 0 && (
@@ -661,8 +713,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
               </>
             )}
 
-            {/* Conditional Flow for Text, MultipleChoice, and Location */}
-            {(questionType === QuestionType.Text || questionType === QuestionType.MultipleChoice || questionType === QuestionType.Location) && (
+            {/* Conditional Flow for Text, MultipleChoice, Location, Number, and Date */}
+            {(questionType === QuestionType.Text || questionType === QuestionType.MultipleChoice || questionType === QuestionType.Location || questionType === QuestionType.Number || questionType === QuestionType.Date) && (
               <>
                 <Divider />
                 <Box>
@@ -679,8 +731,8 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                       render={({ field }) => (
                         <Select
                           {...field}
-                          value={field.value || ''}
-                          onChange={(e) => field.onChange(e.target.value || null)}
+                          value={field.value ?? ''}
+                          onChange={(e) => field.onChange(e.target.value === '' ? null : e.target.value)}
                           displayEmpty
                         >
                           <MenuItem value="">
@@ -688,8 +740,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                           </MenuItem>
                           {availableQuestions.map((q) => (
                             <MenuItem key={q.id} value={q.id}>
-                              Q{q.orderIndex + 1}: {q.questionText.replace(/<[^>]*>/g, '').substring(0, 50)}
-                              {q.questionText.length > 50 ? '...' : ''}
+                              Q{q.orderIndex + 1}: {stripHtmlAndTruncate(q.questionText, 50)}
                             </MenuItem>
                           ))}
                           {availableQuestions.length === 0 && (
@@ -724,6 +775,24 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
               <Alert severity="info">
                 This question will prompt respondents to share their GPS location.
                 In the Telegram bot, users will see a "Share Location" button.
+              </Alert>
+            )}
+
+            {/* Number Info */}
+            {questionType === QuestionType.Number && (
+              <Alert severity="info">
+                This question will accept numeric input (integers or decimals).
+                Respondents can enter values with optional decimal places.
+                Both period (.) and comma (,) are accepted as decimal separators.
+              </Alert>
+            )}
+
+            {/* Date Info */}
+            {questionType === QuestionType.Date && (
+              <Alert severity="info">
+                This question will prompt respondents to enter a date in DD.MM.YYYY format.
+                The bot will display format instructions and validate the date entered.
+                Example: 28.11.2025
               </Alert>
             )}
           </Stack>

@@ -5,7 +5,7 @@
 **Layer**: Presentation Layer (React SPA)
 **Framework**: React 19.2.0 + TypeScript 5.9.3 + Vite 7.2.2
 **UI Library**: Material-UI 6.5.0
-**Last Updated**: 2025-11-21
+**Last Updated**: 2025-11-28
 
 ---
 
@@ -19,6 +19,54 @@ The SurveyBot Frontend is a React-based Single Page Application (SPA) providing 
 - Dashboard with overview metrics
 - Multi-step survey builder with drag-and-drop
 - Multimedia upload and management for questions (NEW in v1.3.0)
+
+---
+
+## Recent Changes & Bug Fixes
+
+### v1.5.1 - Survey Publish Validation Fix (2025-11-28)
+
+**Issue**: SingleChoice questions with "End Survey" option couldn't be published because the empty string value (`''`) was stored instead of `null`, causing the backend validation to fail with error: "Survey must have at least one question that leads to completion".
+
+**Root Cause**:
+- Material-UI `Select` component with React Hook Form was incorrectly handling empty string to null conversion
+- Previous implementation used `value={field.value || ''}` which converted both `null` AND `''` to `''`
+- Previous implementation used `onChange={(e) => field.onChange(e.target.value || null)}` which didn't properly convert empty strings in nested Record fields
+
+**Fix Applied** in `QuestionEditor.tsx`:
+
+Changed at **3 locations** (lines ~608, ~644, ~696):
+
+```typescript
+// BEFORE (Incorrect)
+<Select
+  value={field.value || ''}
+  onChange={(e) => field.onChange(e.target.value || null)}
+>
+
+// AFTER (Correct)
+<Select
+  value={field.value ?? ''}
+  onChange={(e) => field.onChange(e.target.value === '' ? null : e.target.value)}
+>
+```
+
+**Why This Works**:
+- **Nullish coalescing operator (`??`)**: Only converts `undefined`/`null` to `''`, preserving the distinction between null and empty string
+- **Explicit empty string check (`=== ''`)**: Properly converts "End Survey" selection (represented as empty string in the select) to `null` for the form state
+- **Backend compatibility**: ReviewStep.tsx validation checks for `null` or `'0'` to recognize "End Survey", matching backend expectations
+
+**Files Affected**:
+- `frontend/src/components/SurveyBuilder/QuestionEditor.tsx` - Fixed 3 Select components for nextQuestionId fields
+
+**Validation Flow**:
+1. User selects "End Survey" → Select component emits `''`
+2. onChange handler converts `'' → null`
+3. Form state stores `null` in `nextQuestionId` field
+4. ReviewStep validation recognizes `null` as valid "End Survey"
+5. Backend receives `null` and correctly identifies completion path
+
+---
 
 ### Technology Stack
 
@@ -1041,6 +1089,6 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 **End of Frontend Documentation**
 
-**Last Updated**: 2025-11-21 | **Version**: 1.3.0
+**Last Updated**: 2025-11-28 | **Version**: 1.5.1
 
 [← Back to Main Documentation](../CLAUDE.md)

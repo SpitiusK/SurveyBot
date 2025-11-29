@@ -36,9 +36,36 @@ export const QuestionType = {
   MultipleChoice: 2,
   Rating: 3,
   Location: 4,
+  Number: 5,
+  Date: 6,
 } as const;
 
 export type QuestionType = (typeof QuestionType)[keyof typeof QuestionType];
+
+// Question type categorization for conditional flow logic
+// Non-branching: All answers flow to same next question (or end)
+// Uses defaultNextQuestionId field
+export const NON_BRANCHING_QUESTION_TYPES: QuestionType[] = [
+  QuestionType.Text,           // 0
+  QuestionType.MultipleChoice, // 2
+  QuestionType.Rating,         // 3 - Rating uses defaultNextQuestionId, not optionNextQuestions
+  QuestionType.Location,       // 4
+  QuestionType.Number,         // 5
+  QuestionType.Date,           // 6
+];
+
+// Branching: Different answers can flow to different questions
+// Uses optionNextQuestions Record
+export const BRANCHING_QUESTION_TYPES: QuestionType[] = [
+  QuestionType.SingleChoice,   // 1 - Only SingleChoice uses optionNextQuestions
+];
+
+// Helper functions for type checking
+export const isNonBranchingType = (type: QuestionType): boolean =>
+  NON_BRANCHING_QUESTION_TYPES.includes(type);
+
+export const isBranchingType = (type: QuestionType): boolean =>
+  BRANCHING_QUESTION_TYPES.includes(type);
 
 export interface Question {
   id: number;

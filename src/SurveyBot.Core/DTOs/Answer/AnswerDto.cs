@@ -72,4 +72,16 @@ public class AnswerDto
     /// Timestamp when location was captured. Null if not provided.
     /// </summary>
     public DateTime? LocationTimestamp { get; set; }
+
+    /// <summary>
+    /// Gets or sets the numeric value for Number question types.
+    /// Null for other types.
+    /// </summary>
+    public decimal? NumberValue { get; set; }
+
+    /// <summary>
+    /// Gets or sets the date value for Date question types.
+    /// Null for other types.
+    /// </summary>
+    public DateTime? DateValue { get; set; }
 }

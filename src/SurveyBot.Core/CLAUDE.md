@@ -4,7 +4,7 @@
 
 **Layer**: Domain | **Dependencies**: None | **Location**: `C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Core`
 
-**Version**: 1.5.0 (Location Question Type) | **Last Updated**: 2025-11-27
+**Version**: 1.5.1 (Number and Date Question Types) | **Last Updated**: 2025-11-28
 
 ## Overview
 
@@ -109,10 +109,10 @@ SurveyBot.Core/
 - **Entities**: 7 (BaseEntity + 6 domain entities, all with private setters + factory methods)
 - **Interfaces**: 16 (1 generic + 15 specific)
 - **DTOs**: 42+ (organized in 8 categories)
-- **Value Objects**: 7 total
+- **Value Objects**: 9 total
   - NextQuestionDeterminant (v1.4.0)
-  - AnswerValue hierarchy: AnswerValue (abstract), TextAnswerValue, SingleChoiceAnswerValue, MultipleChoiceAnswerValue, RatingAnswerValue (v1.5.0)
-  - AnswerValueFactory (v1.5.0)
+  - AnswerValue hierarchy: AnswerValue (abstract), TextAnswerValue, SingleChoiceAnswerValue, MultipleChoiceAnswerValue, RatingAnswerValue, LocationAnswerValue, NumberAnswerValue (v1.5.1), DateAnswerValue (v1.5.1)
+  - AnswerValueFactory (v1.5.0, extended v1.5.1)
 - **Enums**: 2 (QuestionType, NextStepType)
 - **Exceptions**: 10 (domain-specific)
 - **Constants**: 1 (SurveyConstants)
@@ -248,7 +248,9 @@ AnswerValue (abstract base)
 ├── SingleChoiceAnswerValue
 ├── MultipleChoiceAnswerValue
 ├── RatingAnswerValue
-└── LocationAnswerValue (NEW v1.5.0)
+├── LocationAnswerValue (v1.5.0)
+├── NumberAnswerValue (NEW v1.5.1)
+└── DateAnswerValue (NEW v1.5.1)
 ```
 
 **Pattern**:
@@ -259,6 +261,8 @@ AnswerValue (abstract base)
 [JsonDerivedType(typeof(MultipleChoiceAnswerValue), typeDiscriminator: "MultipleChoice")]
 [JsonDerivedType(typeof(RatingAnswerValue), typeDiscriminator: "Rating")]
 [JsonDerivedType(typeof(LocationAnswerValue), typeDiscriminator: "Location")]
+[JsonDerivedType(typeof(NumberAnswerValue), typeDiscriminator: "Number")]
+[JsonDerivedType(typeof(DateAnswerValue), typeDiscriminator: "Date")]
 public abstract class AnswerValue : IEquatable<AnswerValue>
 {
     public abstract QuestionType QuestionType { get; }
@@ -558,7 +562,7 @@ public class Question : BaseEntity
     public Question? DefaultNextQuestion { get; set; }  // Navigation to next question
 }
 
-public enum QuestionType { Text = 0, SingleChoice = 1, MultipleChoice = 2, Rating = 3, Location = 4 }
+public enum QuestionType { Text = 0, SingleChoice = 1, MultipleChoice = 2, Rating = 3, Location = 4, Number = 5, Date = 6 }
 ```
 
 **Business Rules - Conditional Flow** (NEW in v1.4.0):
@@ -708,10 +712,21 @@ public class Answer
 {"rating": 4}
 ```
 
-**Location** (NEW v1.5.0):
+**Location** (v1.5.0):
 ```json
 {"latitude": 40.7128, "longitude": -74.0060}
 ```
+
+**Number** (NEW v1.5.1):
+```json
+{"number": 42.5, "minValue": 0, "maxValue": 100, "decimalPlaces": 2}
+```
+
+**Date** (NEW v1.5.1):
+```json
+{"date": "2024-06-15T00:00:00", "minDate": "2024-01-01T00:00:00", "maxDate": "2024-12-31T00:00:00"}
+```
+Note: Dates are stored in ISO format internally, but displayed/parsed in DD.MM.YYYY format for users.
 
 ---
 
@@ -2111,6 +2126,7 @@ For comprehensive project documentation, see the **centralized documentation fol
 ---
 
 **Version History**:
+- **v1.5.1** (2025-11-28): Number and Date question types - NumberAnswerValue, DateAnswerValue, statistics DTOs
 - **v1.5.0** (2025-11-27): DDD architecture enhancements - private setters, factory methods, AnswerValue hierarchy
 - **v1.4.2** (2025-11-26): Complete value object migration for Answer.Next
 - **v1.4.0** (2025-11-25): Conditional flow with value objects, cycle detection

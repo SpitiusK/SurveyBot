@@ -1,8 +1,10 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
+using SurveyBot.Core.ValueObjects.Answers;
 
 namespace SurveyBot.Bot.Validators;
 
@@ -50,6 +52,8 @@ public class AnswerValidator : IAnswerValidator
                 QuestionType.MultipleChoice => ValidateMultipleChoiceAnswer(answer, question),
                 QuestionType.Rating => ValidateRatingAnswer(answer, question),
                 QuestionType.Location => ValidateLocationAnswer(answer, question),
+                QuestionType.Number => ValidateNumberAnswer(answer, question),
+                QuestionType.Date => ValidateDateAnswer(answer, question),
                 _ => ValidationResult.Failure($"Unsupported question type: {question.QuestionType}")
             };
         }
@@ -243,6 +247,145 @@ public class AnswerValidator : IAnswerValidator
         if (longitude < -180 || longitude > 180)
         {
             return ValidationResult.Failure($"Longitude must be between -180 and 180. You provided {longitude}.");
+        }
+
+        return ValidationResult.Success();
+    }
+
+    /// <summary>
+    /// Validates number answer.
+    /// </summary>
+    private ValidationResult ValidateNumberAnswer(JsonElement answer, QuestionDto question)
+    {
+        if (!answer.TryGetProperty("number", out var numberElement))
+        {
+            return ValidationResult.Failure("Answer format is invalid. Please provide a number.");
+        }
+
+        // Check for null number (optional question skipped)
+        if (numberElement.ValueKind == JsonValueKind.Null)
+        {
+            if (question.IsRequired)
+            {
+                return ValidationResult.Failure("This question is required. Please provide a number.");
+            }
+            return ValidationResult.Success();
+        }
+
+        // Parse number value (should be a decimal directly in JSON)
+        if (!numberElement.TryGetDecimal(out var numberValue))
+        {
+            return ValidationResult.Failure("Invalid number format. Please enter a valid number.");
+        }
+
+        // Extract min/max/decimalPlaces from the answer itself (NumberAnswerValue.ToJson includes these)
+        decimal? answerMinValue = null;
+        decimal? answerMaxValue = null;
+
+        if (answer.TryGetProperty("minValue", out var minElement) && minElement.ValueKind != JsonValueKind.Null)
+        {
+            answerMinValue = minElement.GetDecimal();
+        }
+
+        if (answer.TryGetProperty("maxValue", out var maxElement) && maxElement.ValueKind != JsonValueKind.Null)
+        {
+            answerMaxValue = maxElement.GetDecimal();
+        }
+
+        // Validate range if constraints are present
+        if (answerMinValue.HasValue && numberValue < answerMinValue.Value)
+        {
+            return ValidationResult.Failure($"Number must be at least {answerMinValue.Value}.");
+        }
+
+        if (answerMaxValue.HasValue && numberValue > answerMaxValue.Value)
+        {
+            return ValidationResult.Failure($"Number must be at most {answerMaxValue.Value}.");
+        }
+
+        return ValidationResult.Success();
+    }
+
+    /// <summary>
+    /// Validates date answer.
+    /// </summary>
+    private ValidationResult ValidateDateAnswer(JsonElement answer, QuestionDto question)
+    {
+        if (!answer.TryGetProperty("date", out var dateElement))
+        {
+            return ValidationResult.Failure("Answer format is invalid. Please provide a date.");
+        }
+
+        // Check for null date (optional question skipped)
+        if (dateElement.ValueKind == JsonValueKind.Null)
+        {
+            if (question.IsRequired)
+            {
+                return ValidationResult.Failure("This question is required. Please provide a date.");
+            }
+            return ValidationResult.Success();
+        }
+
+        // Parse date value from DD.MM.YYYY string format (DateAnswerValue.ToJson() uses this format)
+        var dateString = dateElement.GetString();
+        if (string.IsNullOrWhiteSpace(dateString))
+        {
+            return ValidationResult.Failure("Date value is missing. Please provide a date in DD.MM.YYYY format.");
+        }
+
+        if (!DateTime.TryParseExact(
+            dateString,
+            DateAnswerValue.DateFormat,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var dateValue))
+        {
+            return ValidationResult.Failure("Invalid date format. Use DD.MM.YYYY (e.g., 15.06.2024).");
+        }
+
+        // Extract min/max dates from the answer itself (DateAnswerValue.ToJson includes these)
+        DateTime? answerMinDate = null;
+        DateTime? answerMaxDate = null;
+
+        if (answer.TryGetProperty("minDate", out var minElement) && minElement.ValueKind != JsonValueKind.Null)
+        {
+            var minDateString = minElement.GetString();
+            if (!string.IsNullOrWhiteSpace(minDateString) &&
+                DateTime.TryParseExact(
+                    minDateString,
+                    DateAnswerValue.DateFormat,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var minDate))
+            {
+                answerMinDate = minDate;
+            }
+        }
+
+        if (answer.TryGetProperty("maxDate", out var maxElement) && maxElement.ValueKind != JsonValueKind.Null)
+        {
+            var maxDateString = maxElement.GetString();
+            if (!string.IsNullOrWhiteSpace(maxDateString) &&
+                DateTime.TryParseExact(
+                    maxDateString,
+                    DateAnswerValue.DateFormat,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var maxDate))
+            {
+                answerMaxDate = maxDate;
+            }
+        }
+
+        // Validate range if constraints are present
+        if (answerMinDate.HasValue && dateValue < answerMinDate.Value)
+        {
+            return ValidationResult.Failure($"Date must be on or after {answerMinDate.Value:dd.MM.yyyy}.");
+        }
+
+        if (answerMaxDate.HasValue && dateValue > answerMaxDate.Value)
+        {
+            return ValidationResult.Failure($"Date must be on or before {answerMaxDate.Value:dd.MM.yyyy}.");
         }
 
         return ValidationResult.Success();

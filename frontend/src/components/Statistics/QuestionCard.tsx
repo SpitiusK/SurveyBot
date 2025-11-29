@@ -5,12 +5,15 @@ import {
   CheckBox as MultipleChoiceIcon,
   Star as RatingIcon,
   LocationOn as LocationIcon,
+  Numbers as NumberIcon,
+  CalendarToday as DateIcon,
 } from '@mui/icons-material';
 import type { Question, QuestionStatistics, Response } from '../../types';
 import { QuestionType } from '../../types';
 import ChoiceChart from './ChoiceChart';
 import RatingChart from './RatingChart';
 import TextResponseList from './TextResponseList';
+import { stripHtml } from '../../utils/stringUtils';
 
 interface QuestionCardProps {
   questionStat: QuestionStatistics;
@@ -31,6 +34,10 @@ const QuestionCard = ({ questionStat, question, responses }: QuestionCardProps) 
         return <RatingIcon />;
       case QuestionType.Location:
         return <LocationIcon />;
+      case QuestionType.Number:
+        return <NumberIcon />;
+      case QuestionType.Date:
+        return <DateIcon />;
       default:
         return null;
     }
@@ -48,6 +55,10 @@ const QuestionCard = ({ questionStat, question, responses }: QuestionCardProps) 
         return 'Rating';
       case QuestionType.Location:
         return 'Location';
+      case QuestionType.Number:
+        return 'Number';
+      case QuestionType.Date:
+        return 'Date';
       default:
         return 'Unknown';
     }
@@ -70,7 +81,7 @@ const QuestionCard = ({ questionStat, question, responses }: QuestionCardProps) 
             )}
           </Box>
           <Typography variant="h6" gutterBottom>
-            {question.questionText}
+            {stripHtml(question.questionText)}
           </Typography>
         </Box>
         <Box sx={{ textAlign: 'right' }}>
@@ -109,6 +120,22 @@ const QuestionCard = ({ questionStat, question, responses }: QuestionCardProps) 
         )}
 
         {question.questionType === QuestionType.Location && (
+          <TextResponseList
+            questionStat={questionStat}
+            question={question}
+            responses={responses}
+          />
+        )}
+
+        {question.questionType === QuestionType.Number && (
+          <TextResponseList
+            questionStat={questionStat}
+            question={question}
+            responses={responses}
+          />
+        )}
+
+        {question.questionType === QuestionType.Date && (
           <TextResponseList
             questionStat={questionStat}
             question={question}

@@ -396,6 +396,20 @@ public class QuestionService : IQuestionService
                 rules["description"] = "Geographic location (latitude/longitude coordinates)";
                 break;
 
+            case QuestionType.Number:
+                rules["requiresOptions"] = false;
+                rules["supportsRange"] = true;
+                rules["supportsDecimalPlaces"] = true;
+                rules["description"] = "Numeric input (integer or decimal)";
+                break;
+
+            case QuestionType.Date:
+                rules["requiresOptions"] = false;
+                rules["supportsDateRange"] = true;
+                rules["dateFormat"] = "DD.MM.YYYY";
+                rules["description"] = "Date input in DD.MM.YYYY format";
+                break;
+
             default:
                 throw new InvalidQuestionTypeException(type);
         }
@@ -473,6 +487,22 @@ public class QuestionService : IQuestionService
                 if (options != null && options.Any())
                 {
                     return QuestionValidationResult.Failure("Location questions should not have options.");
+                }
+                return QuestionValidationResult.Success();
+
+            case QuestionType.Number:
+                // Number questions should not have options
+                if (options != null && options.Any())
+                {
+                    return QuestionValidationResult.Failure("Number questions should not have options.");
+                }
+                return QuestionValidationResult.Success();
+
+            case QuestionType.Date:
+                // Date questions should not have options
+                if (options != null && options.Any())
+                {
+                    return QuestionValidationResult.Failure("Date questions should not have options.");
                 }
                 return QuestionValidationResult.Success();
 

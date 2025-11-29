@@ -563,6 +563,14 @@ public class SurveyService : ISurveyService
                 case QuestionType.Text:
                     questionStat.TextStatistics = CalculateTextStatistics(answers);
                     break;
+
+                case QuestionType.Number:
+                    questionStat.NumberStatistics = CalculateNumberStatistics(answers);
+                    break;
+
+                case QuestionType.Date:
+                    questionStat.DateStatistics = CalculateDateStatistics(answers);
+                    break;
             }
 
             statistics.Add(questionStat);
@@ -780,6 +788,159 @@ public class SurveyService : ISurveyService
             AverageLength = Math.Round(textAnswers.Average(t => t.Length), 2),
             MinLength = textAnswers.Min(t => t.Length),
             MaxLength = textAnswers.Max(t => t.Length)
+        };
+    }
+
+    /// <summary>
+    /// Calculates statistics for number questions.
+    /// </summary>
+    private NumberStatisticsDto CalculateNumberStatistics(List<Answer> answers)
+    {
+        var numbers = new List<decimal>();
+
+        foreach (var answer in answers)
+        {
+            // Use pattern matching on answer.Value (no JSON parsing!)
+            switch (answer.Value)
+            {
+                case NumberAnswerValue numberValue:
+                    numbers.Add(numberValue.Value);
+                    break;
+
+                case null:
+                    // Legacy fallback: try to parse AnswerJson
+                    if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
+                    {
+                        try
+                        {
+                            var answerData = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+                            if (answerData.TryGetProperty("number", out var numberElement))
+                            {
+                                numbers.Add(numberElement.GetDecimal());
+                            }
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to parse legacy number for answer {AnswerId}", answer.Id);
+                        }
+                    }
+                    break;
+
+                default:
+                    _logger.LogWarning("Answer {AnswerId} has unexpected Value type for number: {Type}",
+                        answer.Id, answer.Value?.GetType().Name);
+                    break;
+            }
+        }
+
+        if (!numbers.Any())
+        {
+            return new NumberStatisticsDto();
+        }
+
+        var sortedNumbers = numbers.OrderBy(n => n).ToList();
+        var count = sortedNumbers.Count;
+        var sum = sortedNumbers.Sum();
+        var average = sum / count;
+
+        // Calculate median
+        decimal median;
+        if (count % 2 == 0)
+        {
+            median = (sortedNumbers[count / 2 - 1] + sortedNumbers[count / 2]) / 2;
+        }
+        else
+        {
+            median = sortedNumbers[count / 2];
+        }
+
+        // Calculate standard deviation
+        var squaredDifferences = sortedNumbers.Sum(n => (n - average) * (n - average));
+        var standardDeviation = (decimal)Math.Sqrt((double)(squaredDifferences / count));
+
+        return new NumberStatisticsDto
+        {
+            Minimum = sortedNumbers.First(),
+            Maximum = sortedNumbers.Last(),
+            Average = Math.Round(average, 2),
+            Median = Math.Round(median, 2),
+            StandardDeviation = Math.Round(standardDeviation, 2),
+            Count = count,
+            Sum = Math.Round(sum, 2)
+        };
+    }
+
+    /// <summary>
+    /// Calculates statistics for date questions.
+    /// </summary>
+    private DateStatisticsDto CalculateDateStatistics(List<Answer> answers)
+    {
+        var dates = new List<DateTime>();
+
+        foreach (var answer in answers)
+        {
+            // Use pattern matching on answer.Value (no JSON parsing!)
+            switch (answer.Value)
+            {
+                case DateAnswerValue dateValue:
+                    dates.Add(dateValue.Date);
+                    break;
+
+                case null:
+                    // Legacy fallback: try to parse AnswerJson
+                    if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
+                    {
+                        try
+                        {
+                            var answerData = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+                            if (answerData.TryGetProperty("date", out var dateElement))
+                            {
+                                if (dateElement.TryGetDateTime(out var parsedDate))
+                                {
+                                    dates.Add(parsedDate.Date);
+                                }
+                            }
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to parse legacy date for answer {AnswerId}", answer.Id);
+                        }
+                    }
+                    break;
+
+                default:
+                    _logger.LogWarning("Answer {AnswerId} has unexpected Value type for date: {Type}",
+                        answer.Id, answer.Value?.GetType().Name);
+                    break;
+            }
+        }
+
+        if (!dates.Any())
+        {
+            return new DateStatisticsDto();
+        }
+
+        var sortedDates = dates.OrderBy(d => d).ToList();
+        var count = sortedDates.Count;
+
+        // Calculate date distribution (grouped by date, sorted by most recent first)
+        var distribution = dates
+            .GroupBy(d => d.Date)
+            .OrderByDescending(g => g.Key)
+            .Select(g => new DateFrequency
+            {
+                Date = g.Key,
+                Count = g.Count(),
+                Percentage = Math.Round((double)g.Count() / count * 100, 2)
+            })
+            .ToList();
+
+        return new DateStatisticsDto
+        {
+            EarliestDate = sortedDates.First(),
+            LatestDate = sortedDates.Last(),
+            DateDistribution = distribution,
+            Count = count
         };
     }
 

@@ -98,12 +98,33 @@ export const ratingQuestionSchema = baseQuestionSchema.extend({
     .or(z.undefined()),
 });
 
+// Location question schema
+export const locationQuestionSchema = baseQuestionSchema.extend({
+  questionType: z.literal(QuestionType.Location),
+  options: z.array(z.string()).length(0).optional(),
+});
+
+// Number question schema
+export const numberQuestionSchema = baseQuestionSchema.extend({
+  questionType: z.literal(QuestionType.Number),
+  options: z.array(z.string()).length(0).optional(),
+});
+
+// Date question schema
+export const dateQuestionSchema = baseQuestionSchema.extend({
+  questionType: z.literal(QuestionType.Date),
+  options: z.array(z.string()).length(0).optional(),
+});
+
 // Union of all question types
 export const questionSchema = z.discriminatedUnion('questionType', [
   textQuestionSchema,
   singleChoiceQuestionSchema,
   multipleChoiceQuestionSchema,
   ratingQuestionSchema,
+  locationQuestionSchema,
+  numberQuestionSchema,
+  dateQuestionSchema,
 ]);
 
 // Question draft schema (for local state management)

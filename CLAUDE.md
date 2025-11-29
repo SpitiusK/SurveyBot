@@ -1,6 +1,6 @@
 # SurveyBot - Project Documentation
 
-**Version**: 1.5.0 | **Framework**: .NET 8.0 | **Status**: Active Development
+**Version**: 1.5.1 | **Framework**: .NET 8.0 | **Status**: Active Development
 
 ---
 
@@ -192,6 +192,22 @@ SurveyBot implements 10 core design patterns for maintainability and scalability
 
 ### Recent Changes (v1.5.x)
 
+**v1.5.1 (Number and Date Question Types)**:
+- **QuestionType.Number (CORE-001)**: Numeric input with optional range and decimal places validation
+  - NumberAnswerValue value object with min/max range and decimal places constraints
+  - Parse() and TryParse() methods accepting both period and comma as decimal separators
+  - NumberStatisticsDto with min, max, average, median, sum, and standard deviation
+  - NumberQuestionHandler for Telegram bot with validation prompts
+- **QuestionType.Date (CORE-002)**: Date input in DD.MM.YYYY format with optional range validation
+  - DateAnswerValue value object with min/max date constraints
+  - Strict DD.MM.YYYY format parsing with DateTime.TryParseExact
+  - DateStatisticsDto with earliest, latest dates and date distribution
+  - DateQuestionHandler for Telegram bot with format prompts and calendar suggestions
+- **AnswerValue Hierarchy Extended**: Added NumberAnswerValue and DateAnswerValue to polymorphic hierarchy
+- **Statistics Enhancement**: SurveyService now calculates statistics for Number and Date questions
+- **Validation Enhancement**: ResponseService validates Number/Date answers against question constraints
+- **Unit Tests**: Comprehensive tests for NumberAnswerValue and DateAnswerValue (87 tests)
+
 **v1.5.0 (DDD Architecture Enhancements - Complete)**:
 - **Private Setters (ARCH-001)**: All entities now enforce encapsulation with private setters
   - Properties exposed as `{ get; private set; }`
@@ -205,7 +221,7 @@ SurveyBot implements 10 core design patterns for maintainability and scalability
   - Auto-generation of defaults (timestamps, codes) in factory
 - **AnswerValue Value Object (ARCH-003)**: ✅ **COMPLETE** - Polymorphic answer type system
   - Abstract AnswerValue base class with [JsonDerivedType] for polymorphic JSON serialization
-  - Five concrete value objects: TextAnswerValue, SingleChoiceAnswerValue, MultipleChoiceAnswerValue, RatingAnswerValue, LocationAnswerValue
+  - Seven concrete value objects: TextAnswerValue, SingleChoiceAnswerValue, MultipleChoiceAnswerValue, RatingAnswerValue, LocationAnswerValue, NumberAnswerValue, DateAnswerValue (v1.5.1)
   - AnswerValueFactory utility class: Parse(), TryParse(), CreateFromInput(), ParseWithTypeDiscriminator(), ConvertFromLegacy()
   - Answer entity: New Value property (AnswerValue?) alongside legacy AnswerText/AnswerJson for backward compatibility
   - EF Core owned type configuration: Stored as JSONB in answer_value_json column with type discriminator
@@ -542,7 +558,7 @@ User (1) ──creates──> Survey (*) ──contains──> Question (*)
 
 **See** [Core Layer Documentation](src/SurveyBot.Core/CLAUDE.md) for detailed entity descriptions.
 
-**Question Types**: Text, SingleChoice, MultipleChoice, Rating, Location (NEW v1.5.0)
+**Question Types**: Text, SingleChoice, MultipleChoice, Rating, Location, Number, Date (NEW v1.5.1)
 
 **Media Types**: Image (JPG, PNG), Video (MP4), Audio (MP3, OGG), Document (PDF)
 
@@ -781,4 +797,4 @@ documentation/
 
 ---
 
-**Last Updated**: 2025-11-27 | **Version**: 1.5.0 | **Target Framework**: .NET 8.0
+**Last Updated**: 2025-11-28 | **Version**: 1.5.1 | **Target Framework**: .NET 8.0

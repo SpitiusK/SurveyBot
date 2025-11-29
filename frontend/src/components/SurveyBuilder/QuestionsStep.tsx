@@ -18,7 +18,7 @@ import {
   CheckBox as MultipleChoiceIcon,
   Star as RatingIcon,
 } from '@mui/icons-material';
-import { QuestionType } from '../../types';
+import { QuestionType, isNonBranchingType, isBranchingType } from '../../types';
 import type { QuestionDraft } from '../../schemas/questionSchemas';
 import QuestionEditor from './QuestionEditor';
 import QuestionList from './QuestionList';
@@ -100,17 +100,16 @@ const QuestionsStep: React.FC<QuestionsStepProps> = ({
     const lastQuestion = updated[updated.length - 1];
 
     // Check if last question already has conditional flow configured
-    const hasConditionalFlow =
-      lastQuestion.questionType === 1 || lastQuestion.questionType === 3
+    const hasConditionalFlow = isBranchingType(lastQuestion.questionType)
         ? lastQuestion.optionNextQuestions && Object.keys(lastQuestion.optionNextQuestions).length > 0
         : lastQuestion.defaultNextQuestionId !== undefined;
 
     // If no conditional flow is configured, ensure last question ends survey
     if (!hasConditionalFlow) {
-      if (lastQuestion.questionType === 0 || lastQuestion.questionType === 2) {
+      if (isNonBranchingType(lastQuestion.questionType)) {
         // Non-branching: set defaultNextQuestionId = null
         lastQuestion.defaultNextQuestionId = null;
-      } else if (lastQuestion.questionType === 1 || lastQuestion.questionType === 3) {
+      } else if (isBranchingType(lastQuestion.questionType)) {
         // Branching: set first option to end survey if no options configured
         if (!lastQuestion.optionNextQuestions || Object.keys(lastQuestion.optionNextQuestions).length === 0) {
           lastQuestion.defaultNextQuestionId = null;
@@ -138,26 +137,38 @@ const QuestionsStep: React.FC<QuestionsStepProps> = ({
   };
 
   const getQuestionTypeCounts = () => {
-    const counts = {
-      text: 0,
-      singleChoice: 0,
-      multipleChoice: 0,
-      rating: 0,
+    const counts: Record<string, number> = {
+      Text: 0,
+      SingleChoice: 0,
+      MultipleChoice: 0,
+      Rating: 0,
+      Location: 0,
+      Number: 0,
+      Date: 0,
     };
 
     questions.forEach((q) => {
       switch (q.questionType) {
         case QuestionType.Text:
-          counts.text++;
+          counts.Text++;
           break;
         case QuestionType.SingleChoice:
-          counts.singleChoice++;
+          counts.SingleChoice++;
           break;
         case QuestionType.MultipleChoice:
-          counts.multipleChoice++;
+          counts.MultipleChoice++;
           break;
         case QuestionType.Rating:
-          counts.rating++;
+          counts.Rating++;
+          break;
+        case QuestionType.Location:
+          counts.Location++;
+          break;
+        case QuestionType.Number:
+          counts.Number++;
+          break;
+        case QuestionType.Date:
+          counts.Date++;
           break;
       }
     });
@@ -194,31 +205,49 @@ const QuestionsStep: React.FC<QuestionsStepProps> = ({
                 color="error"
                 variant="outlined"
               />
-              {typeCounts.text > 0 && (
+              {typeCounts.Text > 0 && (
                 <Chip
                   icon={<TextIcon />}
-                  label={`${typeCounts.text} Text`}
+                  label={`${typeCounts.Text} Text`}
                   size="small"
                 />
               )}
-              {typeCounts.singleChoice > 0 && (
+              {typeCounts.SingleChoice > 0 && (
                 <Chip
                   icon={<SingleChoiceIcon />}
-                  label={`${typeCounts.singleChoice} Single Choice`}
+                  label={`${typeCounts.SingleChoice} Single Choice`}
                   size="small"
                 />
               )}
-              {typeCounts.multipleChoice > 0 && (
+              {typeCounts.MultipleChoice > 0 && (
                 <Chip
                   icon={<MultipleChoiceIcon />}
-                  label={`${typeCounts.multipleChoice} Multiple Choice`}
+                  label={`${typeCounts.MultipleChoice} Multiple Choice`}
                   size="small"
                 />
               )}
-              {typeCounts.rating > 0 && (
+              {typeCounts.Rating > 0 && (
                 <Chip
                   icon={<RatingIcon />}
-                  label={`${typeCounts.rating} Rating`}
+                  label={`${typeCounts.Rating} Rating`}
+                  size="small"
+                />
+              )}
+              {typeCounts.Location > 0 && (
+                <Chip
+                  label={`${typeCounts.Location} Location`}
+                  size="small"
+                />
+              )}
+              {typeCounts.Number > 0 && (
+                <Chip
+                  label={`${typeCounts.Number} Number`}
+                  size="small"
+                />
+              )}
+              {typeCounts.Date > 0 && (
+                <Chip
+                  label={`${typeCounts.Date} Date`}
                   size="small"
                 />
               )}

@@ -32,34 +32,34 @@ export const FRONTEND_NGROK_URL = 'https://27b2352927ab.ngrok-free.app';
 /**
  * Get the API base URL based on environment
  *
- * - Development (localhost): http://localhost:5000/api
- * - Development (ngrok): https://ngrok-url/api
+ * - If accessing via ngrok frontend: use ngrok backend URL
+ * - If accessing via localhost: use localhost backend URL
  * - Production: Set via environment variables
  */
 export const getApiBaseUrl = (): string => {
-  const env = import.meta.env.MODE;
   const customUrl = import.meta.env.VITE_API_BASE_URL;
 
-  // If VITE_API_BASE_URL is explicitly set, use it
-  if (customUrl && customUrl !== 'http://localhost:5000/api') {
-    return customUrl;
-  }
+  // Check if we're accessing the frontend via ngrok
+  // If so, we must use the ngrok backend URL (localhost won't work from ngrok)
+  if (typeof window !== 'undefined') {
+    const currentHost = window.location.hostname;
 
-  // Development: prefer localhost, fallback to ngrok
-  if (env === 'development') {
-    // Try localhost first
-    try {
-      const httpUrl = 'http://localhost:5000/api';
-      // This would need actual health check, but for now default to localhost
-      return httpUrl;
-    } catch {
-      // Fallback to ngrok if localhost unavailable
+    // If accessing via ngrok, use ngrok backend URL
+    if (currentHost.includes('ngrok-free.app') ||
+        currentHost.includes('ngrok.app') ||
+        currentHost.includes('ngrok.io')) {
+      console.log('Detected ngrok access, using ngrok backend URL:', `${BACKEND_NGROK_URL}/api`);
       return `${BACKEND_NGROK_URL}/api`;
     }
   }
 
-  // Production: use environment variable or ngrok
-  return customUrl || `${BACKEND_NGROK_URL}/api`;
+  // If VITE_API_BASE_URL is explicitly set to something other than localhost, use it
+  if (customUrl && !customUrl.includes('localhost')) {
+    return customUrl;
+  }
+
+  // Default: use localhost for local development
+  return 'http://localhost:5000/api';
 };
 
 /**

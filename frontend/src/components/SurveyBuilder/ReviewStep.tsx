@@ -22,12 +22,14 @@ import {
 import type { BasicInfoFormData } from '@/schemas/surveySchemas';
 import type { QuestionDraft } from '@/schemas/questionSchemas';
 import type { Survey, CreateQuestionDto, Question, UpdateQuestionFlowDto, NextStepType } from '@/types';
+import { isNonBranchingType, isBranchingType, QuestionType } from '@/types';
 import SurveyPreview from './SurveyPreview';
 import PublishSuccess from './PublishSuccess';
 import FlowVisualization from './FlowVisualization';
 import surveyService from '@/services/surveyService';
 import questionService from '@/services/questionService';
 import questionFlowService from '@/services/questionFlowService';
+import { stripHtmlAndTruncate } from '@/utils/stringUtils';
 
 interface ReviewStepProps {
   surveyData: BasicInfoFormData;
@@ -54,13 +56,15 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
   // Helper: Check if survey has at least one endpoint (question leading to end)
   const validateSurveyHasEndpoint = (): boolean => {
     return questions.some((question) => {
-      // Check non-branching questions (Text, MultipleChoice)
-      if (question.questionType === 0 || question.questionType === 2) {
+      // Check non-branching questions (Text, MultipleChoice, Rating, Location, Number, Date)
+      // These use defaultNextQuestionId for flow
+      if (isNonBranchingType(question.questionType)) {
         return question.defaultNextQuestionId === null || question.defaultNextQuestionId === '0';
       }
 
-      // Check branching questions (SingleChoice, Rating)
-      if (question.questionType === 1 || question.questionType === 3) {
+      // Check branching questions (SingleChoice only)
+      // These use optionNextQuestions Record for per-option flow
+      if (isBranchingType(question.questionType)) {
         if (question.optionNextQuestions) {
           return Object.values(question.optionNextQuestions).some((id) => id === null || id === '0');
         }
@@ -88,7 +92,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
       }
 
       // Validate choice questions have options
-      if (question.questionType === 1 || question.questionType === 2) {
+      if (question.questionType === QuestionType.SingleChoice || question.questionType === QuestionType.MultipleChoice) {
         if (!question.options || question.options.length < 2) {
           errors.push(`Question ${index + 1}: Choice questions must have at least 2 options`);
         }
@@ -193,7 +197,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
           questionType: question.questionType,
           isRequired: question.isRequired,
           options:
-            question.questionType === 1 || question.questionType === 2
+            question.questionType === QuestionType.SingleChoice || question.questionType === QuestionType.MultipleChoice
               ? question.options
               : undefined,
           mediaContent: question.mediaContent
@@ -600,21 +604,19 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
         </Typography>
         <Box sx={{ mt: 2 }}>
           {questions.map((question, index) => {
-            const hasEndpoint =
-              (question.questionType === 0 || question.questionType === 2)
-                ? question.defaultNextQuestionId === null || question.defaultNextQuestionId === '0'
-                : question.optionNextQuestions
-                ? Object.values(question.optionNextQuestions).some((id) => id === null || id === '0')
-                : false;
+            const hasEndpoint = isNonBranchingType(question.questionType)
+              ? question.defaultNextQuestionId === null || question.defaultNextQuestionId === '0'
+              : isBranchingType(question.questionType) && question.optionNextQuestions
+              ? Object.values(question.optionNextQuestions).some((id) => id === null || id === '0')
+              : false;
 
             return (
               <Box key={question.id} sx={{ mb: 1.5 }}>
                 <Typography variant="body2" fontWeight={500}>
-                  Question {index + 1}: {question.questionText.replace(/<[^>]*>/g, '').substring(0, 50)}
-                  {question.questionText.length > 50 ? '...' : ''}
+                  Question {index + 1}: {stripHtmlAndTruncate(question.questionText, 50)}
                 </Typography>
                 <Box sx={{ ml: 2, mt: 0.5 }}>
-                  {question.questionType === 0 || question.questionType === 2 ? (
+                  {isNonBranchingType(question.questionType) ? (
                     // Non-branching
                     <Chip
                       size="small"

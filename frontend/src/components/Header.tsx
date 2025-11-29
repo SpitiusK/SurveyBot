@@ -5,19 +5,15 @@ import {
   Typography,
   IconButton,
   Box,
-  Menu,
-  MenuItem,
-  Avatar,
   Tooltip,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
   Brightness4,
   Brightness7,
-  AccountCircle,
-  Logout,
 } from '@mui/icons-material';
 import { useThemeMode } from '../theme/ThemeProvider';
+import { UserMenu } from './UserMenu';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -26,21 +22,6 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onMenuClick, title = 'SurveyBot Admin' }) => {
   const { mode, toggleTheme } = useThemeMode();
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleLogout = () => {
-    // TODO: Implement logout logic
-    handleMenuClose();
-    console.log('Logout clicked');
-  };
 
   return (
     <AppBar
@@ -72,34 +53,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick, title = 'SurveyBot 
             </IconButton>
           </Tooltip>
 
-          <Tooltip title="Account">
-            <IconButton color="inherit" onClick={handleMenuOpen}>
-              <AccountCircle />
-            </IconButton>
-          </Tooltip>
-
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-            anchorOrigin={{
-              vertical: 'bottom',
-              horizontal: 'right',
-            }}
-            transformOrigin={{
-              vertical: 'top',
-              horizontal: 'right',
-            }}
-          >
-            <MenuItem onClick={handleMenuClose}>
-              <Avatar sx={{ width: 32, height: 32, mr: 2 }}>A</Avatar>
-              Profile
-            </MenuItem>
-            <MenuItem onClick={handleLogout}>
-              <Logout sx={{ mr: 2 }} fontSize="small" />
-              Logout
-            </MenuItem>
-          </Menu>
+          <UserMenu />
         </Box>
       </Toolbar>
     </AppBar>

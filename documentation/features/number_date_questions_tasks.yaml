@@ -1,0 +1,1001 @@
+# Number and Date Question Types - Implementation Tasks
+# Version: 1.5.1
+# Date: 2025-11-28
+# Status: Ready for Implementation
+
+feature:
+  name: "Number and Date Question Types"
+  version: "1.5.1"
+  status: "planning"
+  estimated_total_hours: 28
+  priority: "high"
+  description: |
+    Add Number and Date question types to SurveyBot following existing architectural patterns.
+    Number questions accept numeric input with validation (min/max range, decimal places).
+    Date questions accept dates in DD.MM.YYYY format with range validation.
+    Both use polymorphic AnswerValue hierarchy for type-safe storage.
+
+  dependencies:
+    - "AnswerValue polymorphic hierarchy (v1.5.0) - COMPLETE"
+    - "Value object pattern implementation - COMPLETE"
+    - "Factory methods pattern - COMPLETE"
+
+  key_decisions:
+    - "Number: Text input with server-side numeric validation (like Rating)"
+    - "Date: Text input with DD.MM.YYYY format validation (like Location)"
+    - "Format hint automatically appended to date question text"
+    - "Type-safe storage via NumberAnswerValue and DateAnswerValue"
+    - "Configuration in OptionsJson: min/max ranges and formats"
+
+phases:
+  - id: "PHASE-1"
+    name: "Core Layer Implementation"
+    description: "Value objects, enums, and utilities in zero-dependency core"
+    estimated_hours: 9.5
+    status: "pending"
+    tasks:
+      - id: "CORE-001"
+        name: "Update QuestionType enum"
+        description: |
+          Add Number = 5 and Date = 6 to QuestionType enum.
+          This is a backward-compatible change - existing values unchanged.
+        layer: "Core"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/Enums/QuestionType.cs"
+        action: "MODIFY"
+        estimated_hours: 0.5
+        status: "pending"
+        dependencies: []
+        assigned_agent: "ef-core-agent"
+        acceptance_criteria:
+          - "Number = 5 added to enum"
+          - "Date = 6 added to enum"
+          - "All existing enum values unchanged (backward compatible)"
+          - "Enum values are unique and sequential"
+          - "No compilation errors"
+        code_changes:
+          - "Add Number = 5 after Location = 4"
+          - "Add Date = 6 after Number = 5"
+          - "Add XML doc comments for new values"
+        bug_prevention:
+          - "Verify no duplicate enum values"
+          - "Ensure sequential numbering maintains consistency"
+          - "Check that no existing code breaks (grep for QuestionType usage)"
+
+      - id: "CORE-002"
+        name: "Update AnswerValue base class with JSON discriminators"
+        description: |
+          Add [JsonDerivedType] attributes for NumberAnswerValue and DateAnswerValue
+          to enable polymorphic JSON serialization/deserialization.
+        layer: "Core"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/ValueObjects/Answers/AnswerValue.cs"
+        action: "MODIFY"
+        estimated_hours: 0.5
+        status: "pending"
+        dependencies: ["CORE-001"]
+        assigned_agent: "ef-core-agent"
+        acceptance_criteria:
+          - "[JsonDerivedType(typeof(NumberAnswerValue), typeDiscriminator: \"Number\")] added"
+          - "[JsonDerivedType(typeof(DateAnswerValue), typeDiscriminator: \"Date\")] added"
+          - "JSON serialization includes $type discriminator"
+          - "Deserialization routes to correct subtype"
+        code_changes:
+          - "Add JsonDerivedType attribute for NumberAnswerValue"
+          - "Add JsonDerivedType attribute for DateAnswerValue"
+        bug_prevention:
+          - "Verify discriminator strings match exactly (\"Number\", \"Date\")"
+          - "Test JSON serialization includes $type field"
+          - "Test deserialization creates correct subtype"
+
+      - id: "CORE-003"
+        name: "Create NumberAnswerValue value object"
+        description: |
+          Create NumberAnswerValue following RatingAnswerValue pattern.
+          Supports integers and decimals with optional min/max range and decimal places.
+          Immutable with value semantics.
+        layer: "Core"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/ValueObjects/Answers/NumberAnswerValue.cs"
+        action: "CREATE"
+        estimated_hours: 3
+        status: "pending"
+        dependencies: ["CORE-002"]
+        assigned_agent: "ef-core-agent"
+        acceptance_criteria:
+          - "Value object created with decimal Value property"
+          - "MinValue, MaxValue, DecimalPlaces optional properties"
+          - "Create() factory method with validation"
+          - "CreateForQuestion() method extracts config from Question.OptionsJson"
+          - "FromJson() and ToJson() methods work correctly"
+          - "IsValidFor(Question) validates against question config"
+          - "DisplayValue formats with correct decimal places"
+          - "Equality based on Value only"
+          - "All abstract methods implemented"
+        code_changes:
+          - "Create sealed class inheriting from AnswerValue"
+          - "Add decimal Value, MinValue?, MaxValue?, DecimalPlaces? properties"
+          - "Implement Create() with range and decimal validation"
+          - "Implement CreateForQuestion() with OptionsJson parsing"
+          - "Implement FromJson() deserialization"
+          - "Implement ToJson() serialization"
+          - "Implement IsValidFor() validation"
+          - "Implement DisplayValue with formatting"
+          - "Implement Equals() and GetHashCode()"
+          - "Add private NumberData and NumberOptions DTOs"
+        bug_prevention:
+          - "Validate range before creating instance (min <= value <= max)"
+          - "Validate decimal places count (0-10 range, check actual decimals)"
+          - "Handle null optionsJson gracefully (return null constraints)"
+          - "Throw InvalidAnswerFormatException for validation failures"
+          - "Use decimal type for precision (not double/float)"
+          - "Strip unnecessary trailing zeros in DisplayValue"
+          - "Test edge cases: zero, negative, very large numbers"
+
+      - id: "CORE-004"
+        name: "Create DateAnswerValue value object"
+        description: |
+          Create DateAnswerValue with DD.MM.YYYY format validation.
+          Follows LocationAnswerValue pattern for range validation.
+          Immutable with value semantics.
+        layer: "Core"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/ValueObjects/Answers/DateAnswerValue.cs"
+        action: "CREATE"
+        estimated_hours: 3
+        status: "pending"
+        dependencies: ["CORE-002"]
+        assigned_agent: "ef-core-agent"
+        acceptance_criteria:
+          - "Value object created with DateTime Date property"
+          - "MinDate, MaxDate optional properties"
+          - "DateFormat constant = \"dd.MM.yyyy\""
+          - "Create() factory method with range validation"
+          - "Parse() method with strict format validation"
+          - "TryParse() method without exceptions"
+          - "CreateForQuestion() method extracts config from Question.OptionsJson"
+          - "FromJson() and ToJson() methods work correctly"
+          - "IsValidFor(Question) validates against question config"
+          - "DisplayValue formats as DD.MM.YYYY"
+          - "Time component stripped (date only)"
+          - "Equality based on Date only"
+        code_changes:
+          - "Create sealed class inheriting from AnswerValue"
+          - "Add DateTime Date, MinDate?, MaxDate? properties"
+          - "Add DateFormat constant"
+          - "Implement Create() with range validation"
+          - "Implement Parse() with TryParseExact"
+          - "Implement TryParse() non-throwing version"
+          - "Implement CreateForQuestion() with OptionsJson parsing"
+          - "Implement FromJson() deserialization"
+          - "Implement ToJson() serialization"
+          - "Implement IsValidFor() validation"
+          - "Implement DisplayValue formatting"
+          - "Implement Equals() and GetHashCode()"
+          - "Add private DateData and DateOptions DTOs"
+        bug_prevention:
+          - "Use DateTime.TryParseExact with exact format \"dd.MM.yyyy\""
+          - "Use CultureInfo.InvariantCulture for parsing"
+          - "Strip time component (.Date) to avoid comparison issues"
+          - "Validate range AFTER stripping time"
+          - "Handle leap years correctly (2024-02-29 valid, 2025-02-29 invalid)"
+          - "Reject ISO format, slash separators, other formats"
+          - "Throw InvalidAnswerFormatException for validation failures"
+          - "Handle null optionsJson gracefully"
+
+      - id: "CORE-005"
+        name: "Update AnswerValueFactory.Parse()"
+        description: |
+          Add Number and Date cases to Parse() method switch statement.
+          Routes JSON to correct FromJson() method based on QuestionType.
+        layer: "Core"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/Utilities/AnswerValueFactory.cs"
+        action: "MODIFY"
+        estimated_hours: 0.5
+        status: "pending"
+        dependencies: ["CORE-003", "CORE-004"]
+        assigned_agent: "ef-core-agent"
+        acceptance_criteria:
+          - "QuestionType.Number case added calling NumberAnswerValue.FromJson()"
+          - "QuestionType.Date case added calling DateAnswerValue.FromJson()"
+          - "Switch statement exhaustive (default throws)"
+          - "No compilation warnings for missing cases"
+        code_changes:
+          - "Add case QuestionType.Number => NumberAnswerValue.FromJson(json)"
+          - "Add case QuestionType.Date => DateAnswerValue.FromJson(json)"
+        bug_prevention:
+          - "Ensure switch is exhaustive (default case throws)"
+          - "Test with sample JSON for both types"
+          - "Verify InvalidQuestionTypeException thrown for unknown types"
+
+      - id: "CORE-006"
+        name: "Update AnswerValueFactory.CreateFromInput()"
+        description: |
+          Add Number and Date cases to CreateFromInput() method.
+          Add helper methods CreateNumberAnswer() and CreateDateAnswer().
+        layer: "Core"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/Utilities/AnswerValueFactory.cs"
+        action: "MODIFY"
+        estimated_hours: 1
+        status: "pending"
+        dependencies: ["CORE-003", "CORE-004"]
+        assigned_agent: "ef-core-agent"
+        acceptance_criteria:
+          - "QuestionType.Number case added calling CreateNumberAnswer()"
+          - "QuestionType.Date case added calling CreateDateAnswer()"
+          - "CreateNumberAnswer() helper parses decimal from textAnswer"
+          - "CreateDateAnswer() helper parses date from textAnswer"
+          - "Both helpers use CreateForQuestion() when question provided"
+          - "Validation errors throw InvalidAnswerFormatException"
+        code_changes:
+          - "Add case QuestionType.Number in switch"
+          - "Add case QuestionType.Date in switch"
+          - "Add private CreateNumberAnswer(textAnswer, question) method"
+          - "Add private CreateDateAnswer(textAnswer, question) method"
+        bug_prevention:
+          - "Validate textAnswer not null/empty before parsing"
+          - "Use decimal.TryParse for numbers (not double)"
+          - "Use DateTime.ParseExact for dates (exact format)"
+          - "Provide clear error messages on parse failure"
+          - "Pass question config to value object factory"
+
+      - id: "CORE-007"
+        name: "Update AnswerValueFactory.ParseWithTypeDetection()"
+        description: |
+          Add Number and Date discriminator cases and content detection.
+          Enables deserializing answers without explicit QuestionType.
+        layer: "Core"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/Utilities/AnswerValueFactory.cs"
+        action: "MODIFY"
+        estimated_hours: 0.5
+        status: "pending"
+        dependencies: ["CORE-003", "CORE-004"]
+        assigned_agent: "ef-core-agent"
+        acceptance_criteria:
+          - "\"Number\" discriminator case added"
+          - "\"Date\" discriminator case added"
+          - "Content detection for {\"number\": ...} JSON"
+          - "Content detection for {\"date\": ...} JSON"
+          - "Both paths route to correct FromJson() method"
+        code_changes:
+          - "Add \"Number\" case in discriminator switch"
+          - "Add \"Date\" case in discriminator switch"
+          - "Add content detection: if (root.TryGetProperty(\"number\", out _))"
+          - "Add content detection: if (root.TryGetProperty(\"date\", out _))"
+        bug_prevention:
+          - "Test both discriminator path and content detection path"
+          - "Ensure \"number\" property check is after other types (avoid conflicts)"
+          - "Ensure \"date\" property check is unique"
+          - "Throw InvalidAnswerFormatException if type cannot be determined"
+
+      - id: "CORE-008"
+        name: "Create NumberStatisticsDto and DateStatisticsDto"
+        description: |
+          Create DTOs for statistics aggregation in SurveyService.
+          NumberStatistics: min, max, average, median, std dev, count.
+          DateStatistics: earliest, latest, distribution, count.
+        layer: "Core"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/DTOs/Statistics/NumberStatisticsDto.cs"
+        action: "CREATE"
+        estimated_hours: 0.5
+        status: "pending"
+        dependencies: []
+        assigned_agent: "ef-core-agent"
+        acceptance_criteria:
+          - "NumberStatisticsDto created with Minimum, Maximum, Average, Median, StandardDeviation, Count"
+          - "DateStatisticsDto created with EarliestDate, LatestDate, DateDistribution, Count"
+          - "DateFrequency helper class created with Date and Count properties"
+          - "All properties have appropriate data types (decimal for numbers, DateTime for dates)"
+        code_changes:
+          - "Create NumberStatisticsDto.cs with 6 properties"
+          - "Create DateStatisticsDto.cs with 4 properties"
+          - "Create DateFrequency.cs helper class"
+        related_files:
+          - "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/DTOs/Statistics/DateStatisticsDto.cs"
+          - "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/DTOs/Statistics/DateFrequency.cs"
+        bug_prevention:
+          - "Use decimal for number statistics (not double)"
+          - "Use DateTime (not DateTimeOffset) for dates"
+          - "Initialize DateDistribution list in constructor"
+
+  - id: "PHASE-2"
+    name: "Bot Layer Implementation"
+    description: "Telegram bot handlers for Number and Date questions"
+    estimated_hours: 6.5
+    status: "pending"
+    dependencies: ["PHASE-1"]
+    tasks:
+      - id: "BOT-001"
+        name: "Create NumberQuestionHandler"
+        description: |
+          Create handler for Number questions following TextQuestionHandler pattern.
+          Accept text input, validate as decimal, check range and decimal places.
+          Display validation hints (min/max, decimal places).
+        layer: "Bot"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Bot/Handlers/Questions/NumberQuestionHandler.cs"
+        action: "CREATE"
+        estimated_hours: 3
+        status: "pending"
+        dependencies: ["CORE-003", "CORE-005", "CORE-006"]
+        assigned_agent: "telegram-bot-handler-agent"
+        acceptance_criteria:
+          - "Class implements IQuestionHandler"
+          - "QuestionType property returns QuestionType.Number"
+          - "DisplayQuestionAsync() sends question with validation hints"
+          - "ProcessAnswerAsync() validates numeric input"
+          - "Supports both comma and period as decimal separator"
+          - "Validates min/max range from OptionsJson"
+          - "Validates decimal places from OptionsJson"
+          - "Handles /skip for optional questions"
+          - "Handles /back navigation"
+          - "Creates NumberAnswerValue and returns JSON"
+          - "Shows clear error messages for validation failures"
+        code_changes:
+          - "Create class implementing IQuestionHandler"
+          - "Inject IBotService, IAnswerValidator, QuestionErrorHandler, QuestionMediaHelper, ILogger"
+          - "Implement DisplayQuestionAsync() with progress, media, validation hints"
+          - "Implement ProcessAnswerAsync() with decimal parsing and validation"
+          - "Add ParseNumberConfig() helper to extract min/max/decimals"
+          - "Add BuildValidationHint() helper to format hint message"
+          - "Add NumberOptions inner class for OptionsJson deserialization"
+        bug_prevention:
+          - "Accept both ',' and '.' as decimal separator (normalize to '.')"
+          - "Use decimal.TryParse with AllowDecimalPoint | AllowLeadingSign"
+          - "Use CultureInfo.InvariantCulture for parsing"
+          - "Validate BEFORE creating NumberAnswerValue (fail fast)"
+          - "Use NumberAnswerValue.Create() which validates again (defense in depth)"
+          - "Call _validator.ValidateAnswer() as final check"
+          - "Show helpful error messages with examples"
+          - "Handle null/whitespace input"
+          - "Return null on validation failure (re-prompt user)"
+
+      - id: "BOT-002"
+        name: "Create DateQuestionHandler"
+        description: |
+          Create handler for Date questions following TextQuestionHandler pattern.
+          Accept text input in DD.MM.YYYY format, validate date and range.
+          IMPORTANT: Automatically append format hint to question text.
+        layer: "Bot"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Bot/Handlers/Questions/DateQuestionHandler.cs"
+        action: "CREATE"
+        estimated_hours: 3
+        status: "pending"
+        dependencies: ["CORE-004", "CORE-005", "CORE-006"]
+        assigned_agent: "telegram-bot-handler-agent"
+        acceptance_criteria:
+          - "Class implements IQuestionHandler"
+          - "QuestionType property returns QuestionType.Date"
+          - "DisplayQuestionAsync() APPENDS \"(this question must be answered in the format DD.MM.YYYY)\" to question text"
+          - "Shows example date (today's date) in correct format"
+          - "ProcessAnswerAsync() validates DD.MM.YYYY format using TryParseExact"
+          - "Validates min/max date range from OptionsJson"
+          - "Handles /skip for optional questions"
+          - "Handles /back navigation"
+          - "Creates DateAnswerValue and returns JSON"
+          - "Shows clear error messages with format example"
+          - "Rejects ISO format, slash separators, other formats"
+        code_changes:
+          - "Create class implementing IQuestionHandler"
+          - "Inject IBotService, IAnswerValidator, QuestionErrorHandler, QuestionMediaHelper, ILogger"
+          - "Implement DisplayQuestionAsync() with format hint APPENDED to questionText"
+          - "Show example: DateTime.Today:dd.MM.yyyy"
+          - "Implement ProcessAnswerAsync() with strict format validation"
+          - "Use DateTime.TryParseExact with DateAnswerValue.DateFormat"
+          - "Add ParseDateConfig() helper to extract min/max dates"
+          - "Add BuildValidationHint() helper to format range message"
+          - "Add DateOptions inner class for OptionsJson deserialization"
+        bug_prevention:
+          - "MUST append format hint to question text (not just in validation)"
+          - "Use DateTime.TryParseExact with EXACT format (not Parse or TryParse)"
+          - "Use DateAnswerValue.DateFormat constant for consistency"
+          - "Use CultureInfo.InvariantCulture"
+          - "Use DateTimeStyles.None (no lenient parsing)"
+          - "Show error with correct format example on failure"
+          - "Validate range AFTER parsing"
+          - "Use DateAnswerValue.Create() which validates again"
+          - "Call _validator.ValidateAnswer() as final check"
+          - "Test leap years, invalid dates (29.02.2025, 32.01.2025)"
+
+      - id: "BOT-003"
+        name: "Register handlers in DI container"
+        description: |
+          Register NumberQuestionHandler and DateQuestionHandler in BotServiceExtensions.
+          Ensures handlers can be resolved at runtime.
+        layer: "Bot"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Bot/Extensions/BotServiceExtensions.cs"
+        action: "MODIFY"
+        estimated_hours: 0.5
+        status: "pending"
+        dependencies: ["BOT-001", "BOT-002"]
+        assigned_agent: "telegram-bot-handler-agent"
+        acceptance_criteria:
+          - "NumberQuestionHandler registered as IQuestionHandler"
+          - "DateQuestionHandler registered as IQuestionHandler"
+          - "All 7 handlers registered (Text, SingleChoice, MultipleChoice, Rating, Location, Number, Date)"
+          - "DI resolution works at runtime"
+          - "No duplicate registrations"
+        code_changes:
+          - "Add services.AddScoped<IQuestionHandler, NumberQuestionHandler>()"
+          - "Add services.AddScoped<IQuestionHandler, DateQuestionHandler>()"
+        bug_prevention:
+          - "Verify all 7 QuestionType values have corresponding handlers"
+          - "Test DI resolution in integration test"
+          - "Ensure handlers registered as Scoped (not Singleton)"
+
+  - id: "PHASE-3"
+    name: "Infrastructure Layer Implementation"
+    description: "Services for validation and statistics"
+    estimated_hours: 3
+    status: "pending"
+    dependencies: ["PHASE-1"]
+    tasks:
+      - id: "INFRA-001"
+        name: "Update ResponseService validation"
+        description: |
+          Add Number and Date validation cases to ValidateAnswerAsync().
+          Implement ValidateNumberAnswer() and ValidateDateAnswer() methods.
+        layer: "Infrastructure"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Infrastructure/Services/ResponseService.cs"
+        action: "MODIFY"
+        estimated_hours: 2
+        status: "pending"
+        dependencies: ["CORE-003", "CORE-004"]
+        assigned_agent: "aspnet-api-agent"
+        acceptance_criteria:
+          - "ValidateAnswerAsync() switch has QuestionType.Number case"
+          - "ValidateAnswerAsync() switch has QuestionType.Date case"
+          - "ValidateNumberAnswer() method validates decimal, range, decimal places"
+          - "ValidateDateAnswer() method validates DD.MM.YYYY format and range"
+          - "Both methods return ValidationResult"
+          - "Configuration parsed from OptionsJson"
+          - "Clear error messages for validation failures"
+        code_changes:
+          - "Add QuestionType.Number case calling ValidateNumberAnswer()"
+          - "Add QuestionType.Date case calling ValidateDateAnswer()"
+          - "Implement ValidateNumberAnswer(answerText, optionsJson, isRequired)"
+          - "Implement ValidateDateAnswer(answerText, optionsJson, isRequired)"
+          - "Add ParseNumberConfig() helper"
+          - "Add ParseDateConfig() helper"
+          - "Add NumberOptions and DateOptions inner classes"
+        bug_prevention:
+          - "Check null/empty answerText (required vs optional)"
+          - "Use decimal.TryParse for numbers"
+          - "Use DateTime.TryParseExact for dates"
+          - "Parse OptionsJson safely (catch JsonException)"
+          - "Return success for optional empty answers"
+          - "Return failure with message for invalid input"
+          - "Validate range constraints"
+
+      - id: "INFRA-002"
+        name: "Update SurveyService statistics"
+        description: |
+          Add Number and Date statistics calculation to CalculateQuestionStatistics().
+          Implement CalculateNumberStatistics() and CalculateDateStatistics() methods.
+        layer: "Infrastructure"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Infrastructure/Services/SurveyService.cs"
+        action: "MODIFY"
+        estimated_hours: 1
+        status: "pending"
+        dependencies: ["CORE-008"]
+        assigned_agent: "aspnet-api-agent"
+        acceptance_criteria:
+          - "CalculateQuestionStatistics() switch has QuestionType.Number case"
+          - "CalculateQuestionStatistics() switch has QuestionType.Date case"
+          - "CalculateNumberStatistics() extracts NumberAnswerValue from answers"
+          - "CalculateNumberStatistics() calculates min, max, avg, median, std dev"
+          - "CalculateDateStatistics() extracts DateAnswerValue from answers"
+          - "CalculateDateStatistics() calculates earliest, latest, distribution"
+          - "Helper methods CalculateMedian() and CalculateStandardDeviation() added"
+          - "Statistics handle empty answer sets gracefully"
+        code_changes:
+          - "Add QuestionType.Number case setting NumberStatistics"
+          - "Add QuestionType.Date case setting DateStatistics"
+          - "Implement CalculateNumberStatistics(answers)"
+          - "Implement CalculateDateStatistics(answers)"
+          - "Implement CalculateMedian(numbers)"
+          - "Implement CalculateStandardDeviation(numbers)"
+        bug_prevention:
+          - "Cast Answer.Value to NumberAnswerValue/DateAnswerValue safely"
+          - "Filter null values before calculating statistics"
+          - "Handle empty lists (return DTO with Count = 0)"
+          - "Use decimal arithmetic for number stats (avoid double)"
+          - "Use DateTime.Date for date comparisons (no time component)"
+          - "Sort dates for distribution"
+          - "Handle division by zero in std dev calculation"
+
+  - id: "PHASE-4"
+    name: "Testing"
+    description: "Comprehensive unit and integration tests"
+    estimated_hours: 9
+    status: "pending"
+    dependencies: ["PHASE-1", "PHASE-2", "PHASE-3"]
+    tasks:
+      - id: "TEST-001"
+        name: "Create NumberAnswerValue unit tests"
+        description: |
+          Comprehensive tests for NumberAnswerValue value object.
+          Test creation, validation, serialization, equality.
+        layer: "Tests"
+        file_path: "C:/Users/User/Desktop/SurveyBot/tests/SurveyBot.Tests/ValueObjects/NumberAnswerValueTests.cs"
+        action: "CREATE"
+        estimated_hours: 3
+        status: "pending"
+        dependencies: ["CORE-003"]
+        assigned_agent: "dotnet-testing-agent"
+        acceptance_criteria:
+          - "Test valid number creation (integers, decimals, negative, zero)"
+          - "Test range validation (below min, above max)"
+          - "Test decimal places validation (too many decimals)"
+          - "Test JSON serialization/deserialization"
+          - "Test DisplayValue formatting"
+          - "Test equality semantics"
+          - "Test IsValidFor() with question config"
+          - "All tests pass"
+        test_cases:
+          - "Create_ValidNumber_Success (42, 3.14, 0, -5.5)"
+          - "Create_ValueBelowMin_ThrowsException"
+          - "Create_ValueAboveMax_ThrowsException"
+          - "Create_TooManyDecimalPlaces_ThrowsException"
+          - "Create_WithinRange_Success"
+          - "ToJson_SerializesCorrectly"
+          - "FromJson_DeserializesCorrectly"
+          - "DisplayValue_FormatsCorrectly"
+          - "Equals_SameValue_ReturnsTrue"
+          - "Equals_DifferentValue_ReturnsFalse"
+        bug_prevention:
+          - "Test edge cases: zero, negative, very large numbers"
+          - "Test decimal precision issues (3.14159 vs 3.14)"
+          - "Test JSON round-trip preserves value"
+          - "Test equality ignores min/max/decimalPlaces (value only)"
+
+      - id: "TEST-002"
+        name: "Create DateAnswerValue unit tests"
+        description: |
+          Comprehensive tests for DateAnswerValue value object.
+          Test parsing, validation, serialization, equality.
+        layer: "Tests"
+        file_path: "C:/Users/User/Desktop/SurveyBot/tests/SurveyBot.Tests/ValueObjects/DateAnswerValueTests.cs"
+        action: "CREATE"
+        estimated_hours: 3
+        status: "pending"
+        dependencies: ["CORE-004"]
+        assigned_agent: "dotnet-testing-agent"
+        acceptance_criteria:
+          - "Test valid DD.MM.YYYY format parsing"
+          - "Test invalid format rejection (ISO, slash, invalid dates)"
+          - "Test range validation (before min, after max)"
+          - "Test leap year handling"
+          - "Test JSON serialization/deserialization"
+          - "Test TryParse() success and failure paths"
+          - "Test time component stripping"
+          - "Test equality semantics"
+          - "All tests pass"
+        test_cases:
+          - "Parse_ValidDate_Success (28.11.2025, 01.01.2024, 29.02.2024)"
+          - "Parse_InvalidDate_ThrowsException (ISO format, slashes, 32.11.2025, 29.02.2025, 15.13.2025)"
+          - "Create_DateBeforeMin_ThrowsException"
+          - "Create_DateAfterMax_ThrowsException"
+          - "Create_WithinRange_Success"
+          - "ToJson_SerializesCorrectly"
+          - "FromJson_DeserializesCorrectly"
+          - "TryParse_ValidDate_ReturnsTrue"
+          - "TryParse_InvalidDate_ReturnsFalse"
+          - "DisplayValue_ReturnsCorrectFormat"
+          - "Equals_SameDate_ReturnsTrue"
+          - "Equals_DifferentDate_ReturnsFalse"
+          - "Create_StripsTimeComponent"
+        bug_prevention:
+          - "Test leap year dates (2024-02-29 valid, 2025-02-29 invalid)"
+          - "Test invalid day/month (32, 13)"
+          - "Test format strictness (reject ISO, slashes)"
+          - "Test time stripping (14:30:00 → 00:00:00)"
+          - "Test JSON round-trip preserves date"
+          - "Test equality ignores min/max (date only)"
+
+      - id: "TEST-003"
+        name: "Create AnswerValueFactory unit tests for Number/Date"
+        description: |
+          Test AnswerValueFactory integration with NumberAnswerValue and DateAnswerValue.
+          Test Parse(), CreateFromInput(), ParseWithTypeDetection().
+        layer: "Tests"
+        file_path: "C:/Users/User/Desktop/SurveyBot/tests/SurveyBot.Tests/Utilities/AnswerValueFactoryTests.cs"
+        action: "MODIFY"
+        estimated_hours: 1
+        status: "pending"
+        dependencies: ["CORE-005", "CORE-006", "CORE-007"]
+        assigned_agent: "dotnet-testing-agent"
+        acceptance_criteria:
+          - "Parse(json, QuestionType.Number) returns NumberAnswerValue"
+          - "Parse(json, QuestionType.Date) returns DateAnswerValue"
+          - "CreateFromInput() creates NumberAnswerValue from textAnswer"
+          - "CreateFromInput() creates DateAnswerValue from textAnswer"
+          - "ParseWithTypeDetection() detects Number discriminator"
+          - "ParseWithTypeDetection() detects Date discriminator"
+          - "ParseWithTypeDetection() detects number content"
+          - "ParseWithTypeDetection() detects date content"
+          - "All tests pass"
+        test_cases:
+          - "Parse_NumberJson_ReturnsNumberAnswerValue"
+          - "Parse_DateJson_ReturnsDateAnswerValue"
+          - "CreateFromInput_NumberText_ReturnsNumberAnswerValue"
+          - "CreateFromInput_DateText_ReturnsDateAnswerValue"
+          - "ParseWithTypeDetection_NumberDiscriminator_Success"
+          - "ParseWithTypeDetection_DateDiscriminator_Success"
+          - "ParseWithTypeDetection_NumberContent_Success"
+          - "ParseWithTypeDetection_DateContent_Success"
+        bug_prevention:
+          - "Test invalid JSON throws InvalidAnswerFormatException"
+          - "Test unknown QuestionType throws InvalidQuestionTypeException"
+          - "Test CreateFromInput with null question"
+          - "Test CreateFromInput with question config"
+
+      - id: "TEST-004"
+        name: "Create ResponseService validation tests"
+        description: |
+          Test ResponseService.ValidateAnswerAsync() for Number and Date types.
+        layer: "Tests"
+        file_path: "C:/Users/User/Desktop/SurveyBot/tests/SurveyBot.Tests/Services/ResponseServiceTests.cs"
+        action: "MODIFY"
+        estimated_hours: 1
+        status: "pending"
+        dependencies: ["INFRA-001"]
+        assigned_agent: "dotnet-testing-agent"
+        acceptance_criteria:
+          - "Valid number passes validation"
+          - "Invalid number format fails validation"
+          - "Number out of range fails validation"
+          - "Valid date passes validation"
+          - "Invalid date format fails validation"
+          - "Date out of range fails validation"
+          - "Optional empty answers pass validation"
+          - "Required empty answers fail validation"
+        test_cases:
+          - "ValidateAnswerAsync_ValidNumber_ReturnsSuccess"
+          - "ValidateAnswerAsync_InvalidNumberFormat_ReturnsFailure"
+          - "ValidateAnswerAsync_NumberOutOfRange_ReturnsFailure"
+          - "ValidateAnswerAsync_ValidDate_ReturnsSuccess"
+          - "ValidateAnswerAsync_InvalidDateFormat_ReturnsFailure"
+          - "ValidateAnswerAsync_DateOutOfRange_ReturnsFailure"
+        bug_prevention:
+          - "Mock Question with OptionsJson configuration"
+          - "Test both required and optional questions"
+          - "Verify error messages are helpful"
+
+      - id: "TEST-005"
+        name: "Create SurveyService statistics tests"
+        description: |
+          Test SurveyService statistics calculation for Number and Date types.
+        layer: "Tests"
+        file_path: "C:/Users/User/Desktop/SurveyBot/tests/SurveyBot.Tests/Services/SurveyServiceTests.cs"
+        action: "MODIFY"
+        estimated_hours: 1
+        status: "pending"
+        dependencies: ["INFRA-002"]
+        assigned_agent: "dotnet-testing-agent"
+        acceptance_criteria:
+          - "Number statistics calculate min, max, avg, median, std dev correctly"
+          - "Date statistics calculate earliest, latest, distribution correctly"
+          - "Empty answer sets return DTO with Count = 0"
+          - "Statistics handle null values"
+          - "All tests pass"
+        test_cases:
+          - "CalculateNumberStatistics_ValidAnswers_ReturnsCorrectStats"
+          - "CalculateNumberStatistics_EmptyAnswers_ReturnsZeroCount"
+          - "CalculateDateStatistics_ValidAnswers_ReturnsCorrectStats"
+          - "CalculateDateStatistics_EmptyAnswers_ReturnsZeroCount"
+          - "CalculateMedian_OddCount_ReturnsMiddleValue"
+          - "CalculateMedian_EvenCount_ReturnsAverage"
+          - "CalculateStandardDeviation_ValidSet_ReturnsCorrectValue"
+        bug_prevention:
+          - "Test median calculation for odd/even counts"
+          - "Test std dev with single value (should be 0)"
+          - "Test date distribution grouping"
+          - "Mock answers with NumberAnswerValue/DateAnswerValue"
+
+  - id: "PHASE-5"
+    name: "Documentation"
+    description: "Update all documentation files"
+    estimated_hours: 6
+    status: "pending"
+    dependencies: ["PHASE-1", "PHASE-2", "PHASE-3"]
+    tasks:
+      - id: "DOCS-001"
+        name: "Update root CLAUDE.md"
+        description: |
+          Update main project documentation with Number and Date question types.
+          Add to entity overview, question types list, value objects, etc.
+        layer: "Docs"
+        file_path: "C:/Users/User/Desktop/SurveyBot/CLAUDE.md"
+        action: "MODIFY"
+        estimated_hours: 2
+        status: "pending"
+        dependencies: []
+        assigned_agent: "project-manager-agent"
+        acceptance_criteria:
+          - "Question types section updated (add Number and Date)"
+          - "Value objects list updated (add NumberAnswerValue, DateAnswerValue)"
+          - "QuestionType enum values documented (Number = 5, Date = 6)"
+          - "Version updated to 1.5.1"
+          - "Recent changes section updated"
+        sections_to_update:
+          - "Question Types (add Number and Date descriptions)"
+          - "Value Objects (add NumberAnswerValue and DateAnswerValue)"
+          - "Entity Relationship Overview (note new question types)"
+          - "Recent Changes (add v1.5.1 section)"
+          - "Summary for AI Assistants (update counts)"
+
+      - id: "DOCS-002"
+        name: "Update Core CLAUDE.md"
+        description: |
+          Document NumberAnswerValue and DateAnswerValue in Core layer documentation.
+          Update value objects section with detailed descriptions.
+        layer: "Docs"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Core/CLAUDE.md"
+        action: "MODIFY"
+        estimated_hours: 2
+        status: "pending"
+        dependencies: []
+        assigned_agent: "project-manager-agent"
+        acceptance_criteria:
+          - "NumberAnswerValue documented in value objects section"
+          - "DateAnswerValue documented in value objects section"
+          - "Usage examples provided for both"
+          - "Validation rules documented"
+          - "JSON format examples included"
+          - "Version updated to 1.5.1"
+        sections_to_update:
+          - "Value Objects (add NumberAnswerValue and DateAnswerValue subsections)"
+          - "QuestionType Enum (update with Number = 5, Date = 6)"
+          - "AnswerValueFactory Utilities (document new cases)"
+
+      - id: "DOCS-003"
+        name: "Update Bot CLAUDE.md"
+        description: |
+          Document NumberQuestionHandler and DateQuestionHandler in Bot layer documentation.
+          Include usage examples and format hints.
+        layer: "Docs"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Bot/CLAUDE.md"
+        action: "MODIFY"
+        estimated_hours: 1
+        status: "pending"
+        dependencies: []
+        assigned_agent: "project-manager-agent"
+        acceptance_criteria:
+          - "NumberQuestionHandler documented in handlers section"
+          - "DateQuestionHandler documented in handlers section"
+          - "Format hint requirement documented for dates"
+          - "Validation behavior documented"
+          - "User interaction flow documented"
+          - "Version updated to 1.5.1"
+        sections_to_update:
+          - "Question Handlers (add NumberQuestionHandler and DateQuestionHandler)"
+          - "Handler Registration (show 7 handlers)"
+          - "Input Validation (document Number/Date validation)"
+
+      - id: "DOCS-004"
+        name: "Update Infrastructure CLAUDE.md"
+        description: |
+          Document ResponseService and SurveyService updates for Number and Date types.
+        layer: "Docs"
+        file_path: "C:/Users/User/Desktop/SurveyBot/src/SurveyBot.Infrastructure/CLAUDE.md"
+        action: "MODIFY"
+        estimated_hours: 1
+        status: "pending"
+        dependencies: []
+        assigned_agent: "project-manager-agent"
+        acceptance_criteria:
+          - "ResponseService validation updated"
+          - "SurveyService statistics updated"
+          - "NumberStatisticsDto and DateStatisticsDto documented"
+          - "Version updated to 1.5.1"
+        sections_to_update:
+          - "ResponseService (document Number/Date validation)"
+          - "SurveyService (document Number/Date statistics)"
+          - "Statistics DTOs (add NumberStatisticsDto, DateStatisticsDto)"
+
+integration_points:
+  - point: "Core → Bot"
+    description: "Bot handlers use NumberAnswerValue.Create() and DateAnswerValue.Parse()"
+    files:
+      - "NumberQuestionHandler.ProcessAnswerAsync()"
+      - "DateQuestionHandler.ProcessAnswerAsync()"
+    verification: "Bot can create and serialize value objects correctly"
+
+  - point: "Core → Infrastructure"
+    description: "Services use value objects for validation and statistics"
+    files:
+      - "ResponseService.ValidateNumberAnswer()"
+      - "ResponseService.ValidateDateAnswer()"
+      - "SurveyService.CalculateNumberStatistics()"
+      - "SurveyService.CalculateDateStatistics()"
+    verification: "Services can extract and process value objects from Answer.Value"
+
+  - point: "Infrastructure → Database"
+    description: "EF Core serializes AnswerValue as JSONB with discriminator"
+    files:
+      - "Answer entity with Value property"
+      - "AnswerConfiguration (owned type)"
+    verification: "Database stores and retrieves Number/Date answers correctly"
+
+  - point: "Bot → Infrastructure"
+    description: "Bot handlers call ResponseService for validation"
+    files:
+      - "NumberQuestionHandler.ProcessAnswerAsync()"
+      - "DateQuestionHandler.ProcessAnswerAsync()"
+      - "ResponseService.SubmitAnswerAsync()"
+    verification: "End-to-end flow works: user input → validation → storage"
+
+  - point: "DI Container"
+    description: "All handlers registered and resolvable"
+    files:
+      - "BotServiceExtensions.AddBotServices()"
+    verification: "All 7 QuestionType values have registered handlers"
+
+bug_prevention_checklist:
+  core_layer:
+    - "QuestionType enum has Number = 5, Date = 6"
+    - "AnswerValue has [JsonDerivedType] for Number and Date"
+    - "NumberAnswerValue implements all abstract methods"
+    - "DateAnswerValue implements all abstract methods"
+    - "AnswerValueFactory.Parse() has Number and Date cases"
+    - "AnswerValueFactory.CreateFromInput() has Number and Date cases"
+    - "AnswerValueFactory.ParseWithTypeDetection() has Number and Date cases"
+    - "NumberStatisticsDto and DateStatisticsDto created"
+
+  infrastructure_layer:
+    - "ResponseService.ValidateAnswerAsync() has Number and Date cases"
+    - "SurveyService.CalculateQuestionStatistics() has Number and Date cases"
+    - "ValidateNumberAnswer() method added with range/decimal validation"
+    - "ValidateDateAnswer() method added with format/range validation"
+    - "CalculateNumberStatistics() method added with min/max/avg/median/stddev"
+    - "CalculateDateStatistics() method added with earliest/latest/distribution"
+
+  bot_layer:
+    - "NumberQuestionHandler created and implements IQuestionHandler"
+    - "DateQuestionHandler created and implements IQuestionHandler"
+    - "Both handlers registered in BotServiceExtensions.cs"
+    - "Date handler APPENDS format hint to question text"
+    - "Number handler shows validation hint (min/max/decimals)"
+    - "Both handlers support /skip for optional questions"
+    - "Both handlers support /back navigation"
+
+  testing:
+    - "All unit tests for NumberAnswerValue pass"
+    - "All unit tests for DateAnswerValue pass"
+    - "AnswerValueFactory tests pass for Number and Date"
+    - "ResponseService validation tests pass"
+    - "SurveyService statistics tests pass"
+
+  compilation:
+    - "No compiler errors"
+    - "No compiler warnings"
+    - "All projects build successfully"
+
+  runtime:
+    - "DI resolution works for all 7 handlers"
+    - "JSON serialization/deserialization works with discriminators"
+    - "Database saves/retrieves AnswerValue correctly"
+    - "Statistics calculations work for Number and Date"
+    - "End-to-end flow works: create question → answer → retrieve → statistics"
+
+verification_steps:
+  - step: "Create Number question via API"
+    method: "POST"
+    endpoint: "/api/surveys/{id}/questions"
+    body: |
+      {
+        "questionType": "Number",
+        "questionText": "How many hours do you work per week?",
+        "isRequired": true,
+        "options": ["{\"MinValue\": 0, \"MaxValue\": 168, \"DecimalPlaces\": 0}"]
+      }
+    expected: "Question created with ID"
+
+  - step: "Answer Number question via Bot"
+    action: "User types: 40"
+    expected: "Answer saved with NumberAnswerValue in database"
+
+  - step: "Create Date question via API"
+    method: "POST"
+    endpoint: "/api/surveys/{id}/questions"
+    body: |
+      {
+        "questionType": "Date",
+        "questionText": "What is your date of birth?",
+        "isRequired": true,
+        "options": ["{\"MinDate\": \"1900-01-01\", \"MaxDate\": \"2010-12-31\"}"]
+      }
+    expected: "Question created with ID"
+
+  - step: "Answer Date question via Bot"
+    action: "User sees format hint, types: 28.11.2000"
+    expected: "Answer saved with DateAnswerValue in database"
+
+  - step: "Retrieve survey statistics"
+    method: "GET"
+    endpoint: "/api/surveys/{id}/statistics"
+    expected: |
+      Number statistics: min, max, average, median, std dev
+      Date statistics: earliest, latest, distribution
+
+  - step: "Test error scenarios"
+    tests:
+      - "Invalid number format → Error message"
+      - "Number out of range → Error message"
+      - "Invalid date format → Error message with example"
+      - "Date out of range → Error message"
+      - "/skip works for optional questions"
+      - "/skip rejected for required questions"
+
+rollback_plan:
+  condition: "If implementation fails or critical bugs found"
+  steps:
+    - "Revert commits in reverse order (Docs → Tests → Infrastructure → Bot → Core)"
+    - "Remove NumberQuestionHandler and DateQuestionHandler from DI"
+    - "Remove Number and Date cases from all switch statements"
+    - "Remove NumberAnswerValue and DateAnswerValue classes"
+    - "Remove Number and Date from QuestionType enum"
+    - "Run all tests to ensure existing functionality intact"
+    - "Deploy previous version to production"
+
+  prevention:
+    - "Test thoroughly before merging to master"
+    - "Use feature branch for development"
+    - "Get code review before merge"
+    - "Run full test suite before deployment"
+
+timeline:
+  week_1:
+    description: "Core and Bot layers"
+    days:
+      - day: "1-2"
+        tasks: ["CORE-001", "CORE-002", "CORE-003", "CORE-004", "CORE-008"]
+        hours: 8
+      - day: "3"
+        tasks: ["CORE-005", "CORE-006", "CORE-007"]
+        hours: 2
+      - day: "4-5"
+        tasks: ["BOT-001", "BOT-002", "BOT-003"]
+        hours: 6.5
+
+  week_2:
+    description: "Infrastructure, testing, and documentation"
+    days:
+      - day: "1"
+        tasks: ["INFRA-001", "INFRA-002"]
+        hours: 3
+      - day: "2-3"
+        tasks: ["TEST-001", "TEST-002", "TEST-003"]
+        hours: 7
+      - day: "4"
+        tasks: ["TEST-004", "TEST-005"]
+        hours: 2
+      - day: "5"
+        tasks: ["DOCS-001", "DOCS-002", "DOCS-003", "DOCS-004"]
+        hours: 6
+
+success_criteria:
+  - "All 17 files created or modified as specified"
+  - "Number = 5 and Date = 6 added to QuestionType enum"
+  - "NumberAnswerValue and DateAnswerValue value objects created"
+  - "AnswerValue has JSON discriminators for new types"
+  - "AnswerValueFactory handles Number and Date in all methods"
+  - "NumberQuestionHandler and DateQuestionHandler created"
+  - "Handlers registered in DI container (7 total)"
+  - "ResponseService validates Number and Date answers"
+  - "SurveyService calculates statistics for Number and Date"
+  - "All switch statements updated (no missing cases)"
+  - "All unit tests pass (50+ new tests)"
+  - "Integration tests pass"
+  - "Documentation updated (4 CLAUDE.md files)"
+  - "No compilation errors or warnings"
+  - "End-to-end verification complete"
+  - "Bug prevention checklist 100% complete"
+
+notes:
+  - "Follow existing architectural patterns exactly"
+  - "Number questions follow RatingAnswerValue pattern"
+  - "Date questions follow LocationAnswerValue pattern"
+  - "Format hint MUST be appended to date question text in bot"
+  - "Validate in multiple layers (defense in depth)"
+  - "Use decimal for numbers (not double/float)"
+  - "Use DateTime.Date for dates (strip time)"
+  - "Test edge cases thoroughly"
+  - "Update documentation as you go"
+  - "Run tests after each phase"

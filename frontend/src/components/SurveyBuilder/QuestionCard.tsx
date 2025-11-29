@@ -20,9 +20,12 @@ import {
   CheckBox as MultipleChoiceIcon,
   Star as RatingIcon,
   LocationOn as LocationIcon,
+  Numbers as NumberIcon,
+  CalendarToday as DateIcon,
 } from '@mui/icons-material';
 import { QuestionType } from '../../types';
 import type { QuestionDraft } from '../../schemas/questionSchemas';
+import { stripHtml } from '../../utils/stringUtils';
 
 interface QuestionCardProps {
   question: QuestionDraft;
@@ -66,6 +69,10 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
         return <RatingIcon fontSize="small" />;
       case QuestionType.Location:
         return <LocationIcon fontSize="small" />;
+      case QuestionType.Number:
+        return <NumberIcon fontSize="small" />;
+      case QuestionType.Date:
+        return <DateIcon fontSize="small" />;
       default:
         return <TextIcon fontSize="small" />;
     }
@@ -83,6 +90,10 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
         return 'Rating';
       case QuestionType.Location:
         return 'Location';
+      case QuestionType.Number:
+        return 'Number';
+      case QuestionType.Date:
+        return 'Date';
       default:
         return 'Unknown';
     }
@@ -100,6 +111,10 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
         return 'warning';
       case QuestionType.Location:
         return 'secondary';
+      case QuestionType.Number:
+        return 'error';
+      case QuestionType.Date:
+        return 'default';
       default:
         return 'default';
     }
@@ -176,7 +191,7 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
                 fontWeight: 500,
               }}
             >
-              {question.questionText}
+              {stripHtml(question.questionText)}
             </Typography>
 
             {/* Options Preview (for choice questions) */}
@@ -230,6 +245,20 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
             {question.questionType === QuestionType.Location && (
               <Typography variant="body2" color="text.secondary" sx={{ pl: 2 }}>
                 GPS location sharing
+              </Typography>
+            )}
+
+            {/* Number Info */}
+            {question.questionType === QuestionType.Number && (
+              <Typography variant="body2" color="text.secondary" sx={{ pl: 2 }}>
+                Numeric input (integer or decimal)
+              </Typography>
+            )}
+
+            {/* Date Info */}
+            {question.questionType === QuestionType.Date && (
+              <Typography variant="body2" color="text.secondary" sx={{ pl: 2 }}>
+                Date input (DD.MM.YYYY format)
               </Typography>
             )}
           </Box>

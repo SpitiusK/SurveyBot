@@ -27,7 +27,6 @@ import {
   Timeline,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { AppShell } from '@/layouts/AppShell';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import surveyService from '@/services/surveyService';
 import { useAuth } from '@/hooks/useAuth';
@@ -144,9 +143,8 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <AppShell>
-      <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
-        <Breadcrumb />
+    <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
+      <Breadcrumb />
 
         {/* Welcome Section */}
         <Box sx={{ mb: 4 }}>
@@ -415,8 +413,7 @@ const Dashboard: React.FC = () => {
             )}
           </CardContent>
         </Card>
-      </Box>
-    </AppShell>
+    </Box>
   );
 };
 

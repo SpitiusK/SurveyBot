@@ -13,6 +13,8 @@ namespace SurveyBot.Core.ValueObjects.Answers;
 [JsonDerivedType(typeof(MultipleChoiceAnswerValue), typeDiscriminator: "MultipleChoice")]
 [JsonDerivedType(typeof(RatingAnswerValue), typeDiscriminator: "Rating")]
 [JsonDerivedType(typeof(LocationAnswerValue), typeDiscriminator: "Location")]
+[JsonDerivedType(typeof(NumberAnswerValue), typeDiscriminator: "Number")]
+[JsonDerivedType(typeof(DateAnswerValue), typeDiscriminator: "Date")]
 public abstract class AnswerValue : IEquatable<AnswerValue>
 {
     /// <summary>

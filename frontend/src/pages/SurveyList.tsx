@@ -17,7 +17,6 @@ import {
 } from '@mui/material';
 import { Add } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { AppShell } from '@/layouts/AppShell';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { EmptyState } from '@/components/EmptyState';
 import { SurveyFiltersComponent } from '@/components/SurveyFilters';
@@ -289,9 +288,8 @@ const SurveyList: React.FC = () => {
   };
 
   return (
-    <AppShell>
-      <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
-        <Breadcrumb />
+    <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
+      <Breadcrumb />
 
         {/* Header */}
         <Box
@@ -450,7 +448,6 @@ const SurveyList: React.FC = () => {
             </Box>
           </>
         )}
-      </Box>
 
       {/* Delete Confirmation Dialog */}
       {deleteDialog.survey && (
@@ -489,7 +486,7 @@ const SurveyList: React.FC = () => {
           {toast.message}
         </Alert>
       </Snackbar>
-    </AppShell>
+    </Box>
   );
 };
 

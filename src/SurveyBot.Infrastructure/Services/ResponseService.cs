@@ -385,6 +385,8 @@ public class ResponseService : IResponseService
             QuestionType.MultipleChoice => ValidateMultipleChoiceAnswer(selectedOptions, question.OptionsJson, question.IsRequired),
             QuestionType.Rating => ValidateRatingAnswer(ratingValue, question.IsRequired),
             QuestionType.Location => ValidateLocationAnswer(answerJson, question.IsRequired),
+            QuestionType.Number => ValidateNumberAnswer(answerJson, question.IsRequired, question.OptionsJson),
+            QuestionType.Date => ValidateDateAnswer(answerJson, question.IsRequired, question.OptionsJson),
             _ => ValidationResult.Failure("Unknown question type")
         };
     }
@@ -624,6 +626,14 @@ public class ResponseService : IResponseService
                 dto.LocationTimestamp = locationValue.Timestamp;
                 break;
 
+            case NumberAnswerValue numberValue:
+                dto.NumberValue = numberValue.Value;
+                break;
+
+            case DateAnswerValue dateValue:
+                dto.DateValue = dateValue.Date;
+                break;
+
             case null:
                 // Fallback for legacy data - try legacy AnswerText/AnswerJson
                 dto.AnswerText = answer.AnswerText;
@@ -833,32 +843,195 @@ public class ResponseService : IResponseService
         return ValidationResult.Success();
     }
 
+    /// <summary>
+    /// Validates number answer from JSON.
+    /// Supports optional min/max range and decimal places validation.
+    /// </summary>
+    private ValidationResult ValidateNumberAnswer(string? answerJson, bool isRequired, string? optionsJson)
+    {
+        if (isRequired && string.IsNullOrWhiteSpace(answerJson))
+        {
+            return ValidationResult.Failure("Number answer is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(answerJson))
+        {
+            return ValidationResult.Success(); // Optional question with no answer
+        }
+
+        try
+        {
+            // Use NumberAnswerValue.FromJson() which includes validation
+            var numberValue = NumberAnswerValue.FromJson(answerJson);
+
+            // If optionsJson contains additional validation rules, apply them
+            if (!string.IsNullOrWhiteSpace(optionsJson))
+            {
+                var options = JsonSerializer.Deserialize<NumberOptions>(optionsJson);
+                if (options != null)
+                {
+                    if (options.MinValue.HasValue && numberValue.Value < options.MinValue.Value)
+                    {
+                        return ValidationResult.Failure($"Number must be at least {options.MinValue.Value}");
+                    }
+
+                    if (options.MaxValue.HasValue && numberValue.Value > options.MaxValue.Value)
+                    {
+                        return ValidationResult.Failure($"Number must be at most {options.MaxValue.Value}");
+                    }
+
+                    if (options.DecimalPlaces.HasValue && options.DecimalPlaces.Value >= 0)
+                    {
+                        var actualDecimalPlaces = GetDecimalPlaces(numberValue.Value);
+                        if (actualDecimalPlaces > options.DecimalPlaces.Value)
+                        {
+                            return ValidationResult.Failure($"Number cannot have more than {options.DecimalPlaces.Value} decimal place(s)");
+                        }
+                    }
+                }
+            }
+
+            _logger.LogDebug("Number answer validated: {Value}", numberValue.Value);
+            return ValidationResult.Success();
+        }
+        catch (InvalidAnswerFormatException ex)
+        {
+            _logger.LogError(ex, "Invalid number answer format: {Json}", answerJson);
+            return ValidationResult.Failure($"Invalid number answer format: {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Invalid JSON format for number answer: {Json}", answerJson);
+            return ValidationResult.Failure("Invalid JSON format for number answer.");
+        }
+    }
+
+    /// <summary>
+    /// Validates date answer from JSON.
+    /// Supports optional min/max date range validation.
+    /// </summary>
+    private ValidationResult ValidateDateAnswer(string? answerJson, bool isRequired, string? optionsJson)
+    {
+        if (isRequired && string.IsNullOrWhiteSpace(answerJson))
+        {
+            return ValidationResult.Failure("Date answer is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(answerJson))
+        {
+            return ValidationResult.Success(); // Optional question with no answer
+        }
+
+        try
+        {
+            // Use DateAnswerValue.FromJson() which includes validation
+            var dateValue = DateAnswerValue.FromJson(answerJson);
+
+            // If optionsJson contains additional validation rules, apply them
+            if (!string.IsNullOrWhiteSpace(optionsJson))
+            {
+                var options = JsonSerializer.Deserialize<DateOptions>(optionsJson);
+                if (options != null)
+                {
+                    if (options.MinDate.HasValue && dateValue.Date < options.MinDate.Value.Date)
+                    {
+                        return ValidationResult.Failure($"Date must be on or after {options.MinDate.Value:dd.MM.yyyy}");
+                    }
+
+                    if (options.MaxDate.HasValue && dateValue.Date > options.MaxDate.Value.Date)
+                    {
+                        return ValidationResult.Failure($"Date must be on or before {options.MaxDate.Value:dd.MM.yyyy}");
+                    }
+                }
+            }
+
+            _logger.LogDebug("Date answer validated: {Value}", dateValue.Date.ToString(DateAnswerValue.DateFormat));
+            return ValidationResult.Success();
+        }
+        catch (InvalidAnswerFormatException ex)
+        {
+            _logger.LogError(ex, "Invalid date answer format: {Json}", answerJson);
+            return ValidationResult.Failure($"Invalid date answer format: {ex.Message}");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Invalid JSON format for date answer: {Json}", answerJson);
+            return ValidationResult.Failure("Invalid JSON format for date answer.");
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of decimal places in a decimal value.
+    /// </summary>
+    private static int GetDecimalPlaces(decimal value)
+    {
+        value = value / 1.000000000000000000000000000000000m;
+        var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var decimalIndex = text.IndexOf('.');
+        if (decimalIndex < 0)
+            return 0;
+        return text.Length - decimalIndex - 1;
+    }
+
+    /// <summary>
+    /// Number options from question configuration.
+    /// </summary>
+    private sealed class NumberOptions
+    {
+        public decimal? MinValue { get; set; }
+        public decimal? MaxValue { get; set; }
+        public int? DecimalPlaces { get; set; }
+    }
+
+    /// <summary>
+    /// Date options from question configuration.
+    /// </summary>
+    private sealed class DateOptions
+    {
+        public DateTime? MinDate { get; set; }
+        public DateTime? MaxDate { get; set; }
+    }
+
     // Conditional Flow Logic
 
     /// <summary>
     /// Determines the next question ID based on the question type and answer.
     /// Implements the conditional flow logic priority: Conditional → Default → Sequential → End.
     /// </summary>
+    /// <remarks>
+    /// Question type classification for navigation:
+    /// - Branching (SingleChoice): Each option can have individual flow (uses QuestionOption.Next)
+    /// - Non-branching (Text, MultipleChoice, Rating, Number, Date, Location): All answers use same flow (uses Question.DefaultNext)
+    ///
+    /// Note: Rating questions are classified as non-branching because they use a 1-5 scale
+    /// without QuestionOption entities. They should use DefaultNext for navigation.
+    /// </remarks>
     private async Task<NextQuestionDeterminant> DetermineNextStepAsync(
         Question question,
         List<int>? selectedOptions,
         int surveyId,
         CancellationToken cancellationToken)
     {
-        // For branching question types (SingleChoice, Rating)
-        if (question.QuestionType == QuestionType.SingleChoice || question.QuestionType == QuestionType.Rating)
+        // For branching question types (SingleChoice only)
+        // SingleChoice questions have QuestionOption entities with individual Next flow
+        if (question.QuestionType == QuestionType.SingleChoice)
         {
             return await DetermineBranchingNextStepAsync(question, selectedOptions, cancellationToken);
         }
 
-        // For non-branching question types (Text, MultipleChoice)
+        // For non-branching question types (Text, MultipleChoice, Rating, Number, Date, Location)
+        // These use Question.DefaultNext for navigation (no per-option flow)
         return await DetermineNonBranchingNextStepAsync(question, surveyId, cancellationToken);
     }
 
     /// <summary>
-    /// Determines next question for branching question types (SingleChoice, Rating).
+    /// Determines next question for branching question types (SingleChoice only).
     /// Priority: Option's Next → Question's DefaultNext → Sequential fallback → End.
     /// </summary>
+    /// <remarks>
+    /// Note: Rating questions were previously classified as branching but have been moved
+    /// to non-branching flow (v1.5.1) because they use a 1-5 scale without QuestionOption entities.
+    /// </remarks>
     private async Task<NextQuestionDeterminant> DetermineBranchingNextStepAsync(
         Question question,
         List<int>? selectedOptions,

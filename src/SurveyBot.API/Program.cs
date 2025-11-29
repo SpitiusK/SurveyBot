@@ -429,7 +429,8 @@ try
     }
 
     // Enable CORS (must be before UseAuthentication)
-    app.UseCors();
+    // Using NgrokPolicy to auto-allow all ngrok URLs dynamically
+    app.UseCors("NgrokPolicy");
 
     // Enable static file serving for media uploads
     var webRootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");

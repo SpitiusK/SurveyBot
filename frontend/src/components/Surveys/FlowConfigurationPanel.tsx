@@ -28,6 +28,7 @@ import type {
   ConditionalFlowDto,
   UpdateQuestionFlowDto,
 } from '@/types';
+import { isBranchingType } from '@/types';
 
 interface FlowConfigurationPanelProps {
   surveyId: number;
@@ -68,8 +69,7 @@ export default function FlowConfigurationPanel({
   const [defaultNextQuestionId, setDefaultNextQuestionId] = useState<number | null>(null);
   const [optionFlows, setOptionFlows] = useState<Record<number, number | null>>({});
 
-  const isBranchingQuestion =
-    question.questionType === 1 || question.questionType === 3; // SingleChoice or Rating
+  const isBranchingQuestion = isBranchingType(question.questionType);
 
   // Load flow configuration on mount or when question changes
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   List,
   ListItem,
@@ -15,8 +15,11 @@ import {
   List as ListIcon,
   Settings,
   Help,
+  Logout,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { ConfirmDialog } from './ConfirmDialog';
 
 export interface MenuItem {
   text: string;
@@ -43,12 +46,31 @@ interface NavigationProps {
 export const Navigation: React.FC<NavigationProps> = ({ onItemClick }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
   const handleNavigate = (path: string) => {
     navigate(path);
     if (onItemClick) {
       onItemClick();
     }
+  };
+
+  const handleLogoutClick = () => {
+    setShowLogoutDialog(true);
+  };
+
+  const handleLogoutConfirm = () => {
+    logout();
+    setShowLogoutDialog(false);
+    navigate('/login');
+    if (onItemClick) {
+      onItemClick();
+    }
+  };
+
+  const handleLogoutCancel = () => {
+    setShowLogoutDialog(false);
   };
 
   const renderMenuItem = (item: MenuItem) => {
@@ -98,27 +120,79 @@ export const Navigation: React.FC<NavigationProps> = ({ onItemClick }) => {
   };
 
   return (
-    <Box sx={{ overflow: 'auto', height: '100%' }}>
-      <List>
-        <Box sx={{ px: 2, py: 1.5 }}>
-          <Typography variant="overline" color="text.secondary" fontWeight={600}>
-            Main Menu
-          </Typography>
-        </Box>
-        {primaryMenuItems.map(renderMenuItem)}
-      </List>
+    <>
+      <Box sx={{ overflow: 'auto', height: '100%' }}>
+        <List>
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Typography variant="overline" color="text.secondary" fontWeight={600}>
+              Main Menu
+            </Typography>
+          </Box>
+          {primaryMenuItems.map(renderMenuItem)}
+        </List>
 
-      <Divider sx={{ my: 2 }} />
+        <Divider sx={{ my: 2 }} />
 
-      <List>
-        <Box sx={{ px: 2, py: 1.5 }}>
-          <Typography variant="overline" color="text.secondary" fontWeight={600}>
-            Other
-          </Typography>
-        </Box>
-        {secondaryMenuItems.map(renderMenuItem)}
-      </List>
-    </Box>
+        <List>
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Typography variant="overline" color="text.secondary" fontWeight={600}>
+              Other
+            </Typography>
+          </Box>
+          {secondaryMenuItems.map(renderMenuItem)}
+        </List>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Logout Button */}
+        <List>
+          <ListItem disablePadding>
+            <ListItemButton
+              onClick={handleLogoutClick}
+              sx={{
+                py: 1.5,
+                borderRadius: 1,
+                mb: 0.5,
+                mx: 1,
+                color: 'error.main',
+                '&:hover': {
+                  backgroundColor: 'error.light',
+                  opacity: 0.1,
+                },
+              }}
+            >
+              <ListItemIcon
+                sx={{
+                  minWidth: 40,
+                  color: 'error.main',
+                }}
+              >
+                <Logout />
+              </ListItemIcon>
+              <ListItemText
+                primary="Logout"
+                primaryTypographyProps={{
+                  fontWeight: 500,
+                  fontSize: '0.95rem',
+                }}
+              />
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Box>
+
+      {/* Logout Confirmation Dialog */}
+      <ConfirmDialog
+        open={showLogoutDialog}
+        title="Confirm Logout"
+        message="Are you sure you want to log out?"
+        confirmLabel="Logout"
+        cancelLabel="Cancel"
+        onConfirm={handleLogoutConfirm}
+        onCancel={handleLogoutCancel}
+        severity="warning"
+      />
+    </>
   );
 };
 

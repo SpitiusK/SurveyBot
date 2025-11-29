@@ -29,5 +29,17 @@ public enum QuestionType
     /// Geographic location question requesting latitude/longitude coordinates.
     /// Displayed via Telegram's location sharing functionality.
     /// </summary>
-    Location = 4
+    Location = 4,
+
+    /// <summary>
+    /// Numeric input question accepting integers or decimals.
+    /// Supports validation for min/max range and decimal places via OptionsJson.
+    /// </summary>
+    Number = 5,
+
+    /// <summary>
+    /// Date input question accepting dates in DD.MM.YYYY format.
+    /// Supports validation for min/max date range via OptionsJson.
+    /// </summary>
+    Date = 6
 }
