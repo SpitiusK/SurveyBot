@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
+import { v4 as uuidv4 } from 'uuid';
 import {
   Box,
   Stepper,
@@ -26,7 +27,7 @@ import ReviewStep from '@/components/SurveyBuilder/ReviewStep';
 import { basicInfoSchema, type BasicInfoFormData } from '@/schemas/surveySchemas';
 import type { QuestionDraft } from '@/schemas/questionSchemas';
 import surveyService from '@/services/surveyService';
-import type { StepConfig } from '@/types';
+import type { StepConfig, Question } from '@/types';
 
 // Step configuration
 const STEPS: StepConfig[] = [
@@ -49,6 +50,74 @@ const STEPS: StepConfig[] = [
     isValid: false,
   },
 ];
+
+// Helper function to transform backend Question[] to QuestionDraft[]
+const transformQuestionsFromBackend = (
+  questions: Question[]
+): QuestionDraft[] => {
+  // Create a mapping of backend question IDs to frontend UUIDs
+  const idMapping = new Map<number, string>();
+  questions.forEach((q) => {
+    idMapping.set(q.id, uuidv4());
+  });
+
+  return questions.map((q) => {
+    // Parse mediaContent JSON string if present
+    let parsedMediaContent: import('@/types/media').MediaContentDto | null = null;
+    if (q.mediaContent) {
+      try {
+        parsedMediaContent = JSON.parse(q.mediaContent);
+      } catch {
+        console.warn(`Failed to parse mediaContent for question ${q.id}`);
+      }
+    }
+
+    // Convert defaultNext to defaultNextQuestionId string
+    let defaultNextQuestionId: string | null = null;
+    if (q.defaultNext) {
+      if (q.defaultNext.type === 1) {
+        // EndSurvey
+        defaultNextQuestionId = null;
+      } else if (q.defaultNext.type === 0 && q.defaultNext.nextQuestionId) {
+        // GoToQuestion - map to UUID
+        const mappedId = idMapping.get(q.defaultNext.nextQuestionId);
+        defaultNextQuestionId = mappedId || null;
+      }
+    }
+
+    // Convert optionDetails to optionNextQuestions mapping
+    let optionNextQuestions: Record<number, string | null> | undefined;
+    if (q.optionDetails && q.optionDetails.length > 0) {
+      optionNextQuestions = {};
+      q.optionDetails.forEach((opt) => {
+        if (opt.next) {
+          if (opt.next.type === 1) {
+            // EndSurvey
+            optionNextQuestions![opt.orderIndex] = null;
+          } else if (opt.next.type === 0 && opt.next.nextQuestionId) {
+            // GoToQuestion - map to UUID
+            const mappedId = idMapping.get(opt.next.nextQuestionId);
+            optionNextQuestions![opt.orderIndex] = mappedId || null;
+          }
+        }
+      });
+    }
+
+    const draft: QuestionDraft = {
+      id: idMapping.get(q.id)!,
+      questionText: q.questionText,
+      questionType: q.questionType,
+      isRequired: q.isRequired,
+      options: q.options || [],
+      orderIndex: q.orderIndex,
+      mediaContent: parsedMediaContent,
+      defaultNextQuestionId,
+      optionNextQuestions,
+    };
+
+    return draft;
+  });
+};
 
 const SurveyBuilder: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
@@ -142,6 +211,30 @@ const SurveyBuilder: React.FC = () => {
           allowMultipleResponses: survey.allowMultipleResponses,
           showResults: survey.showResults,
         });
+
+        // Check if localStorage draft already has questions (user has unsaved work)
+        const draftKey = getDraftKey();
+        const savedDraft = localStorage.getItem(draftKey);
+        let hasLocalDraftQuestions = false;
+
+        if (savedDraft) {
+          try {
+            const draft = JSON.parse(savedDraft);
+            hasLocalDraftQuestions = draft.questions && Array.isArray(draft.questions) && draft.questions.length > 0;
+          } catch {
+            // Ignore parse errors
+          }
+        }
+
+        // Only load questions from API if no local draft exists with questions
+        // This preserves user's unsaved work when re-opening the editor
+        if (!hasLocalDraftQuestions && survey.questions && survey.questions.length > 0) {
+          const transformedQuestions = transformQuestionsFromBackend(survey.questions);
+          setQuestions(transformedQuestions);
+          console.log('Loaded and transformed questions from API:', transformedQuestions);
+        } else if (hasLocalDraftQuestions) {
+          console.log('Using existing questions from localStorage draft');
+        }
 
         console.log('Loaded survey for editing:', survey);
       } catch (err: any) {
