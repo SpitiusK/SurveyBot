@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Bot.Interfaces;
+using SurveyBot.Bot.Services;
 using SurveyBot.Core.DTOs.Response;
 using SurveyBot.Core.Interfaces;
 using Telegram.Bot;
@@ -21,6 +22,7 @@ public class SurveyCommandHandler : ICommandHandler
     private readonly IResponseRepository _responseRepository;
     private readonly IConversationStateManager _stateManager;
     private readonly CompletionHandler _completionHandler;
+    private readonly SurveyCache _surveyCache;
     private readonly ILogger<SurveyCommandHandler> _logger;
     private readonly Dictionary<Core.Entities.QuestionType, IQuestionHandler> _questionHandlers;
 
@@ -32,6 +34,7 @@ public class SurveyCommandHandler : ICommandHandler
         IResponseRepository responseRepository,
         IConversationStateManager stateManager,
         CompletionHandler completionHandler,
+        SurveyCache surveyCache,
         IEnumerable<IQuestionHandler> questionHandlers,
         ILogger<SurveyCommandHandler> logger)
     {
@@ -40,6 +43,7 @@ public class SurveyCommandHandler : ICommandHandler
         _responseRepository = responseRepository ?? throw new ArgumentNullException(nameof(responseRepository));
         _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
         _completionHandler = completionHandler ?? throw new ArgumentNullException(nameof(completionHandler));
+        _surveyCache = surveyCache ?? throw new ArgumentNullException(nameof(surveyCache));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         // Build dictionary of question handlers by type
@@ -94,6 +98,14 @@ public class SurveyCommandHandler : ICommandHandler
                 return;
             }
 
+            // 🔄 INVALIDATE CACHE: Ensure SurveyResponseHandler uses fresh data
+            // This fixes version mismatch when admin updates survey between button click and first answer
+            // Without this, SurveyResponseHandler might use stale cached survey with old version
+            _surveyCache.InvalidateSurvey(survey.Id);
+            _logger.LogDebug(
+                "Invalidated cache for survey {SurveyId} to ensure fresh data for response handler",
+                survey.Id);
+
             if (!survey.IsActive)
             {
                 await SendSurveyInactiveAsync(chatId, survey.Title, cancellationToken);
@@ -110,7 +122,23 @@ public class SurveyCommandHandler : ICommandHandler
             var existingResponse = await _responseRepository.GetIncompleteResponseAsync(survey.Id, userId);
             if (existingResponse != null)
             {
-                // Resume existing response
+                // 🔄 REFRESH VERSION: Update conversation state with current survey version
+                // This prevents false "Survey Updated" alerts when user clicks button after admin updates
+                var currentState = await _stateManager.GetStateAsync(userId);
+                if (currentState != null && currentState.CurrentSurveyVersion != survey.Version)
+                {
+                    _logger.LogInformation(
+                        "Refreshing survey version for user {TelegramId}: {OldVersion} → {NewVersion}",
+                        userId,
+                        currentState.CurrentSurveyVersion,
+                        survey.Version);
+
+                    // Update version in state to match current survey
+                    currentState.CurrentSurveyVersion = survey.Version;
+                    await _stateManager.SetStateAsync(userId, currentState);
+                }
+
+                // Resume existing response with fresh version
                 await ResumeExistingResponseAsync(chatId, userId, survey, existingResponse, cancellationToken);
                 return;
             }
@@ -138,11 +166,11 @@ public class SurveyCommandHandler : ICommandHandler
                 userId,
                 survey.Id);
 
-            // Initialize conversation state
+            // Initialize conversation state with survey version for stale data detection
             var questions = survey.Questions.OrderBy(q => q.OrderIndex).ToList();
             var totalQuestions = questions.Count;
 
-            await _stateManager.StartSurveyAsync(userId, survey.Id, response.Id, totalQuestions);
+            await _stateManager.StartSurveyAsync(userId, survey.Id, response.Id, totalQuestions, survey.Version);
 
             // Send survey intro message
             await SendSurveyIntroAsync(chatId, survey.Title, survey.Description, totalQuestions, cancellationToken);
@@ -291,8 +319,8 @@ public class SurveyCommandHandler : ICommandHandler
             }
         }
 
-        // Initialize state
-        await _stateManager.StartSurveyAsync(userId, survey.Id, existingResponse.Id, totalQuestions);
+        // Initialize state with survey version for stale data detection
+        await _stateManager.StartSurveyAsync(userId, survey.Id, existingResponse.Id, totalQuestions, survey.Version);
 
         // Update to correct question index
         for (int i = 0; i < nextQuestionIndex; i++)

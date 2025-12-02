@@ -1,6 +1,6 @@
 # SurveyBot.Bot - Telegram Bot Layer
 
-**Version**: 1.5.0 | **Framework**: .NET 8.0 | **Telegram.Bot**: 22.7.4
+**Version**: 1.6.2 | **Framework**: .NET 8.0 | **Telegram.Bot**: 22.7.4
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [API Layer](../SurveyBot.API/CLAUDE.md)
@@ -993,6 +993,30 @@ _surveyCache.InvalidateSurvey(surveyId);
 _surveyCache.InvalidateUserSurveys(userId);
 ```
 
+**Cache Invalidation Critical Path (FIXED in v1.6.2 - BOT-FIX-001)**:
+
+**Problem**: False "Survey Updated" alerts when users clicked survey buttons
+- SurveyCommandHandler fetched survey directly from repository (bypassed cache)
+- SurveyResponseHandler used cached survey data
+- Version mismatch between fresh and cached data triggered false positive
+
+**Solution**: Cache invalidation in SurveyCommandHandler
+```csharp
+// In SurveyCommandHandler.HandleAsync() (lines 104-107)
+var survey = await _surveyRepository.GetByCodeAsync(code);
+
+// NEW in v1.6.2: Invalidate cache to ensure fresh data
+_surveyCache.InvalidateSurvey(survey.Id);
+
+// Now SurveyResponseHandler will fetch fresh data from repository
+```
+
+**Impact**:
+- Ensures consistency between command handlers and response handlers
+- Prevents version mismatch false positives
+- Users no longer see "Survey Updated" alert when resuming surveys
+- Cache still provides performance benefit for other survey lookups
+
 ---
 
 ## Admin Authorization
@@ -1811,4 +1835,4 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 ---
 
-**Last Updated**: 2025-11-25 | **Version**: 1.4.0 (Comprehensive Architecture Documentation Update)
+**Last Updated**: 2025-12-02 | **Version**: 1.6.2 (Cache Invalidation Bug Fix)

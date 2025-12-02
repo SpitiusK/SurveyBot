@@ -1,6 +1,6 @@
 # SurveyBot - Project Documentation
 
-**Version**: 1.5.1 | **Framework**: .NET 8.0 | **Status**: Active Development
+**Version**: 1.6.2 | **Framework**: .NET 8.0 | **Status**: Active Development
 
 ---
 
@@ -191,6 +191,37 @@ SurveyBot implements 10 core design patterns for maintainability and scalability
 **See**: [Architecture Documentation](documentation/architecture/ARCHITECTURE.md) for detailed pattern descriptions.
 
 ### Recent Changes (v1.5.x)
+
+**v1.6.2 (Bug Fixes - December 2, 2025)**:
+- **SurveyCommandHandler Cache Invalidation (BOT-FIX-001)**: Fixed false "Survey Updated" alerts
+  - Added cache invalidation when starting/resuming surveys via SurveyCommandHandler
+  - Ensures SurveyResponseHandler uses fresh survey data from cache
+  - Prevents version mismatch false positives after clicking survey button
+  - Location: `src/SurveyBot.Bot/Handlers/Commands/SurveyCommandHandler.cs` (lines 104-107)
+- **ResponseService DefaultNext EndSurvey (INFRA-FIX-001)**: Fixed non-branching questions ignoring EndSurvey
+  - Added explicit check for NextStepType.EndSurvey before sequential fallback in DetermineNonBranchingNextStepAsync
+  - Affects Rating, Text, Number, Date, Location question types
+  - Surveys now correctly end when non-branching questions configured with EndSurvey
+  - Priority order: EndSurvey check → GoToQuestion check → Sequential fallback
+  - Location: `src/SurveyBot.Infrastructure/Services/ResponseService.cs` (lines 1116-1136)
+
+**v1.6.1 (Survey Version Tracking - Bug Fix)**:
+- **Survey Version Field**: Added `Version` column to surveys table (auto-increments on update)
+- **Stale Data Detection**: Bot captures survey version when user starts, detects mid-session updates
+- **Cache Invalidation**: Automatic cache invalidation on version mismatch
+- **User-Friendly Reset**: Clear notification message when survey changes during active session
+- **Backward Compatibility**: Existing surveys get version 1, old sessions skip version check
+- **Bug Fixed**: "Failed to save your answer" error when admin updates survey during active user session
+- **Files Changed**: Survey entity, SurveyDto, ConversationState, SurveyResponseHandler, SurveyService
+
+**v1.6.0 (Survey Update Redesign)**:
+- **Atomic Survey Updates**: New PUT /api/surveys/{id}/complete endpoint replaces 21+ API calls with single atomic operation
+- **Index-Based Flow**: Frontend uses array indexes for conditional flow, backend transforms to database IDs
+- **Three-Pass Algorithm**: Delete → Create → Transform → Validate pipeline ensures data consistency
+- **Performance**: 20x faster survey publishing (from 5-10s to <1s)
+- **Code Reduction**: Frontend ReviewStep reduced by 76% (330 → ~80 lines)
+- **UpdateSurveyWithQuestionsDto**: New DTO for complete survey replacement
+- **UpdateConfirmationDialog**: Warning dialog for destructive updates
 
 **v1.5.1 (Number and Date Question Types)**:
 - **QuestionType.Number (CORE-001)**: Numeric input with optional range and decimal places validation
@@ -576,6 +607,7 @@ User (1) ──creates──> Survey (*) ──contains──> Question (*)
 - GET `/` - List surveys (auth, paginated)
 - GET `/{id}` - Get survey (auth)
 - PUT `/{id}` - Update (auth)
+- PUT `/{id}/complete` - Complete replacement (auth, atomic, destructive)
 - DELETE `/{id}` - Delete (auth)
 - POST `/{id}/activate` - Activate (auth)
 - GET `/code/{code}` - Get by code (PUBLIC)
@@ -723,20 +755,21 @@ documentation/
 
 ## Summary for AI Assistants
 
-**SurveyBot v1.5.0** is a .NET 8.0 Telegram bot with React admin panel following Clean Architecture and DDD principles with comprehensive value object implementation.
+**SurveyBot v1.6.0** is a .NET 8.0 Telegram bot with React admin panel following Clean Architecture and DDD principles with comprehensive value object implementation and atomic survey update capabilities.
 
 **Key Points**:
-1. **Version**: v1.5.0 (Core DDD enhancements complete) - Enhanced encapsulation, factory methods, polymorphic value objects
+1. **Version**: v1.6.0 (Atomic survey updates) - Single-call survey replacement with index-based flow
 2. **Architecture**: Clean Architecture with 10 design patterns, ZERO-dependency core
-3. **NEW in v1.5.0**: Private setters, factory methods, AnswerValue polymorphic hierarchy
-4. **Features v1.4.x**: Conditional branching, cycle detection (DFS), value objects, owned types
-4. **Config files**: Base (appsettings.json) + Development (appsettings.Development.json) overrides
-5. **Bot modes**: Polling (local dev) vs Webhook (prod with HTTPS)
-6. **Database**: PostgreSQL via Docker, EF Core 9.0 with owned type migrations
-7. **Auth**: JWT Bearer with Telegram-based login
-8. **Survey codes**: 6-char alphanumeric (Base36 via SurveyCodeGenerator)
-9. **File paths**: Always use absolute paths (e.g., C:\Users\User\Desktop\SurveyBot\...)
-10. **Documentation**: Centralized in `documentation/` + layer-specific CLAUDE.md files
+3. **NEW in v1.6.0**: Atomic survey updates with single API call, index-based flow transformation
+4. **NEW in v1.5.0**: Private setters, factory methods, AnswerValue polymorphic hierarchy
+5. **Features v1.4.x**: Conditional branching, cycle detection (DFS), value objects, owned types
+6. **Config files**: Base (appsettings.json) + Development (appsettings.Development.json) overrides
+7. **Bot modes**: Polling (local dev) vs Webhook (prod with HTTPS)
+8. **Database**: PostgreSQL via Docker, EF Core 9.0 with owned type migrations
+9. **Auth**: JWT Bearer with Telegram-based login
+10. **Survey codes**: 6-char alphanumeric (Base36 via SurveyCodeGenerator)
+11. **File paths**: Always use absolute paths (e.g., C:\Users\User\Desktop\SurveyBot\...)
+12. **Documentation**: Centralized in `documentation/` + layer-specific CLAUDE.md files
 
 **Architectural Highlights v1.5.0**:
 - **7 Entities**: User, Survey, Question, QuestionOption, Response, Answer, MediaFile (all with private setters + factory methods)
@@ -797,4 +830,4 @@ documentation/
 
 ---
 
-**Last Updated**: 2025-11-28 | **Version**: 1.5.1 | **Target Framework**: .NET 8.0
+**Last Updated**: 2025-12-02 | **Version**: 1.6.2 | **Target Framework**: .NET 8.0

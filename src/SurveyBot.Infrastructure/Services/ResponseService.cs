@@ -1114,16 +1114,29 @@ public class ResponseService : IResponseService
         CancellationToken cancellationToken)
     {
         // Priority 1: Check question's default flow
-        if (question.DefaultNext != null &&
-            question.DefaultNext.Type == NextStepType.GoToQuestion)
+        if (question.DefaultNext != null)
         {
-            _logger.LogInformation(
-                "Using question default flow for non-branching question {QuestionId}: {DefaultNext}",
-                question.Id, question.DefaultNext);
-            return question.DefaultNext;
+            // Check for EndSurvey type
+            if (question.DefaultNext.Type == NextStepType.EndSurvey)
+            {
+                _logger.LogInformation(
+                    "Question {QuestionId} configured to end survey (DefaultNext = EndSurvey)",
+                    question.Id);
+                return NextQuestionDeterminant.End();
+            }
+
+            // Check for GoToQuestion type
+            if (question.DefaultNext.Type == NextStepType.GoToQuestion)
+            {
+                _logger.LogInformation(
+                    "Using question default flow for non-branching question {QuestionId}: GoToQuestion({NextQuestionId})",
+                    question.Id, question.DefaultNext.NextQuestionId);
+                return question.DefaultNext;
+            }
         }
 
         // Priority 2: Sequential fallback (backward compatibility)
+        // Only used when DefaultNext is null (not configured)
         var sequentialNextId = await GetNextSequentialQuestionIdAsync(
             surveyId,
             question.OrderIndex,

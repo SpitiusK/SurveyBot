@@ -1,6 +1,6 @@
 # SurveyBot.Infrastructure - Data Access Layer
 
-**Version**: 1.5.0 | **Target Framework**: .NET 8.0 | **EF Core**: 9.0.10 | **Database**: PostgreSQL 15+
+**Version**: 1.6.2 | **Target Framework**: .NET 8.0 | **EF Core**: 9.0.10 | **Database**: PostgreSQL 15+
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [API Layer](../SurveyBot.API/CLAUDE.md)
@@ -771,6 +771,62 @@ else
 - Only survey creator can activate
 - Logs cycle detection attempts and validation success
 
+**UpdateSurveyWithQuestionsAsync** (NEW in v1.5.2):
+
+**Signature**:
+```csharp
+Task<SurveyDto> UpdateSurveyWithQuestionsAsync(
+    int surveyId,
+    int userId,
+    UpdateSurveyWithQuestionsDto dto,
+    CancellationToken cancellationToken = default)
+```
+
+**Purpose**: Completely replaces survey metadata and all questions in a single atomic transaction using a three-pass algorithm.
+
+**Three-Pass Algorithm**:
+
+1. **PASS 1 - Delete & Create**:
+   - Delete all existing questions (cascades to options, answers, responses)
+   - Create new questions from DTO
+   - Store mapping of OrderIndex → Database ID
+
+2. **PASS 2 - Transform Flow**:
+   - Convert index-based references to database ID references
+   - For each question's DefaultNextQuestionIndex → DefaultNextQuestionId
+   - For each SingleChoice option's NextQuestionIndex → NextQuestionId
+   - Handle special values: null (sequential), -1 (end survey)
+
+3. **PASS 3 - Validate & Commit**:
+   - Run cycle detection via ISurveyValidationService
+   - Activate survey if isActive=true and no cycles
+   - Commit transaction
+
+**Index Reference Convention**:
+| Index Value | Meaning | Transforms To |
+|-------------|---------|---------------|
+| null | Sequential flow | DefaultNextQuestionId = null |
+| -1 | End survey | NextQuestionDeterminant.End() |
+| 0+ | Goto question | NextQuestionDeterminant.ToQuestion(dbId) |
+
+**Transaction Behavior**:
+- Entire operation runs in single database transaction
+- If any step fails, all changes are rolled back
+- No partial updates possible
+
+**Dependencies Injected**:
+- ISurveyRepository
+- IQuestionRepository
+- ISurveyValidationService
+- SurveyBotDbContext (for transactions)
+- IMapper
+
+**Exceptions**:
+- SurveyNotFoundException - Survey doesn't exist
+- UnauthorizedAccessException - User doesn't own survey
+- SurveyValidationException - Empty questions, invalid indexes
+- SurveyCycleException - Flow creates infinite loop
+
 **GetSurveyStatisticsAsync**:
 - Total/completed/incomplete responses
 - Completion rate percentage
@@ -823,7 +879,7 @@ public string GenerateAccessToken(int userId, long telegramId, string? username)
 - No password validation (Telegram auth handled externally)
 - Returns JWT + refresh token
 
-### ResponseService (UPDATED in v1.4.2)
+### ResponseService (UPDATED in v1.6.2)
 
 **Location**: `Services/ResponseService.cs`
 
@@ -862,6 +918,77 @@ public async Task<int?> GetNextQuestionAsync(int responseId)
 - Marks survey complete when `answer.Next.Type == NextStepType.EndSurvey`
 - Thread-safe with database transaction
 - **No more magic values**: Uses type-safe value object checks throughout
+
+**FIXED in v1.6.2 (INFRA-FIX-001): DetermineNonBranchingNextStepAsync EndSurvey Bug**:
+
+**Problem**: Non-branching questions (Rating, Text, Number, Date, Location) ignored `DefaultNext = EndSurvey` configuration
+- Method only checked for `NextStepType.GoToQuestion` type
+- Fell through to sequential fallback even when EndSurvey was configured
+- Caused surveys to continue instead of ending when configured to end
+
+**Root Cause Analysis** (lines 1116-1136):
+```csharp
+// OLD CODE (v1.6.1 and earlier) - BUGGY
+private async Task<NextQuestionDeterminant> DetermineNonBranchingNextStepAsync(Question question)
+{
+    // Check if question has explicit next configured
+    if (question.DefaultNext?.Type == NextStepType.GoToQuestion)
+    {
+        return question.DefaultNext;
+    }
+    // BUG: No check for EndSurvey - falls through to sequential logic!
+
+    // Sequential fallback (get next by OrderIndex)
+    var nextQuestion = await GetNextQuestionByOrderAsync(question.SurveyId, question.OrderIndex);
+    return nextQuestion != null
+        ? NextQuestionDeterminant.ToQuestion(nextQuestion.Id)
+        : NextQuestionDeterminant.End();
+}
+```
+
+**Solution**: Added explicit EndSurvey check before sequential fallback
+```csharp
+// NEW CODE (v1.6.2) - FIXED
+private async Task<NextQuestionDeterminant> DetermineNonBranchingNextStepAsync(Question question)
+{
+    // Priority 1: Check for explicit EndSurvey configuration
+    if (question.DefaultNext?.Type == NextStepType.EndSurvey)
+    {
+        return NextQuestionDeterminant.End();
+    }
+
+    // Priority 2: Check for explicit GoToQuestion configuration
+    if (question.DefaultNext?.Type == NextStepType.GoToQuestion)
+    {
+        return question.DefaultNext;
+    }
+
+    // Priority 3: Sequential fallback (only if DefaultNext is null)
+    var nextQuestion = await GetNextQuestionByOrderAsync(question.SurveyId, question.OrderIndex);
+    return nextQuestion != null
+        ? NextQuestionDeterminant.ToQuestion(nextQuestion.Id)
+        : NextQuestionDeterminant.End();
+}
+```
+
+**Impact**:
+- **Affected Question Types**: Rating, Text, Number, Date, Location
+- **Before**: These questions always used sequential flow (ignored EndSurvey)
+- **After**: These questions correctly end survey when configured with EndSurvey
+- **Priority Order**: EndSurvey → GoToQuestion → Sequential fallback
+- **Backward Compatibility**: Existing surveys with null DefaultNext still work (sequential)
+
+**Example Scenario**:
+```csharp
+// Survey with 3 questions: Q1 (Text), Q2 (Rating), Q3 (Text)
+// Configuration: Q2.DefaultNext = EndSurvey (rating determines satisfaction, end if low)
+
+// OLD BEHAVIOR (BUGGY):
+// User answers Q1 → Q2 (Rating: 2/5) → Q3 (BUG: continues to Q3 instead of ending)
+
+// NEW BEHAVIOR (FIXED):
+// User answers Q1 → Q2 (Rating: 2/5) → Survey Complete ✓
+```
 
 ### Other Services
 
@@ -1576,4 +1703,4 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 ---
 
-**Last Updated**: 2025-11-26 | **Version**: 1.4.2 (Completed Answer.Next Value Object Migration)
+**Last Updated**: 2025-12-02 | **Version**: 1.6.2 (ResponseService EndSurvey Bug Fix)
