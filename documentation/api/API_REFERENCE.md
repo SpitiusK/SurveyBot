@@ -324,6 +324,17 @@ POST /api/users
 
 ### Surveys Endpoints
 
+**Available Operations**:
+- Get All Surveys (paginated, with filters)
+- Get Survey by ID (with questions and statistics)
+- Create Survey (with initial questions)
+- Update Survey (metadata only)
+- **Complete Update** (replace all questions - NEW)
+- Delete Survey (cascade delete)
+- Toggle Survey Status (activate/deactivate)
+- Get Survey by Code (public access)
+- Get Survey Statistics (responses, completion rates)
+
 #### Get All Surveys
 
 Retrieve a list of all surveys.
@@ -547,7 +558,143 @@ PUT /api/surveys/{id}
 }
 ```
 
-**Note**: Cannot update questions through this endpoint. Use dedicated question endpoints.
+**Note**: Cannot update questions through this endpoint. Use dedicated question endpoints or the Complete Update endpoint below.
+
+#### Complete Survey Update (Replace Survey and Questions)
+
+Completely replaces survey metadata and all questions in a single atomic transaction. This is a destructive operation that deletes ALL existing questions, responses, and answers before creating new ones.
+
+```http
+PUT /api/surveys/{id}/complete
+```
+
+**Path Parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| id | integer | Yes | Survey ID |
+
+**Authentication**: Required (JWT Bearer token)
+
+**Authorization**: User must own the survey
+
+**Request Body**
+```json
+{
+  "title": "Survey Title",
+  "description": "Optional description",
+  "allowMultipleResponses": false,
+  "showResults": true,
+  "isActive": true,
+  "questions": [
+    {
+      "questionText": "Question 1",
+      "questionType": 0,
+      "orderIndex": 0,
+      "isRequired": true,
+      "optionsJson": null,
+      "mediaContent": null,
+      "defaultNextQuestionIndex": null,
+      "options": null
+    }
+  ]
+}
+```
+
+**Flow Reference Convention** (index-based):
+- `null` = Sequential flow (proceed to next question by OrderIndex)
+- `-1` = End survey (no more questions)
+- `0+` = Jump to question at specified array index
+
+**Response 200 OK**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "title": "Survey Title",
+    "description": "Optional description",
+    "allowMultipleResponses": false,
+    "showResults": true,
+    "isActive": true,
+    "questions": [
+      {
+        "id": 123,
+        "questionText": "Question 1",
+        "questionType": 0,
+        "orderIndex": 0,
+        "isRequired": true
+      }
+    ]
+  },
+  "message": "Survey and questions updated successfully"
+}
+```
+
+**Error Responses**:
+- **400 Bad Request** - Validation error (empty title, no questions, invalid indexes)
+  ```json
+  {
+    "success": false,
+    "statusCode": 400,
+    "message": "Validation failed",
+    "errors": {
+      "title": ["Title is required"],
+      "questions": ["At least one question is required"]
+    }
+  }
+  ```
+- **401 Unauthorized** - Missing or invalid JWT token
+- **403 Forbidden** - User doesn't own the survey
+- **404 Not Found** - Survey not found
+- **409 Conflict** - Cycle detected in question flow (SurveyCycleException)
+  ```json
+  {
+    "success": false,
+    "statusCode": 409,
+    "message": "Survey flow contains a cycle",
+    "errors": {
+      "cyclePath": ["Question 0 → Question 1 → Question 0"]
+    }
+  }
+  ```
+
+**Example with conditional flow**:
+```json
+{
+  "title": "Customer Feedback",
+  "description": "Help us improve",
+  "allowMultipleResponses": false,
+  "showResults": true,
+  "isActive": false,
+  "questions": [
+    {
+      "questionText": "How satisfied are you?",
+      "questionType": 1,
+      "orderIndex": 0,
+      "isRequired": true,
+      "options": [
+        { "text": "Very Satisfied", "orderIndex": 0, "nextQuestionIndex": -1 },
+        { "text": "Dissatisfied", "orderIndex": 1, "nextQuestionIndex": 1 }
+      ]
+    },
+    {
+      "questionText": "What can we improve?",
+      "questionType": 0,
+      "orderIndex": 1,
+      "isRequired": true,
+      "defaultNextQuestionIndex": -1
+    }
+  ]
+}
+```
+
+**Important Notes**:
+- This is a DESTRUCTIVE operation - all existing questions and responses are deleted
+- The operation is atomic - if any part fails, all changes are rolled back
+- Survey activation should be done separately via the activate endpoint
+- Flow validation (cycle detection) happens during this operation
+- Use this for complete survey redesign, not for adding/removing individual questions
 
 #### Delete Survey
 

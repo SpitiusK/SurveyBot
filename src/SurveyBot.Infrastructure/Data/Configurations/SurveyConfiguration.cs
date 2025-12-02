@@ -71,6 +71,12 @@ public class SurveyConfiguration : IEntityTypeConfiguration<Survey>
             .IsRequired()
             .HasDefaultValue(true);
 
+        // Version - for detecting stale data in bot conversations
+        builder.Property(s => s.Version)
+            .HasColumnName("version")
+            .IsRequired()
+            .HasDefaultValue(1);
+
         // CreatedAt
         builder.Property(s => s.CreatedAt)
             .HasColumnName("created_at")

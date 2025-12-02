@@ -6,6 +6,7 @@ import type {
   SurveyListItem,
   CreateSurveyDto,
   UpdateSurveyDto,
+  UpdateSurveyWithQuestionsDto,
   SurveyStatistics,
   SurveyFilterParams,
 } from '@/types';
@@ -43,6 +44,22 @@ class SurveyService {
   // Update survey
   async updateSurvey(id: number, dto: UpdateSurveyDto): Promise<Survey> {
     const response = await api.put<ApiResponse<Survey>>(`${this.basePath}/${id}`, dto);
+    return response.data.data!;
+  }
+
+  /**
+   * Completely replaces survey metadata and all questions in a single atomic transaction.
+   * WARNING: This deletes ALL existing questions, responses, and answers before creating new ones.
+   *
+   * @param surveyId - Survey ID to update
+   * @param dto - Complete survey data with questions and flow configuration
+   * @returns Updated survey with new question IDs
+   */
+  async updateSurveyComplete(surveyId: number, dto: UpdateSurveyWithQuestionsDto): Promise<Survey> {
+    const response = await api.put<ApiResponse<Survey>>(
+      `${this.basePath}/${surveyId}/complete`,
+      dto
+    );
     return response.data.data!;
   }
 

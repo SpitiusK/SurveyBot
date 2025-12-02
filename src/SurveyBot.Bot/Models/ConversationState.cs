@@ -84,6 +84,13 @@ public class ConversationState
     public List<int> VisitedQuestionIds { get; set; } = new();
 
     /// <summary>
+    /// The version of the survey when the conversation started.
+    /// Used to detect if the survey was modified during the session.
+    /// If the current survey version differs, the conversation should be reset.
+    /// </summary>
+    public int? CurrentSurveyVersion { get; set; }
+
+    /// <summary>
     /// Checks if this state has expired (30 minutes of inactivity)
     /// </summary>
     public bool IsExpired => DateTime.UtcNow - LastActivityAt > TimeSpan.FromMinutes(30);
@@ -210,6 +217,7 @@ public class ConversationState
         CurrentResponseId = null;
         CurrentQuestionIndex = null;
         TotalQuestions = null;
+        CurrentSurveyVersion = null;
         AnsweredQuestionIndices.Clear();
         CachedAnswers.Clear();
         Metadata.Clear();

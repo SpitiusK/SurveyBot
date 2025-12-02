@@ -126,6 +126,39 @@ export interface UpdateSurveyDto {
   showResults?: boolean;
 }
 
+// Complete Survey Update DTOs (TASK-FRONTEND-002)
+// NEW: Complete survey update with all questions (index-based flow)
+
+/**
+ * DTO for creating a question with conditional flow in a complete survey update.
+ * Uses index-based references to support creation of questions that don't have IDs yet.
+ * Matches backend CreateQuestionWithFlowDto structure exactly.
+ */
+export interface CreateQuestionWithFlowDto {
+  questionText: string;
+  questionType: QuestionType; // 0=Text, 1=SingleChoice, 2=MultipleChoice, 3=Rating, 4=Location, 5=Number, 6=Date
+  isRequired: boolean;
+  orderIndex: number;
+  options?: string[] | null; // For choice questions
+  mediaContent?: MediaContentDto | null; // Deserialized MediaContentDto object (will be serialized by backend)
+  defaultNextQuestionIndex?: number | null; // Index-based: -1=sequential, null=end, 0+=goto
+  optionNextQuestionIndexes?: Record<number, number | null>; // For SingleChoice: optionIndex -> questionIndex
+}
+
+/**
+ * DTO for completely replacing survey metadata and all questions in a single atomic transaction.
+ * WARNING: This deletes ALL existing questions, responses, and answers before creating new ones.
+ * Matches backend UpdateSurveyWithQuestionsDto structure exactly.
+ */
+export interface UpdateSurveyWithQuestionsDto {
+  title: string;
+  description?: string | null;
+  allowMultipleResponses: boolean;
+  showResults: boolean;
+  activateAfterUpdate?: boolean; // Default true in backend
+  questions: CreateQuestionWithFlowDto[];
+}
+
 export interface CreateQuestionDto {
   questionText: string;
   questionType: QuestionType;

@@ -61,8 +61,9 @@ public interface IConversationStateManager
     /// <param name="surveyId">Survey ID</param>
     /// <param name="responseId">Response record ID</param>
     /// <param name="totalQuestions">Total number of questions in survey</param>
+    /// <param name="surveyVersion">Current version of the survey (for version mismatch detection)</param>
     /// <returns>True if successful</returns>
-    Task<bool> StartSurveyAsync(long userId, int surveyId, int responseId, int totalQuestions);
+    Task<bool> StartSurveyAsync(long userId, int surveyId, int responseId, int totalQuestions, int surveyVersion = 1);
 
     /// <summary>
     /// Records an answer for current question
@@ -133,6 +134,14 @@ public interface IConversationStateManager
     /// <param name="userId">Telegram user ID</param>
     /// <returns>Current response ID or null</returns>
     Task<int?> GetCurrentResponseIdAsync(long userId);
+
+    /// <summary>
+    /// Gets the survey version that was active when the conversation started.
+    /// Used to detect if survey was modified during an active session.
+    /// </summary>
+    /// <param name="userId">Telegram user ID</param>
+    /// <returns>Survey version or null if no active survey</returns>
+    Task<int?> GetCurrentSurveyVersionAsync(long userId);
 
     /// <summary>
     /// Gets progress percentage through survey

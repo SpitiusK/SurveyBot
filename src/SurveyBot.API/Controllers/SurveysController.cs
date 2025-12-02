@@ -306,6 +306,129 @@ public class SurveysController : ControllerBase
     }
 
     /// <summary>
+    /// Completely replaces survey and all questions in single atomic operation
+    /// </summary>
+    /// <remarks>
+    /// WARNING: This operation deletes existing questions, responses, and answers.
+    /// Use with caution when survey has responses.
+    ///
+    /// Flow configuration uses 0-based question indexes:
+    /// - null = Sequential (follow OrderIndex)
+    /// - -1 = End survey
+    /// - 0+ = Go to specific question index
+    ///
+    /// Operation is atomic - all changes committed or all rolled back.
+    /// </remarks>
+    /// <param name="id">Survey ID to update</param>
+    /// <param name="dto">Complete survey data with questions and flow configuration</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Updated survey with new question IDs</returns>
+    /// <response code="200">Survey updated successfully</response>
+    /// <response code="400">Validation error or cycle detected in question flow</response>
+    /// <response code="401">User not authenticated or doesn't own the survey</response>
+    /// <response code="404">Survey not found</response>
+    [HttpPut("{id}/complete")]
+    [SwaggerOperation(
+        Summary = "Complete survey update with all questions",
+        Description = "Replaces survey metadata and all questions atomically. WARNING: Deletes existing questions, responses, and answers!",
+        Tags = new[] { "Surveys" }
+    )]
+    [ProducesResponseType(typeof(ApiResponse<SurveyDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<SurveyDto>>> UpdateSurveyComplete(
+        [FromRoute] int id,
+        [FromBody] UpdateSurveyWithQuestionsDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogInformation("📥 UpdateSurveyComplete called - SurveyId: {SurveyId}", id);
+            _logger.LogDebug("Incoming DTO: {Dto}", System.Text.Json.JsonSerializer.Serialize(dto, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState
+                    .Where(x => x.Value?.Errors.Count > 0)
+                    .Select(x => new { Field = x.Key, Errors = x.Value!.Errors.Select(e => e.ErrorMessage) })
+                    .ToList();
+
+                _logger.LogWarning("❌ Model validation failed: {Errors}", System.Text.Json.JsonSerializer.Serialize(errors));
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Invalid request data",
+                    Data = ModelState
+                });
+            }
+
+            var userId = GetUserIdFromClaims();
+            _logger.LogInformation("🔧 Updating complete survey {SurveyId} for user {UserId}, QuestionCount: {QuestionCount}", id, userId, dto.Questions.Count);
+
+            var survey = await _surveyService.UpdateSurveyWithQuestionsAsync(id, userId, dto, cancellationToken);
+
+            return Ok(ApiResponse<SurveyDto>.Ok(survey, "Survey updated successfully with all questions"));
+        }
+        catch (SurveyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Survey {SurveyId} not found", id);
+            return NotFound(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Core.Exceptions.UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized complete update attempt for survey {SurveyId}", id);
+            return StatusCode(StatusCodes.Status403Forbidden, new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (SurveyCycleException ex)
+        {
+            _logger.LogWarning(ex, "Survey {SurveyId} has cycle in question flow", id);
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Message = $"Invalid survey flow: {ex.Message}",
+                Data = new { cyclePath = ex.CyclePath, error = "CYCLE_DETECTED" }
+            });
+        }
+        catch (SurveyValidationException ex)
+        {
+            _logger.LogWarning(ex, "Validation failed for survey {SurveyId}", id);
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid operation for survey {SurveyId}", id);
+            return BadRequest(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating complete survey {SurveyId}", id);
+            return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<object>
+            {
+                Success = false,
+                Message = "An error occurred while updating the survey"
+            });
+        }
+    }
+
+    /// <summary>
     /// Deletes a survey.
     /// </summary>
     /// <param name="id">Survey ID.</param>

@@ -53,6 +53,13 @@ public class Survey : BaseEntity
     [Required]
     public bool ShowResults { get; private set; } = true;
 
+    /// <summary>
+    /// Gets the survey version number. Incremented each time the survey is updated.
+    /// Used to detect stale data in bot conversations.
+    /// </summary>
+    [Required]
+    public int Version { get; private set; } = 1;
+
     // Navigation properties
 
     /// <summary>
@@ -167,6 +174,16 @@ public class Survey : BaseEntity
     public void Deactivate()
     {
         IsActive = false;
+        MarkAsModified();
+    }
+
+    /// <summary>
+    /// Increments the survey version number.
+    /// Call this when survey structure changes (questions added/removed/modified).
+    /// </summary>
+    public void IncrementVersion()
+    {
+        Version++;
         MarkAsModified();
     }
 
@@ -302,6 +319,17 @@ public class Survey : BaseEntity
     internal void SetShowResults(bool show)
     {
         ShowResults = show;
+    }
+
+    /// <summary>
+    /// Sets the survey version. Used by tests only.
+    /// For normal use, prefer IncrementVersion() method.
+    /// </summary>
+    internal void SetVersion(int version)
+    {
+        if (version < 1)
+            throw new ArgumentException("Version must be at least 1", nameof(version));
+        Version = version;
     }
 
     #endregion

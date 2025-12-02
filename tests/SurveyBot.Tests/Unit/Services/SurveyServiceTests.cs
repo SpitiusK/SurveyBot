@@ -1,4 +1,5 @@
 using AutoMapper;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using SurveyBot.Core.DTOs.Common;
@@ -6,6 +7,7 @@ using SurveyBot.Core.DTOs.Survey;
 using SurveyBot.Core.Entities;
 using SurveyBot.Core.Exceptions;
 using SurveyBot.Core.Interfaces;
+using SurveyBot.Infrastructure.Data;
 using SurveyBot.Infrastructure.Services;
 using SurveyBot.Tests.Fixtures;
 using Xunit;
@@ -15,19 +17,29 @@ namespace SurveyBot.Tests.Unit.Services;
 /// <summary>
 /// Unit tests for SurveyService.
 /// </summary>
-public class SurveyServiceTests
+public class SurveyServiceTests : IDisposable
 {
     private readonly Mock<ISurveyRepository> _surveyRepositoryMock;
+    private readonly Mock<IQuestionRepository> _questionRepositoryMock;
     private readonly Mock<IResponseRepository> _responseRepositoryMock;
     private readonly Mock<IAnswerRepository> _answerRepositoryMock;
     private readonly Mock<ISurveyValidationService> _validationServiceMock;
     private readonly Mock<IMapper> _mapperMock;
     private readonly Mock<ILogger<SurveyService>> _loggerMock;
+    private readonly SurveyBotDbContext _context;
     private readonly SurveyService _sut;
 
     public SurveyServiceTests()
     {
+        // Setup in-memory database
+        var options = new DbContextOptionsBuilder<SurveyBotDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+
+        _context = new SurveyBotDbContext(options);
+
         _surveyRepositoryMock = new Mock<ISurveyRepository>();
+        _questionRepositoryMock = new Mock<IQuestionRepository>();
         _responseRepositoryMock = new Mock<IResponseRepository>();
         _answerRepositoryMock = new Mock<IAnswerRepository>();
         _validationServiceMock = new Mock<ISurveyValidationService>();
@@ -41,11 +53,19 @@ public class SurveyServiceTests
 
         _sut = new SurveyService(
             _surveyRepositoryMock.Object,
+            _questionRepositoryMock.Object,
             _responseRepositoryMock.Object,
             _answerRepositoryMock.Object,
             _validationServiceMock.Object,
+            _context,
             _mapperMock.Object,
             _loggerMock.Object);
+    }
+
+    public void Dispose()
+    {
+        _context.Database.EnsureDeleted();
+        _context.Dispose();
     }
 
     #region CreateSurveyAsync Tests

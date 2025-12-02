@@ -100,6 +100,13 @@ public class SurveyResponseHandler
             return false;
         }
 
+        // Check for survey version mismatch (survey was updated during active session)
+        if (await CheckAndHandleVersionMismatchAsync(userId, chatId, state, survey, cancellationToken))
+        {
+            // Version mismatch handled - user notified and conversation reset
+            return true;
+        }
+
         // Get current question
         var questionDto = survey.Questions.ElementAtOrDefault(state.CurrentQuestionIndex.Value);
         if (questionDto == null)
@@ -261,6 +268,13 @@ public class SurveyResponseHandler
             return false;
         }
 
+        // Check for survey version mismatch (survey was updated during active session)
+        if (await CheckAndHandleVersionMismatchAsync(userId, chatId, state, survey, cancellationToken))
+        {
+            // Version mismatch handled - user notified and conversation reset
+            return true;
+        }
+
         // Get current question
         var questionDto = survey.Questions.ElementAtOrDefault(state.CurrentQuestionIndex.Value);
         if (questionDto == null)
@@ -398,6 +412,64 @@ public class SurveyResponseHandler
     }
 
     #region Private Helper Methods
+
+    /// <summary>
+    /// Checks if the survey version has changed since the user started the survey.
+    /// If version mismatch detected, notifies the user and resets their conversation.
+    /// </summary>
+    /// <param name="userId">The Telegram user ID.</param>
+    /// <param name="chatId">The chat ID for sending messages.</param>
+    /// <param name="state">The current conversation state.</param>
+    /// <param name="survey">The fetched survey DTO.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True if version mismatch was detected and handled, false otherwise.</returns>
+    private async Task<bool> CheckAndHandleVersionMismatchAsync(
+        long userId,
+        long chatId,
+        ConversationState state,
+        SurveyDto survey,
+        CancellationToken cancellationToken)
+    {
+        // If no version was captured when starting (backward compatibility), skip check
+        if (!state.CurrentSurveyVersion.HasValue)
+        {
+            _logger.LogDebug(
+                "No version captured for user {UserId} survey {SurveyId} - skipping version check (backward compatibility)",
+                userId,
+                state.CurrentSurveyId);
+            return false;
+        }
+
+        // Compare stored version with current survey version
+        if (state.CurrentSurveyVersion.Value != survey.Version)
+        {
+            _logger.LogWarning(
+                "Survey version mismatch for user {UserId}: started with version {StartVersion}, current version {CurrentVersion}. Survey was updated during active session.",
+                userId,
+                state.CurrentSurveyVersion.Value,
+                survey.Version);
+
+            // Invalidate cache to ensure fresh data on next attempt
+            _surveyCache.InvalidateSurvey(survey.Id);
+
+            // Notify user
+            await _botService.Client.SendMessage(
+                chatId: chatId,
+                text: "⚠️ *Survey Updated*\n\n" +
+                      "This survey was updated by the creator while you were responding.\n\n" +
+                      "Your session has been reset. Please start the survey again to see the latest questions.\n\n" +
+                      $"Use `/survey {survey.Code ?? survey.Id.ToString()}` to restart.",
+                parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
+                cancellationToken: cancellationToken);
+
+            // Reset conversation state
+            await _stateManager.CancelSurveyAsync(userId);
+
+            return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Fetches survey with questions from API with caching for performance.

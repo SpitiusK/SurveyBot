@@ -6,6 +6,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using SurveyBot.API.Extensions;
+using SurveyBot.API.Filters;
 using SurveyBot.Bot.Extensions;
 using SurveyBot.Core.Configuration;
 using SurveyBot.Core.Interfaces;
@@ -35,8 +36,20 @@ try
 
     // Add services to the container.
 
-    // Add Controllers
-    builder.Services.AddControllers();
+    // Add Controllers with Model Validation Logging Filter
+    builder.Services.AddControllers(options =>
+    {
+        // Add filter that logs detailed validation errors before 400 Bad Request
+        options.Filters.Add<ModelValidationLoggingFilter>();
+    })
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Disable automatic 400 response so our filter can run and log validation errors
+        options.SuppressModelStateInvalidFilter = true;
+    });
+
+    // Register the validation logging filter
+    builder.Services.AddScoped<ModelValidationLoggingFilter>();
 
     // Configure CORS for frontend access
     builder.Services.AddCors(options =>
@@ -395,6 +408,13 @@ try
     }
 
     // Configure the HTTP request pipeline.
+
+    // Enable request body buffering so we can read it multiple times (for logging)
+    app.Use(async (context, next) =>
+    {
+        context.Request.EnableBuffering();
+        await next();
+    });
 
     // Add Serilog request logging
     app.UseSerilogRequestLogging(options =>

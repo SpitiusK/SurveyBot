@@ -193,7 +193,8 @@ public class ExampleController : ControllerBase
 | `/` | POST | Yes | Create survey |
 | `/` | GET | Yes | List surveys (paginated) |
 | `/{id}` | GET | Yes | Get survey details |
-| `/{id}` | PUT | Yes | Update survey |
+| `/{id}` | PUT | Yes | Update survey metadata |
+| `/{id}/complete` | PUT | Yes | **Complete update (replace all questions)** - NEW |
 | `/{id}` | DELETE | Yes | Delete survey |
 | `/{id}/activate` | POST | Yes | Activate survey |
 | `/{id}/deactivate` | POST | Yes | Deactivate survey |
@@ -201,6 +202,15 @@ public class ExampleController : ControllerBase
 | `/{id}/statistics` | GET | Yes | Get statistics |
 
 **Authorization**: User must own survey (except `/code/{code}`)
+
+**NEW Endpoint - Complete Survey Update**:
+- **PUT `/{id}/complete`**: Completely replaces survey and all questions in atomic transaction
+- **DESTRUCTIVE**: Deletes all existing questions, responses, and answers
+- **Validation**: Performs cycle detection on question flow before saving
+- **Request**: `UpdateSurveyWithQuestionsDto` with survey metadata and complete question list
+- **Flow Reference**: Uses array index-based references (`null` = sequential, `-1` = end, `0+` = jump to index)
+- **Error Responses**: 400 (validation), 401 (unauthorized), 403 (forbidden), 404 (not found), 409 (cycle detected)
+- **Use Case**: Complete survey redesign, frontend admin panel bulk updates
 
 **NEW in v1.4.0 - Conditional Flow**:
 - **ActivateSurvey** now validates survey flow before activation

@@ -54,6 +54,12 @@ public class SurveyDto
     public bool ShowResults { get; set; }
 
     /// <summary>
+    /// Gets or sets the survey version number.
+    /// Used to detect stale data in bot conversations after survey updates.
+    /// </summary>
+    public int Version { get; set; }
+
+    /// <summary>
     /// Gets or sets the list of questions in this survey.
     /// </summary>
     public List<QuestionDto> Questions { get; set; } = new();

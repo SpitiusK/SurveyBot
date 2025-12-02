@@ -119,4 +119,46 @@ public interface ISurveyService
     /// <exception cref="UnauthorizedAccessException">Thrown when the user doesn't own the survey.</exception>
     Task<string> ExportSurveyToCSVAsync(int surveyId, int userId, string filter = "completed",
         bool includeMetadata = true, bool includeTimestamps = true);
+
+    /// <summary>
+    /// Completely replaces survey metadata and all questions in a single atomic transaction.
+    /// This method implements the delete-and-recreate pattern for survey updates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>WARNING:</b> This operation deletes ALL existing questions, responses, and answers
+    /// before creating new questions from the provided DTO. Use with caution when the survey
+    /// has existing responses.
+    /// </para>
+    /// <para>
+    /// The operation uses a three-pass algorithm:
+    /// <list type="number">
+    ///   <item>PASS 1: Delete existing questions and create new questions (get database IDs)</item>
+    ///   <item>PASS 2: Transform index-based flow references to database ID-based flow</item>
+    ///   <item>PASS 3: Validate survey flow (cycle detection) and optionally activate</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Flow configuration uses index-based references in the DTO:
+    /// <list type="bullet">
+    ///   <item><c>null</c> = Sequential flow (follow OrderIndex to next question)</item>
+    ///   <item><c>-1</c> = End survey (no more questions)</item>
+    ///   <item><c>0+</c> = Jump to question at specific index</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    /// <param name="surveyId">The ID of the survey to update.</param>
+    /// <param name="userId">The ID of the user making the update (ownership check).</param>
+    /// <param name="dto">Complete survey data with questions and flow configuration.</param>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The updated survey DTO with new question IDs.</returns>
+    /// <exception cref="SurveyNotFoundException">Thrown when the survey is not found.</exception>
+    /// <exception cref="UnauthorizedAccessException">Thrown when the user doesn't own the survey.</exception>
+    /// <exception cref="SurveyCycleException">Thrown when the question flow contains cycles.</exception>
+    /// <exception cref="SurveyValidationException">Thrown when validation fails (e.g., no questions, invalid indexes).</exception>
+    Task<SurveyDto> UpdateSurveyWithQuestionsAsync(
+        int surveyId,
+        int userId,
+        UpdateSurveyWithQuestionsDto dto,
+        CancellationToken cancellationToken = default);
 }

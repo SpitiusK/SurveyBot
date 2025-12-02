@@ -1,3 +1,52 @@
+# Quick Reference - API Endpoints & Error Handling
+
+## Surveys Endpoints
+
+### PUT /api/surveys/{id}/complete - Complete Survey Update (NEW)
+
+**Authentication**: Required (JWT Bearer token)
+**Authorization**: User must own the survey
+**Description**: Completely replaces survey metadata and all questions in a single atomic transaction. DESTRUCTIVE - deletes all existing questions, responses, and answers.
+
+**Request Body**:
+```json
+{
+  "title": "Survey Title",
+  "description": "Optional description",
+  "allowMultipleResponses": false,
+  "showResults": true,
+  "isActive": true,
+  "questions": [
+    {
+      "questionText": "Question 1",
+      "questionType": 0,
+      "orderIndex": 0,
+      "isRequired": true,
+      "optionsJson": null,
+      "mediaContent": null,
+      "defaultNextQuestionIndex": null,
+      "options": null
+    }
+  ]
+}
+```
+
+**Flow Reference Convention** (index-based):
+- `null` = Sequential flow (proceed to next question by OrderIndex)
+- `-1` = End survey (no more questions)
+- `0+` = Jump to question at specified array index
+
+**Response**: 200 OK with ApiResponse<SurveyDto>
+
+**Error Codes**:
+- 400 - Validation error (empty title, no questions, invalid indexes)
+- 401 - Missing or invalid JWT token
+- 403 - User doesn't own the survey
+- 404 - Survey not found
+- 409 - Cycle detected in question flow
+
+---
+
 # Quick Reference - Logging & Error Handling
 
 ## Throw Custom Exceptions

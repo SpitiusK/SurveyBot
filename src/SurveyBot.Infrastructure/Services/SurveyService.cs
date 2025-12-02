@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using SurveyBot.Core.DTOs.Common;
 using SurveyBot.Core.DTOs.Statistics;
@@ -8,7 +9,9 @@ using SurveyBot.Core.Entities;
 using SurveyBot.Core.Exceptions;
 using SurveyBot.Core.Interfaces;
 using SurveyBot.Core.Utilities;
+using SurveyBot.Core.ValueObjects;
 using SurveyBot.Core.ValueObjects.Answers;
+using SurveyBot.Infrastructure.Data;
 using System.Text.Json;
 
 namespace SurveyBot.Infrastructure.Services;
@@ -19,9 +22,11 @@ namespace SurveyBot.Infrastructure.Services;
 public class SurveyService : ISurveyService
 {
     private readonly ISurveyRepository _surveyRepository;
+    private readonly IQuestionRepository _questionRepository;
     private readonly IResponseRepository _responseRepository;
     private readonly IAnswerRepository _answerRepository;
     private readonly ISurveyValidationService _validationService;
+    private readonly SurveyBotDbContext _context;
     private readonly IMapper _mapper;
     private readonly ILogger<SurveyService> _logger;
 
@@ -30,16 +35,20 @@ public class SurveyService : ISurveyService
     /// </summary>
     public SurveyService(
         ISurveyRepository surveyRepository,
+        IQuestionRepository questionRepository,
         IResponseRepository responseRepository,
         IAnswerRepository answerRepository,
         ISurveyValidationService validationService,
+        SurveyBotDbContext context,
         IMapper mapper,
         ILogger<SurveyService> logger)
     {
         _surveyRepository = surveyRepository;
+        _questionRepository = questionRepository;
         _responseRepository = responseRepository;
         _answerRepository = answerRepository;
         _validationService = validationService;
+        _context = context;
         _mapper = mapper;
         _logger = logger;
     }
@@ -128,6 +137,324 @@ public class SurveyService : ISurveyService
         result.CompletedResponses = completedCount;
 
         return result;
+    }
+
+    /// <inheritdoc/>
+    public async Task<SurveyDto> UpdateSurveyWithQuestionsAsync(
+        int surveyId,
+        int userId,
+        UpdateSurveyWithQuestionsDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation(
+            "🔄 Starting UpdateSurveyWithQuestionsAsync - SurveyId: {SurveyId}, UserId: {UserId}, QuestionCount: {QuestionCount}",
+            surveyId, userId, dto.Questions.Count);
+        _logger.LogDebug("DTO: {Dto}", JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true }));
+
+        using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            _logger.LogInformation("PASS 1: Deleting existing questions and creating new ones for survey {SurveyId}", surveyId);
+
+            // Step 1: Validate ownership
+            var survey = await _surveyRepository.GetByIdAsync(surveyId);
+            if (survey == null)
+            {
+                _logger.LogWarning("Survey {SurveyId} not found", surveyId);
+                throw new SurveyNotFoundException(surveyId);
+            }
+
+            if (survey.CreatorId != userId)
+            {
+                _logger.LogWarning(
+                    "User {UserId} attempted to update survey {SurveyId} owned by {OwnerId}",
+                    userId, surveyId, survey.CreatorId);
+                throw new Core.Exceptions.UnauthorizedAccessException(userId, "Survey", surveyId);
+            }
+
+            // Step 2: Update survey metadata and increment version
+            survey.UpdateMetadata(
+                dto.Title,
+                dto.Description,
+                dto.AllowMultipleResponses,
+                dto.ShowResults);
+
+            // Increment version to invalidate cached data in bot conversations
+            survey.IncrementVersion();
+            _logger.LogInformation("📊 Survey {SurveyId} version incremented to {Version}", surveyId, survey.Version);
+
+            await _surveyRepository.UpdateAsync(survey);
+
+            _logger.LogInformation("✅ Survey {SurveyId} metadata updated", surveyId);
+
+            // Step 3: Delete existing questions (CASCADE deletes responses/answers)
+            var deletedCount = await _questionRepository.DeleteBySurveyIdAsync(surveyId);
+            _logger.LogInformation(
+                "✅ Deleted {DeletedCount} existing questions from survey {SurveyId}",
+                deletedCount, surveyId);
+
+            // Step 4: Create new questions WITHOUT flow configuration
+            var indexToIdMap = new Dictionary<int, int>(); // orderIndex → database ID
+            var createdQuestions = new List<Question>();
+
+            for (int i = 0; i < dto.Questions.Count; i++)
+            {
+                var questionDto = dto.Questions[i];
+
+                // Create question without flow configuration
+                var question = Question.Create(
+                    surveyId: surveyId,
+                    questionText: questionDto.QuestionText,
+                    questionType: questionDto.QuestionType,
+                    orderIndex: questionDto.OrderIndex,
+                    isRequired: questionDto.IsRequired,
+                    optionsJson: questionDto.Options != null ? JsonSerializer.Serialize(questionDto.Options) : null,
+                    mediaContent: questionDto.MediaContent != null ? JsonSerializer.Serialize(questionDto.MediaContent) : null,
+                    defaultNext: null); // No flow yet
+
+                // Save to get database ID
+                var createdQuestion = await _questionRepository.CreateAsync(question);
+                createdQuestions.Add(createdQuestion);
+
+                // Build index map
+                indexToIdMap[i] = createdQuestion.Id;
+
+                // Create QuestionOptions for SingleChoice questions
+                if (questionDto.QuestionType == QuestionType.SingleChoice && questionDto.Options != null)
+                {
+                    for (int optIdx = 0; optIdx < questionDto.Options.Count; optIdx++)
+                    {
+                        var option = QuestionOption.Create(
+                            questionId: createdQuestion.Id,
+                            text: questionDto.Options[optIdx],
+                            orderIndex: optIdx);
+
+                        // Add option to question (using internal method for EF Core)
+                        createdQuestion.AddOptionInternal(option);
+                    }
+
+                    // Save options
+                    await _questionRepository.UpdateAsync(createdQuestion);
+                }
+            }
+
+            _logger.LogInformation(
+                "✅ PASS 1 complete: Created {QuestionCount} new questions for survey {SurveyId}",
+                createdQuestions.Count, surveyId);
+
+            _logger.LogInformation("PASS 2: Transforming index-based flow to ID-based flow for survey {SurveyId}", surveyId);
+
+            // Log the complete index→ID mapping for debugging
+            _logger.LogDebug(
+                "Index→ID Mapping for survey {SurveyId}: {Mapping}",
+                surveyId,
+                string.Join(", ", indexToIdMap.Select(kvp => $"[{kvp.Key}→{kvp.Value}]")));
+
+            // Load questions with options for flow configuration
+            var questionsForFlow = await _questionRepository.GetBySurveyIdAsync(surveyId);
+            var questionMap = questionsForFlow.ToDictionary(q => q.OrderIndex, q => q);
+
+            for (int i = 0; i < dto.Questions.Count; i++)
+            {
+                var questionDto = dto.Questions[i];
+                var question = questionMap[i];
+
+                _logger.LogDebug(
+                    "📝 Q{Index} (ID:{QuestionId}, Type:{QuestionType}): Processing flow transformation",
+                    i, question.Id, questionDto.QuestionType);
+
+                // Transform DefaultNextQuestionIndex
+                if (questionDto.DefaultNextQuestionIndex.HasValue)
+                {
+                    var nextIndex = questionDto.DefaultNextQuestionIndex.Value;
+
+                    if (nextIndex == -1)
+                    {
+                        // Sequential flow: null (use next question by order)
+                        question.UpdateDefaultNext(null);
+                        _logger.LogDebug(
+                            "  ➡️ Q{Index}: DefaultNextQuestionIndex={InputValue} → Sequential flow (null)",
+                            i, nextIndex);
+                    }
+                    else if (nextIndex >= 0 && indexToIdMap.ContainsKey(nextIndex))
+                    {
+                        // Go to specific question
+                        var targetQuestionId = indexToIdMap[nextIndex];
+                        question.UpdateDefaultNext(NextQuestionDeterminant.ToQuestion(targetQuestionId));
+                        _logger.LogDebug(
+                            "  ➡️ Q{Index}: DefaultNextQuestionIndex={InputValue} → GoToQuestion(ID:{TargetId})",
+                            i, nextIndex, targetQuestionId);
+                    }
+                    else if (nextIndex >= 0)
+                    {
+                        // Index not found in map
+                        _logger.LogWarning(
+                            "  ⚠️ Q{Index}: DefaultNextQuestionIndex={InputValue} NOT FOUND in indexToIdMap (max index: {MaxIndex}). No transformation applied.",
+                            i, nextIndex, indexToIdMap.Count - 1);
+                    }
+                }
+                else
+                {
+                    // null means end survey
+                    question.UpdateDefaultNext(NextQuestionDeterminant.End());
+                    _logger.LogDebug(
+                        "  ➡️ Q{Index}: DefaultNextQuestionIndex=null → EndSurvey",
+                        i);
+                }
+
+                // Transform OptionNextQuestionIndexes for SingleChoice questions
+                if (questionDto.QuestionType == QuestionType.SingleChoice &&
+                    questionDto.OptionNextQuestionIndexes != null)
+                {
+                    _logger.LogDebug(
+                        "  🔀 Q{Index}: SingleChoice question with {OptionCount} option flow configurations",
+                        i, questionDto.OptionNextQuestionIndexes.Count);
+
+                    // Reload question with options
+                    var questionWithOptions = await _questionRepository.GetByIdWithOptionsAsync(question.Id);
+                    if (questionWithOptions != null)
+                    {
+                        var options = questionWithOptions.Options.OrderBy(o => o.OrderIndex).ToList();
+
+                        foreach (var kvp in questionDto.OptionNextQuestionIndexes)
+                        {
+                            var optionIndex = kvp.Key;
+                            var nextQuestionIndex = kvp.Value;
+
+                            if (optionIndex >= 0 && optionIndex < options.Count)
+                            {
+                                var option = options[optionIndex];
+
+                                if (nextQuestionIndex.HasValue)
+                                {
+                                    if (nextQuestionIndex.Value == -1)
+                                    {
+                                        // Sequential flow
+                                        option.UpdateNext(null);
+                                        _logger.LogDebug(
+                                            "    ↪️ Option[{OptionIndex}]: NextQuestionIndex={InputValue} → Sequential flow (null)",
+                                            optionIndex, nextQuestionIndex.Value);
+                                    }
+                                    else if (nextQuestionIndex.Value >= 0 && indexToIdMap.ContainsKey(nextQuestionIndex.Value))
+                                    {
+                                        // Go to specific question
+                                        var targetQuestionId = indexToIdMap[nextQuestionIndex.Value];
+                                        option.UpdateNext(NextQuestionDeterminant.ToQuestion(targetQuestionId));
+                                        _logger.LogDebug(
+                                            "    ↪️ Option[{OptionIndex}]: NextQuestionIndex={InputValue} → GoToQuestion(ID:{TargetId})",
+                                            optionIndex, nextQuestionIndex.Value, targetQuestionId);
+                                    }
+                                    else if (nextQuestionIndex.Value >= 0)
+                                    {
+                                        _logger.LogWarning(
+                                            "    ⚠️ Option[{OptionIndex}]: NextQuestionIndex={InputValue} NOT FOUND in indexToIdMap (max index: {MaxIndex})",
+                                            optionIndex, nextQuestionIndex.Value, indexToIdMap.Count - 1);
+                                    }
+                                }
+                                else
+                                {
+                                    // null means end survey
+                                    option.UpdateNext(NextQuestionDeterminant.End());
+                                    _logger.LogDebug(
+                                        "    ↪️ Option[{OptionIndex}]: NextQuestionIndex=null → EndSurvey",
+                                        optionIndex);
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogWarning(
+                                    "    ⚠️ Option[{OptionIndex}]: Invalid option index (max: {MaxOptionIndex})",
+                                    optionIndex, options.Count - 1);
+                            }
+                        }
+
+                        await _questionRepository.UpdateAsync(questionWithOptions);
+                    }
+                    else
+                    {
+                        _logger.LogError(
+                            "  ❌ Q{Index}: Failed to reload question with options for flow transformation",
+                            i);
+                    }
+                }
+                else if (questionDto.OptionNextQuestionIndexes != null && questionDto.OptionNextQuestionIndexes.Any())
+                {
+                    _logger.LogWarning(
+                        "  ⚠️ Q{Index}: OptionNextQuestionIndexes provided for non-SingleChoice question (Type:{QuestionType}). This will be ignored.",
+                        i, questionDto.QuestionType);
+                }
+
+                // Save flow configuration
+                await _questionRepository.UpdateAsync(question);
+            }
+
+            _logger.LogInformation("✅ PASS 2 complete: Flow configuration updated for survey {SurveyId}", surveyId);
+
+            _logger.LogInformation("PASS 3: Validating survey structure for survey {SurveyId}", surveyId);
+
+            // Run cycle detection
+            var cycleResult = await _validationService.DetectCycleAsync(surveyId);
+            if (cycleResult.HasCycle)
+            {
+                _logger.LogWarning(
+                    "Survey {SurveyId} has cycle: {CyclePath}",
+                    surveyId, string.Join(" -> ", cycleResult.CyclePath!));
+
+                await transaction.RollbackAsync();
+                throw new SurveyCycleException(
+                    cycleResult.CyclePath!,
+                    $"Survey contains a cycle: {cycleResult.ErrorMessage}");
+            }
+
+            // Check survey has at least one endpoint
+            var endpoints = await _validationService.FindSurveyEndpointsAsync(surveyId);
+            if (!endpoints.Any())
+            {
+                _logger.LogWarning("Survey {SurveyId} has no endpoints", surveyId);
+
+                await transaction.RollbackAsync();
+                throw new SurveyValidationException(
+                    "Survey must have at least one path that leads to completion (end survey).");
+            }
+
+            // Activate survey if requested
+            if (dto.ActivateAfterUpdate)
+            {
+                survey.Activate();
+                await _surveyRepository.UpdateAsync(survey);
+                _logger.LogInformation("Survey {SurveyId} activated after update", surveyId);
+            }
+
+            // Commit transaction
+            await transaction.CommitAsync();
+            _logger.LogInformation(
+                "✅ PASS 3 complete: Validation passed for survey {SurveyId}");
+
+            _logger.LogInformation(
+                "✅✅✅ Survey {SurveyId} update completed successfully. Questions: {QuestionCount}, Endpoints: {EndpointCount}, IsActive: {IsActive}",
+                surveyId, dto.Questions.Count, endpoints.Count, survey.IsActive);
+
+            // Return updated survey
+            var updatedSurvey = await _surveyRepository.GetByIdWithQuestionsAsync(surveyId);
+            var responseCount = await _surveyRepository.GetResponseCountAsync(surveyId);
+            var completedCount = await _responseRepository.GetCompletedCountAsync(surveyId);
+
+            var result = _mapper.Map<SurveyDto>(updatedSurvey);
+            result.TotalResponses = responseCount;
+            result.CompletedResponses = completedCount;
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "❌ Failed to update survey {SurveyId} with questions. Rolling back transaction. Error: {ErrorMessage}",
+                surveyId, ex.Message);
+
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     /// <inheritdoc/>

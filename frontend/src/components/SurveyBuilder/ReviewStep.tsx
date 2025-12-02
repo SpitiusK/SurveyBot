@@ -21,14 +21,12 @@ import {
 } from '@mui/icons-material';
 import type { BasicInfoFormData } from '@/schemas/surveySchemas';
 import type { QuestionDraft } from '@/schemas/questionSchemas';
-import type { Survey, CreateQuestionDto, Question, UpdateQuestionFlowDto, NextStepType } from '@/types';
-import { isNonBranchingType, isBranchingType, QuestionType } from '@/types';
+import type { Survey, CreateQuestionWithFlowDto, UpdateSurveyWithQuestionsDto, QuestionType } from '@/types';
+import { isNonBranchingType, isBranchingType } from '@/types';
 import SurveyPreview from './SurveyPreview';
 import PublishSuccess from './PublishSuccess';
 import FlowVisualization from './FlowVisualization';
 import surveyService from '@/services/surveyService';
-import questionService from '@/services/questionService';
-import questionFlowService from '@/services/questionFlowService';
 import { stripHtmlAndTruncate } from '@/utils/stringUtils';
 
 interface ReviewStepProps {
@@ -92,7 +90,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
       }
 
       // Validate choice questions have options
-      if (question.questionType === QuestionType.SingleChoice || question.questionType === QuestionType.MultipleChoice) {
+      if (question.questionType === 1 || question.questionType === 2) {
         if (!question.options || question.options.length < 2) {
           errors.push(`Question ${index + 1}: Choice questions must have at least 2 options`);
         }
@@ -126,401 +124,205 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
     await handlePublish();
   };
 
+  /**
+   * Convert question ID references to index references.
+   * @param questionId - The UUID or special marker (null, '0')
+   * @param allQuestions - Array of all questions in order
+   * @returns Index (0+), -1 (sequential), or null (end survey)
+   */
+  const convertIdToIndex = (
+    questionId: string | null | undefined,
+    allQuestions: QuestionDraft[]
+  ): number | null => {
+    // null or '0' means end survey
+    if (questionId === null || questionId === undefined || questionId === '0') {
+      return null;
+    }
+
+    // Find the index of the question with this UUID
+    const index = allQuestions.findIndex((q) => q.id === questionId);
+
+    if (index === -1) {
+      console.warn(`Question ID ${questionId} not found in questions array, defaulting to end survey`);
+      return null;
+    }
+
+    return index;
+  };
+
   const handlePublish = async () => {
     setIsPublishing(true);
     setPublishError(null);
 
     const startTime = Date.now();
 
-    // ========== LOGGING: SURVEY PUBLISH STARTED ==========
-    console.group('🚀 SURVEY PUBLISH STARTED');
+    console.group('🚀 SURVEY PUBLISH STARTED (NEW SINGLE API CALL APPROACH)');
     console.log('Timestamp:', new Date().toISOString());
     console.log('Survey Title:', surveyData.title);
     console.log('Total Questions:', questions.length);
-    console.log('Questions with Conditional Flow:', questions.filter(q =>
-      q.defaultNextQuestionId !== undefined ||
-      (q.optionNextQuestions && Object.keys(q.optionNextQuestions).length > 0)
-    ).length);
     console.log('Is Edit Mode:', isEditMode);
     console.groupEnd();
 
     try {
       let survey: Survey;
 
-      // Step 1: Create or update the survey
       if (isEditMode && existingSurveyId) {
-        // Update existing survey
-        survey = await surveyService.updateSurvey(existingSurveyId, {
+        // ========== NEW APPROACH: Single API call with index-based flow ==========
+
+        console.group('📦 Building UpdateSurveyWithQuestionsDto');
+
+        // Build questions with index-based flow references
+        const questionsDto: CreateQuestionWithFlowDto[] = questions.map((q, index) => {
+          console.group(`Question ${index}`);
+          console.log('UUID:', q.id);
+          console.log('Text:', q.questionText.substring(0, 50) + '...');
+          console.log('Type:', q.questionType);
+
+          // Convert defaultNextQuestionId from UUID to index
+          let defaultNextQuestionIndex: number | null | undefined = undefined;
+
+          if (q.defaultNextQuestionId !== undefined) {
+            const convertedIndex = convertIdToIndex(q.defaultNextQuestionId, questions);
+            defaultNextQuestionIndex = convertedIndex;
+
+            console.log('Default Flow:');
+            console.log('  From UUID:', q.defaultNextQuestionId);
+            console.log('  To Index:', defaultNextQuestionIndex);
+            console.log('  Meaning:', defaultNextQuestionIndex === null ? 'End Survey' : `Go to Q${defaultNextQuestionIndex}`);
+          }
+
+          // Convert option flows from UUID to index
+          let optionNextQuestionIndexes: Record<number, number | null> | undefined;
+
+          if (q.optionNextQuestions && Object.keys(q.optionNextQuestions).length > 0) {
+            optionNextQuestionIndexes = {};
+
+            console.log('Option Flows:');
+            Object.entries(q.optionNextQuestions).forEach(([optionIndexStr, nextQuestionUuid]) => {
+              const optionIndex = parseInt(optionIndexStr, 10);
+              const convertedIndex = convertIdToIndex(nextQuestionUuid, questions);
+              optionNextQuestionIndexes![optionIndex] = convertedIndex;
+
+              console.log(`  Option ${optionIndex}:`);
+              console.log(`    From UUID: ${nextQuestionUuid}`);
+              console.log(`    To Index: ${convertedIndex}`);
+              console.log(`    Meaning: ${convertedIndex === null ? 'End Survey' : `Go to Q${convertedIndex}`}`);
+            });
+          }
+
+          const dto: CreateQuestionWithFlowDto = {
+            questionText: q.questionText,
+            questionType: q.questionType,
+            isRequired: q.isRequired,
+            orderIndex: index,
+            options: (q.questionType === 1 || q.questionType === 2) ? q.options ?? null : null,
+            mediaContent: q.mediaContent ?? null, // Send as object, axios will serialize
+            defaultNextQuestionIndex: defaultNextQuestionIndex ?? null,
+            optionNextQuestionIndexes: optionNextQuestionIndexes ?? null,
+          };
+
+          console.log('Built DTO:', dto);
+          console.groupEnd();
+
+          return dto;
+        });
+
+        const updateDto: UpdateSurveyWithQuestionsDto = {
           title: surveyData.title,
-          description: surveyData.description || undefined,
+          description: surveyData.description ?? null,
           allowMultipleResponses: surveyData.allowMultipleResponses,
           showResults: surveyData.showResults,
+          activateAfterUpdate: true, // Activate after successful update
+          questions: questionsDto,
+        };
+
+        console.log('Complete DTO:', updateDto);
+        console.groupEnd();
+
+        console.log('📤 Sending UpdateSurveyWithQuestionsDto:', JSON.stringify(updateDto, null, 2));
+
+        console.log('🌐 Calling PUT /api/surveys/:id/complete with single request...');
+
+        survey = await surveyService.updateSurveyComplete(existingSurveyId, updateDto);
+
+        console.log('✅ Survey updated successfully with new question IDs:', survey);
+        console.log('   Questions received:', survey.questions.length);
+        survey.questions.forEach((q, i) => {
+          console.log(`   Q${i}: ID=${q.id}, Text=${q.questionText.substring(0, 30)}...`);
         });
+
       } else {
-        // Create new survey
+        // Create mode: Still use old approach (create survey first, then use complete endpoint)
+        console.log('📝 Create mode: Creating survey first...');
+
         survey = await surveyService.createSurvey({
           title: surveyData.title,
           description: surveyData.description || undefined,
           allowMultipleResponses: surveyData.allowMultipleResponses,
           showResults: surveyData.showResults,
         });
-      }
 
-      console.log('✅ Survey created/updated. ID:', survey.id);
+        console.log('✅ Survey created. ID:', survey.id);
 
-      // Step 2: Create all questions (Two-Pass Approach)
-      // PASS 1: Create questions WITHOUT flow configuration
-      // This allows us to build a mapping from temporary UUIDs to actual database IDs
+        // Now use complete endpoint to add all questions
+        const questionsDto: CreateQuestionWithFlowDto[] = questions.map((q, index) => {
+          const defaultNextQuestionIndex = q.defaultNextQuestionId !== undefined
+            ? convertIdToIndex(q.defaultNextQuestionId, questions)
+            : null;
 
-      // ========== LOGGING: PASS 1 START ==========
-      console.group('📝 PASS 1: Creating Questions (Without Flow)');
-      for (const [index, question] of questions.entries()) {
-        console.log(`Question ${index + 1}:`, {
-          tempId: question.id,
-          text: question.questionText.substring(0, 50) + (question.questionText.length > 50 ? '...' : ''),
-          type: question.questionType,
-          hasOptions: question.options?.length || 0,
-          hasDefaultFlow: question.defaultNextQuestionId !== undefined,
-          hasOptionFlow: question.optionNextQuestions ? Object.keys(question.optionNextQuestions).length : 0,
+          const optionNextQuestionIndexes = q.optionNextQuestions
+            ? Object.fromEntries(
+                Object.entries(q.optionNextQuestions).map(([optIdx, uuid]) => [
+                  parseInt(optIdx, 10),
+                  convertIdToIndex(uuid, questions)
+                ])
+              )
+            : null;
+
+          return {
+            questionText: q.questionText,
+            questionType: q.questionType,
+            isRequired: q.isRequired,
+            orderIndex: index,
+            options: (q.questionType === 1 || q.questionType === 2) ? q.options ?? null : null,
+            mediaContent: q.mediaContent ?? null, // Send as object, axios will serialize
+            defaultNextQuestionIndex: defaultNextQuestionIndex ?? null,
+            optionNextQuestionIndexes: optionNextQuestionIndexes ?? null,
+          };
         });
-      }
-      console.groupEnd();
 
-      const questionIdMap = new Map<string, number>(); // UUID -> Database Question ID
-      const createdQuestions: Question[] = [];
-
-      for (let i = 0; i < questions.length; i++) {
-        const question = questions[i];
-
-        const questionDto: CreateQuestionDto = {
-          questionText: question.questionText,
-          questionType: question.questionType,
-          isRequired: question.isRequired,
-          options:
-            question.questionType === QuestionType.SingleChoice || question.questionType === QuestionType.MultipleChoice
-              ? question.options
-              : undefined,
-          mediaContent: question.mediaContent
-            ? JSON.stringify(question.mediaContent)
-            : null,
-          // No flow fields in PASS 1
+        const updateDto: UpdateSurveyWithQuestionsDto = {
+          title: surveyData.title,
+          description: surveyData.description ?? null,
+          allowMultipleResponses: surveyData.allowMultipleResponses,
+          showResults: surveyData.showResults,
+          activateAfterUpdate: true,
+          questions: questionsDto,
         };
 
-        console.log(`Creating question ${i + 1}/${questions.length} (UUID: ${question.id})`);
-        console.log('🔍 DEBUG: About to call questionService.createQuestion...');
-        console.log('🔍 DEBUG: surveyId:', survey.id);
-        console.log('🔍 DEBUG: questionDto:', questionDto);
+        console.log('📤 Sending UpdateSurveyWithQuestionsDto:', JSON.stringify(updateDto, null, 2));
 
-        const createdQuestion = await questionService.createQuestion(
-          survey.id,
-          questionDto
-        );
+        console.log('🌐 Calling PUT /api/surveys/:id/complete for new survey...');
+        survey = await surveyService.updateSurveyComplete(survey.id, updateDto);
 
-        console.log('🔍 DEBUG: API call completed successfully');
-        console.log('🔍 DEBUG: createdQuestion object:', createdQuestion);
-        console.log('🔍 DEBUG: createdQuestion.id:', createdQuestion.id);
-        console.log('🔍 DEBUG: typeof createdQuestion.id:', typeof createdQuestion.id);
-
-        createdQuestions.push(createdQuestion);
-
-        // Store mapping: UUID → Database ID
-        questionIdMap.set(question.id, createdQuestion.id);
-        console.log(`  ✓ Created with DB ID: ${createdQuestion.id}`);
+        console.log('✅ Survey created and activated with questions');
       }
 
-      // ========== LOGGING: PASS 1 COMPLETE ==========
-      console.group('✅ PASS 1 COMPLETE: Question ID Mapping');
-      console.table(Array.from(questionIdMap.entries()).map(([uuid, dbId]) => ({
-        UUID: uuid,
-        'Database ID': dbId,
-      })));
-      console.groupEnd();
+      setPublishedSurvey(survey);
 
-      // PASS 1.5: Fetch created questions WITH their options to build option ID mapping
-
-      // ========== LOGGING: PASS 1.5 START ==========
-      console.group('🔍 PASS 1.5: Fetching Option Database IDs');
-
-      // Fetch all questions for the survey to get OptionDetails
-      const questionsWithOptions = await questionService.getQuestionsBySurveyId(survey.id);
-
-      // Build option index → option database ID mapping
-      // Structure: Map<questionDbId, Map<optionIndex, optionDbId>>
-      const optionMappings = new Map<number, Map<number, number>>();
-
-      questionsWithOptions.forEach((q) => {
-        // Check if this question has conditional flow configured in draft
-        const questionDraft = questions.find(draft => questionIdMap.get(draft.id) === q.id);
-
-        if (questionDraft?.optionNextQuestions &&
-            Object.keys(questionDraft.optionNextQuestions).length > 0) {
-
-          // Build mapping from option indexes to option database IDs
-          if (q.optionDetails && q.optionDetails.length > 0) {
-            const optionMap = new Map<number, number>();
-            q.optionDetails.forEach((opt) => {
-              optionMap.set(opt.orderIndex, opt.id);
-            });
-            optionMappings.set(q.id, optionMap);
-
-            console.log(`Question ${q.id}:`, {
-              questionText: q.questionText.substring(0, 30) + '...',
-              optionCount: q.optionDetails.length,
-              options: q.optionDetails.map((opt, idx) => ({
-                index: idx,
-                databaseId: opt.id,
-                text: opt.text,
-              })),
-            });
-          } else {
-            console.warn(`⚠️ Question ${q.id} has flow config but no optionDetails from API`);
-          }
-        }
-      });
-
-      console.groupEnd();
-      console.log('✅ PASS 1.5 complete. Option ID mappings built.');
-
-      // PASS 2: Update flow configuration using actual question IDs and option IDs
-
-      // ========== LOGGING: PASS 2 START ==========
-      console.group('🔄 PASS 2: UUID → Database ID Transformations');
-
-      let flowUpdateCount = 0;
-      let successCount = 0;
-      let failCount = 0;
-
-      for (let i = 0; i < questions.length; i++) {
-        const question = questions[i];
-        const questionDbId = questionIdMap.get(question.id)!;
-        const isLastQuestion = i === questions.length - 1;
-
-        console.group(`Question ${i + 1} (UUID: ${question.id.substring(0, 8)}...)`);
-        console.log('Database ID:', questionDbId);
-
-        // Convert UUID references to actual database IDs
-        let defaultNextQuestionId: number | null | undefined;
-
-        if (question.defaultNextQuestionId !== undefined) {
-          console.group('Default Flow Transformation:');
-          console.log('Original Value (UUID or marker):', question.defaultNextQuestionId);
-
-          if (question.defaultNextQuestionId === null ||
-              question.defaultNextQuestionId === undefined ||
-              question.defaultNextQuestionId === '0') {
-            // Explicit end survey
-            console.log('✅ Explicit end-of-survey marker → Will send 0');
-            console.info('ℹ️ End Survey: defaultNextQuestionId = 0 (survey ends after this question)');
-            defaultNextQuestionId = 0;
-          } else {
-            // Convert UUID to actual question ID with validation
-            const resolvedId = questionIdMap.get(question.defaultNextQuestionId);
-            console.log('UUID Lookup Result:', resolvedId);
-
-            if (resolvedId === undefined) {
-              console.error('❌ UUID NOT FOUND in questionIdMap!');
-              console.error('Available UUIDs:', Array.from(questionIdMap.keys()));
-              console.warn('⚠️ FALLBACK TRIGGERED: UUID not in mapping', {
-                missingUuid: question.defaultNextQuestionId,
-                availableUuids: Array.from(questionIdMap.keys()),
-                fallbackValue: 0,
-                reason: 'UUID→ID lookup returned undefined',
-              });
-              console.log('Fallback: Setting to 0 (end survey)');
-              defaultNextQuestionId = 0;
-            } else {
-              console.log('✅ Resolved to Database ID:', resolvedId);
-              defaultNextQuestionId = resolvedId;
-            }
-          }
-          console.groupEnd();
-        } else if (isLastQuestion) {
-          // Last question defaults to end survey if no explicit flow
-          console.log('ℹ️ Last question without explicit flow → Defaulting to end survey (0)');
-          defaultNextQuestionId = 0;
-        } else {
-          // No flow configured, will use sequential flow (undefined = skip update)
-          console.log('ℹ️ No default flow configured → Will use sequential flow (undefined)');
-          defaultNextQuestionId = undefined;
-        }
-
-        if (defaultNextQuestionId === null) {
-          console.info('ℹ️ Sequential Flow: defaultNextQuestionId = null (use next question in order)');
-        }
-
-        // Convert option-specific flows (for SingleChoice branching)
-        // CRITICAL: Use option DATABASE IDs, not option indexes
-        let optionNextQuestions: Record<number, number> | undefined;
-
-        if (question.optionNextQuestions && Object.keys(question.optionNextQuestions).length > 0) {
-          console.group('Option Flow Transformations:');
-
-          const optionIdMap = optionMappings.get(questionDbId);
-
-          console.log('Option Index → DB ID Mapping:',
-            optionIdMap ? Array.from(optionIdMap.entries()).map(([idx, id]) => ({ index: idx, dbId: id })) : 'NOT FOUND'
-          );
-
-          if (!optionIdMap) {
-            console.error(`❌ No option mapping found for question ${questionDbId}`);
-            console.error(`   Question type: ${question.questionType}, Has options: ${question.options?.length || 0}`);
-          } else {
-            optionNextQuestions = {};
-
-            for (const [optionIndexStr, nextQuestionUuid] of Object.entries(question.optionNextQuestions)) {
-              const optionIndex = parseInt(optionIndexStr, 10);
-
-              console.group(`Option ${optionIndex}:`);
-              console.log('Option Index:', optionIndex);
-
-              const optionDbId = optionIdMap.get(optionIndex);
-              console.log('Option Database ID:', optionDbId || '❌ NOT FOUND');
-
-              if (!optionDbId) {
-                console.error('❌ Option index not found in mapping! Skipping this option.');
-                console.warn('⚠️ OPTION SKIPPED: Index not in mapping', {
-                  questionDbId,
-                  optionIndex,
-                  availableIndexes: Array.from(optionIdMap.keys()),
-                  reason: 'Option index not found in fetched question data',
-                });
-                console.groupEnd();
-                continue;
-              }
-
-              // Resolve next question UUID to database ID
-              let nextQuestionId: number;
-              console.log('Next Question UUID:', nextQuestionUuid);
-
-              if (nextQuestionUuid === null || nextQuestionUuid === '0') {
-                // End survey
-                nextQuestionId = 0;
-                console.log('Next Question DB ID: 0 (end survey)');
-              } else {
-                // Convert UUID to actual question ID
-                const resolvedNextId = questionIdMap.get(nextQuestionUuid);
-                if (resolvedNextId === undefined) {
-                  console.error(`❌ Invalid next question UUID: ${nextQuestionUuid} not found in questionIdMap`);
-                  console.error('Available UUIDs:', Array.from(questionIdMap.keys()));
-                  // Default to end survey
-                  nextQuestionId = 0;
-                  console.log('Fallback: Next Question DB ID: 0 (end survey)');
-                } else {
-                  nextQuestionId = resolvedNextId;
-                  console.log('Next Question DB ID:', nextQuestionId);
-                }
-              }
-
-              // KEY FIX: Use option database ID, not option index
-              optionNextQuestions[optionDbId] = nextQuestionId;
-              console.log('✅ Will send:', { optionId: optionDbId, nextQuestionId });
-
-              console.groupEnd();
-            }
-
-            console.log('✓ Converted option flows:', optionNextQuestions);
-          }
-
-          console.groupEnd();
-        }
-
-        // Only update flow if there's something to configure
-        if (defaultNextQuestionId !== undefined || optionNextQuestions) {
-          flowUpdateCount++;
-
-          // Transform to NextQuestionDeterminant structure
-          // Backend expects: type as INTEGER (0 = GoToQuestion, 1 = EndSurvey)
-          // Backend expects: optionNextDeterminants as EMPTY OBJECT {}, not null
-          // Frontend uses: -1 or 0 = "End Survey", positive integer = question ID, null/undefined = sequential
-          const payload: UpdateQuestionFlowDto = {
-            defaultNext: defaultNextQuestionId === undefined || defaultNextQuestionId === null ? null : (
-              defaultNextQuestionId <= 0
-                ? { type: 1 as NextStepType, nextQuestionId: null }  // EndSurvey = 1 (when -1 or 0)
-                : { type: 0 as NextStepType, nextQuestionId: defaultNextQuestionId }  // GoToQuestion = 0
-            ),
-            optionNextDeterminants: optionNextQuestions ? Object.fromEntries(
-              Object.entries(optionNextQuestions).map(([optionId, nextId]) => [
-                optionId,
-                nextId <= 0
-                  ? { type: 1 as NextStepType, nextQuestionId: null }  // EndSurvey = 1 (when -1 or 0)
-                  : { type: 0 as NextStepType, nextQuestionId: nextId }  // GoToQuestion = 0
-              ])
-            ) : {},  // Empty object {} instead of null (backend expects Dictionary, not null)
-          };
-
-          console.group(`🌐 API REQUEST: Update Flow for Question ${questionDbId}`);
-          console.log('Endpoint:', `PUT /api/surveys/${survey.id}/questions/${questionDbId}/flow`);
-          console.log('Payload:', {
-            defaultNext: payload.defaultNext,
-            optionNextDeterminants: payload.optionNextDeterminants,
-            _analysis: {
-              defaultFlowType: !payload.defaultNext ? 'null (sequential)' :
-                                payload.defaultNext.type === 1 ? 'EndSurvey' :
-                                `GoToQuestion ${payload.defaultNext.nextQuestionId}`,
-              optionFlowCount: payload.optionNextDeterminants ? Object.keys(payload.optionNextDeterminants).length : 0,
-              optionFlowDetails: payload.optionNextDeterminants ? Object.entries(payload.optionNextDeterminants).map(([k, v]) => ({
-                optionDbId: k,
-                next: v,
-                flowType: v.type === 1 ? 'end survey' : `question ${v.nextQuestionId}`,
-              })) : [],
-            },
-          });
-
-          try {
-            const response = await questionFlowService.updateQuestionFlow(
-              survey.id,
-              questionDbId,
-              payload
-            );
-            console.log('✅ Response:', response);
-            successCount++;
-          } catch (error: any) {
-            console.error('❌ API Error:', error);
-            console.error('Error Details:', {
-              status: error.response?.status,
-              statusText: error.response?.statusText,
-              data: error.response?.data,
-              sentPayload: payload,
-            });
-            failCount++;
-            throw error; // Re-throw to stop publish process
-          }
-          console.groupEnd();
-
-          console.log(`  ✓ Flow updated for question ${questionDbId}`);
-        } else {
-          console.log(`Skipping flow update for question ${questionDbId} (no flow configured)`);
-        }
-
-        console.groupEnd(); // End Question group
-      }
-
-      console.groupEnd(); // End PASS 2 group
-      console.log('✅ PASS 2 complete. All conditional flows configured.');
-
-      // Step 3: Activate the survey
-      const activatedSurvey = await surveyService.activateSurvey(survey.id);
-
-      // Step 4: Get full survey details with questions
-      const fullSurvey = await surveyService.getSurveyById(activatedSurvey.id);
-
-      setPublishedSurvey(fullSurvey);
-
-      // ========== LOGGING: PUBLISH SUMMARY ==========
       const duration = Date.now() - startTime;
       console.group('📊 PUBLISH SUMMARY');
-      console.log('Total Questions Created:', createdQuestions.length);
-      console.log('Questions with Flow Configuration:', flowUpdateCount);
-      console.log('Flow Updates Successful:', successCount);
-      console.log('Flow Updates Failed:', failCount);
+      console.log('Total Questions Created:', survey.questions.length);
+      console.log('API Calls Made:', 1); // Single call!
       console.log('Duration:', `${duration}ms (${(duration / 1000).toFixed(2)}s)`);
+      console.log('Approach:', 'Single atomic transaction with index-based flow');
       console.groupEnd();
 
       console.log('🎉 SURVEY PUBLISH COMPLETED');
 
       // Callback
       if (onPublishSuccess) {
-        onPublishSuccess(fullSurvey);
+        onPublishSuccess(survey);
       }
     } catch (err: any) {
       console.error('❌ SURVEY PUBLISH FAILED');
@@ -530,7 +332,6 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
       console.error('Error Response:', err.response?.data);
       console.error('Error Status:', err.response?.status);
       console.error('Validation Errors:', err.response?.data?.errors);
-      console.error('Full Error Object:', JSON.stringify(err.response?.data, null, 2));
 
       const errorMessage =
         err.response?.data?.message ||

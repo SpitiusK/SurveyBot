@@ -136,7 +136,7 @@ public class ConversationStateManager : IConversationStateManager
     /// <summary>
     /// Initializes survey state when user starts a survey
     /// </summary>
-    public async Task<bool> StartSurveyAsync(long userId, int surveyId, int responseId, int totalQuestions)
+    public async Task<bool> StartSurveyAsync(long userId, int surveyId, int responseId, int totalQuestions, int surveyVersion = 1)
     {
         await _transitionLock.WaitAsync();
         try
@@ -152,7 +152,8 @@ public class ConversationStateManager : IConversationStateManager
                     CurrentSurveyId = surveyId,
                     CurrentResponseId = responseId,
                     CurrentQuestionIndex = 0,
-                    TotalQuestions = totalQuestions
+                    TotalQuestions = totalQuestions,
+                    CurrentSurveyVersion = surveyVersion
                 };
             }
             else
@@ -163,13 +164,14 @@ public class ConversationStateManager : IConversationStateManager
                 state.CurrentResponseId = responseId;
                 state.CurrentQuestionIndex = 0;
                 state.TotalQuestions = totalQuestions;
+                state.CurrentSurveyVersion = surveyVersion;
                 state.TransitionTo(ConversationStateType.InSurvey);
             }
 
             await SetStateAsync(userId, state);
 
             _logger.LogInformation(
-                $"Survey started for user {userId}: survey={surveyId}, response={responseId}, questions={totalQuestions}");
+                $"Survey started for user {userId}: survey={surveyId}, response={responseId}, questions={totalQuestions}, version={surveyVersion}");
 
             return true;
         }
@@ -428,6 +430,16 @@ public class ConversationStateManager : IConversationStateManager
     {
         var state = await GetStateAsync(userId);
         return state?.CurrentResponseId;
+    }
+
+    /// <summary>
+    /// Gets the survey version that was active when the conversation started.
+    /// Used to detect if survey was modified during an active session.
+    /// </summary>
+    public async Task<int?> GetCurrentSurveyVersionAsync(long userId)
+    {
+        var state = await GetStateAsync(userId);
+        return state?.CurrentSurveyVersion;
     }
 
     /// <summary>
