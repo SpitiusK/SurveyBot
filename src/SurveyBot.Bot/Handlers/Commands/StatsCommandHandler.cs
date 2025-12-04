@@ -134,9 +134,9 @@ public class StatsCommandHandler : ICommandHandler
                          $"Total Questions: {totalQuestions}\n";
 
             // Add average completion time if available
-            if (stats.AverageCompletionTime.HasValue)
+            if (stats.AverageCompletionTimeMinutes.HasValue)
             {
-                var avgTime = TimeSpan.FromSeconds(stats.AverageCompletionTime.Value);
+                var avgTime = TimeSpan.FromMinutes(stats.AverageCompletionTimeMinutes.Value);
                 responseText += $"Avg. Completion Time: {avgTime.Minutes}m {avgTime.Seconds}s\n";
             }
 

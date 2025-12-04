@@ -6,6 +6,7 @@ import { ThemeProvider } from './theme/ThemeProvider';
 import { GlobalStyles } from './theme/globalStyles.tsx';
 import { AuthProvider } from './context/AuthContext';
 import './index.css';
+import 'leaflet/dist/leaflet.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

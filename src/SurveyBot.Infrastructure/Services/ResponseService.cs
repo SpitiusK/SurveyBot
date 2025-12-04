@@ -662,6 +662,9 @@ public class ResponseService : IResponseService
                 break;
         }
 
+        // Add pre-computed display value for frontend consumption
+        dto.DisplayValue = answer.Value?.DisplayValue;
+
         return dto;
     }
 

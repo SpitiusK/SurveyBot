@@ -65,4 +65,10 @@ public class QuestionStatisticsDto
     /// Includes earliest, latest, and date distribution.
     /// </summary>
     public DateStatisticsDto? DateStatistics { get; set; }
+
+    /// <summary>
+    /// Gets or sets location statistics for location questions.
+    /// Includes geographic bounds, center point, and individual location data points.
+    /// </summary>
+    public LocationStatisticsDto? LocationStatistics { get; set; }
 }

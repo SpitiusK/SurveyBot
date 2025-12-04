@@ -95,23 +95,12 @@ const ResponsesTable = ({ responses, survey }: ResponsesTableProps) => {
     page * rowsPerPage + rowsPerPage
   );
 
-  const getAnswerDisplay = (answer: any, questionType: QuestionType) => {
-    if (!answer || !answer.answerData) return 'No answer';
-
-    const data = answer.answerData;
-
-    switch (questionType) {
-      case QuestionType.Text:
-        return data.text || 'No text';
-      case QuestionType.SingleChoice:
-        return data.selectedOption || 'No selection';
-      case QuestionType.MultipleChoice:
-        return data.selectedOptions?.join(', ') || 'No selections';
-      case QuestionType.Rating:
-        return `${data.rating || 0} / 5`;
-      default:
-        return 'Unknown';
-    }
+  /**
+   * Returns the display value for an answer.
+   * Uses pre-computed DisplayValue from backend.
+   */
+  const getAnswerDisplay = (answer: any, _questionType?: QuestionType) => {
+    return answer?.displayValue ?? 'No answer';
   };
 
   if (responses.length === 0) {

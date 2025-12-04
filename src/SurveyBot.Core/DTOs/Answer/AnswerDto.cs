@@ -84,4 +84,11 @@ public class AnswerDto
     /// Null for other types.
     /// </summary>
     public DateTime? DateValue { get; set; }
+
+    /// <summary>
+    /// Gets or sets the pre-computed display value for this answer.
+    /// Computed from AnswerValue.DisplayValue in the backend.
+    /// Null if no answer value exists.
+    /// </summary>
+    public string? DisplayValue { get; set; }
 }

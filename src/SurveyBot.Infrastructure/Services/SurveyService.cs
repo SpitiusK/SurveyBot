@@ -723,7 +723,8 @@ public class SurveyService : ISurveyService
                 : 0,
             UniqueRespondents = allResponses.Select(r => r.RespondentTelegramId).Distinct().Count(),
             FirstResponseAt = allResponses.OrderBy(r => r.StartedAt).FirstOrDefault()?.StartedAt,
-            LastResponseAt = allResponses.OrderByDescending(r => r.StartedAt).FirstOrDefault()?.StartedAt
+            LastResponseAt = allResponses.OrderByDescending(r => r.StartedAt).FirstOrDefault()?.StartedAt,
+            CreatedAt = survey.CreatedAt
         };
 
         // Calculate average completion time for completed responses
@@ -736,7 +737,8 @@ public class SurveyService : ISurveyService
 
             if (completionTimes.Any())
             {
-                statistics.AverageCompletionTime = Math.Round(completionTimes.Average(), 2);
+                // Convert seconds to minutes for frontend compatibility
+                statistics.AverageCompletionTimeMinutes = Math.Round(completionTimes.Average() / 60, 2);
             }
         }
 
@@ -897,6 +899,10 @@ public class SurveyService : ISurveyService
 
                 case QuestionType.Date:
                     questionStat.DateStatistics = CalculateDateStatistics(answers);
+                    break;
+
+                case QuestionType.Location:
+                    questionStat.LocationStatistics = CalculateLocationStatistics(answers);
                     break;
             }
 
@@ -1268,6 +1274,88 @@ public class SurveyService : ISurveyService
             LatestDate = sortedDates.Last(),
             DateDistribution = distribution,
             Count = count
+        };
+    }
+
+    /// <summary>
+    /// Calculates statistics for location-type questions.
+    /// Extracts location data points and calculates geographic bounds.
+    /// </summary>
+    /// <param name="answers">Answers for the location question</param>
+    /// <returns>Location statistics with bounds and data points</returns>
+    private LocationStatisticsDto CalculateLocationStatistics(List<Answer> answers)
+    {
+        var locations = new List<LocationDataPointDto>();
+
+        foreach (var answer in answers)
+        {
+            switch (answer.Value)
+            {
+                case LocationAnswerValue locationValue:
+                    locations.Add(new LocationDataPointDto
+                    {
+                        Latitude = locationValue.Latitude,
+                        Longitude = locationValue.Longitude,
+                        Accuracy = locationValue.Accuracy,
+                        Timestamp = locationValue.Timestamp,
+                        ResponseId = answer.ResponseId
+                    });
+                    break;
+
+                case null:
+                    // Legacy fallback
+                    if (!string.IsNullOrWhiteSpace(answer.AnswerJson))
+                    {
+                        try
+                        {
+                            var data = JsonSerializer.Deserialize<JsonElement>(answer.AnswerJson);
+                            if (data.TryGetProperty("latitude", out var lat) &&
+                                data.TryGetProperty("longitude", out var lon))
+                            {
+                                locations.Add(new LocationDataPointDto
+                                {
+                                    Latitude = lat.GetDouble(),
+                                    Longitude = lon.GetDouble(),
+                                    Accuracy = data.TryGetProperty("accuracy", out var acc)
+                                        ? acc.GetDouble()
+                                        : null,
+                                    Timestamp = data.TryGetProperty("timestamp", out var ts)
+                                        ? ts.GetDateTime()
+                                        : null,
+                                    ResponseId = answer.ResponseId
+                                });
+                            }
+                        }
+                        catch (JsonException ex)
+                        {
+                            _logger.LogWarning(ex,
+                                "Failed to parse location answer JSON for answer ID {AnswerId}",
+                                answer.Id);
+                        }
+                    }
+                    break;
+            }
+        }
+
+        if (!locations.Any())
+        {
+            return new LocationStatisticsDto
+            {
+                TotalLocations = 0,
+                Locations = new List<LocationDataPointDto>()
+            };
+        }
+
+        return new LocationStatisticsDto
+        {
+            TotalLocations = locations.Count,
+            MinLatitude = locations.Min(l => l.Latitude),
+            MaxLatitude = locations.Max(l => l.Latitude),
+            MinLongitude = locations.Min(l => l.Longitude),
+            MaxLongitude = locations.Max(l => l.Longitude),
+            CenterLatitude = locations.Average(l => l.Latitude),
+            CenterLongitude = locations.Average(l => l.Longitude),
+            Locations = locations
         };
     }
 

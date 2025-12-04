@@ -36,9 +36,9 @@ public class SurveyStatisticsDto
     public double CompletionRate { get; set; }
 
     /// <summary>
-    /// Gets or sets the average completion time in seconds for completed responses.
+    /// Gets or sets the average completion time in minutes for completed responses.
     /// </summary>
-    public double? AverageCompletionTime { get; set; }
+    public double? AverageCompletionTimeMinutes { get; set; }
 
     /// <summary>
     /// Gets or sets the number of unique respondents.
@@ -54,6 +54,11 @@ public class SurveyStatisticsDto
     /// Gets or sets the timestamp of the most recent response.
     /// </summary>
     public DateTime? LastResponseAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the timestamp when the survey was created.
+    /// </summary>
+    public DateTime CreatedAt { get; set; }
 
     /// <summary>
     /// Gets or sets the statistics for each question in the survey.

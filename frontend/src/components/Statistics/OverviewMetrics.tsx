@@ -77,7 +77,7 @@ const OverviewMetrics = ({ statistics }: OverviewMetricsProps) => {
   };
 
   const formatTime = (minutes: number | null) => {
-    if (minutes === null || minutes === 0) return 'N/A';
+    if (minutes == null || minutes === 0 || Number.isNaN(minutes)) return 'N/A';
     if (minutes < 1) return '< 1 min';
     if (minutes < 60) return `${Math.round(minutes)} min`;
     const hours = Math.floor(minutes / 60);

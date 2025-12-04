@@ -17,9 +17,9 @@ const RATING_COLORS = {
 };
 
 const RatingChart = ({ questionStat, question: _question }: RatingChartProps) => {
-  const { choiceDistribution, averageRating } = questionStat;
+  const { ratingStatistics } = questionStat;
 
-  if (!choiceDistribution || Object.keys(choiceDistribution).length === 0) {
+  if (!ratingStatistics || !ratingStatistics.distribution || Object.keys(ratingStatistics.distribution).length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 4 }}>
         <Typography color="text.secondary">No ratings yet</Typography>
@@ -30,10 +30,10 @@ const RatingChart = ({ questionStat, question: _question }: RatingChartProps) =>
   // Prepare data for all ratings 1-5
   const chartData = [1, 2, 3, 4, 5].map((rating) => ({
     rating,
-    count: choiceDistribution[rating.toString()] || 0,
+    count: ratingStatistics.distribution[rating]?.count || 0,
     percentage:
       questionStat.totalAnswers > 0
-        ? (((choiceDistribution[rating.toString()] || 0) / questionStat.totalAnswers) * 100).toFixed(
+        ? (((ratingStatistics.distribution[rating]?.count || 0) / questionStat.totalAnswers) * 100).toFixed(
             1
           )
         : '0',
@@ -88,7 +88,7 @@ const RatingChart = ({ questionStat, question: _question }: RatingChartProps) =>
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
-              {averageRating?.toFixed(2) || '0.00'}
+              {ratingStatistics.averageRating?.toFixed(2) || '0.00'}
             </Typography>
             <StarIcon sx={{ fontSize: 40, color: '#fbc02d' }} />
           </Box>

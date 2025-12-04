@@ -13,6 +13,9 @@ import { QuestionType } from '../../types';
 import ChoiceChart from './ChoiceChart';
 import RatingChart from './RatingChart';
 import TextResponseList from './TextResponseList';
+import NumberStatsCard from './NumberStatsCard';
+import DateStatsChart from './DateStatsChart';
+import LeafletMapStats from './LeafletMapStats';
 import { stripHtml } from '../../utils/stringUtils';
 
 interface QuestionCardProps {
@@ -119,28 +122,19 @@ const QuestionCard = ({ questionStat, question, responses }: QuestionCardProps) 
           <RatingChart questionStat={questionStat} question={question} />
         )}
 
-        {question.questionType === QuestionType.Location && (
-          <TextResponseList
-            questionStat={questionStat}
-            question={question}
-            responses={responses}
+        {question.questionType === QuestionType.Location && questionStat.locationStatistics && (
+          <LeafletMapStats
+            data={questionStat.locationStatistics}
+            questionText={stripHtml(question.questionText)}
           />
         )}
 
-        {question.questionType === QuestionType.Number && (
-          <TextResponseList
-            questionStat={questionStat}
-            question={question}
-            responses={responses}
-          />
+        {question.questionType === QuestionType.Number && questionStat.numberStatistics && (
+          <NumberStatsCard statistics={questionStat.numberStatistics} />
         )}
 
-        {question.questionType === QuestionType.Date && (
-          <TextResponseList
-            questionStat={questionStat}
-            question={question}
-            responses={responses}
-          />
+        {question.questionType === QuestionType.Date && questionStat.dateStatistics && (
+          <DateStatsChart statistics={questionStat.dateStatistics} />
         )}
       </Box>
     </Paper>

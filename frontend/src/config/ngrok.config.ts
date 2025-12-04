@@ -20,14 +20,14 @@
  * Set to your ngrok URL when using remote access:
  * Example: https://abc123def45.ngrok-free.app
  */
-export const BACKEND_NGROK_URL = 'https://df0778be2c16.ngrok-free.app';
+export const BACKEND_NGROK_URL = 'https://4fb96e092b87.ngrok-free.app';
 
 /**
  * Frontend ngrok URL (if running frontend on ngrok)
  * Used in Vite config for CORS allowedHosts
  * Leave as empty string if not using ngrok for frontend
  */
-export const FRONTEND_NGROK_URL = 'https://27b2352927ab.ngrok-free.app';
+export const FRONTEND_NGROK_URL = 'https://7e31d418b2ac.ngrok-free.app';
 
 /**
  * Get the API base URL based on environment

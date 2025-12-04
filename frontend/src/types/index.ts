@@ -183,6 +183,7 @@ export interface Answer {
   questionId: number;
   answerText: string | null;
   answerData: Record<string, unknown>;
+  displayValue?: string | null;
   createdAt: string;
 }
 
@@ -203,14 +204,92 @@ export interface ChoiceStatistics {
   percentage: number;
 }
 
+// Rating Statistics (backend provides comprehensive rating analysis)
+export interface RatingDistribution {
+  rating: number;
+  count: number;
+  percentage: number;
+}
+
+export interface RatingStatistics {
+  averageRating: number;
+  medianRating: number;
+  modeRating: number;
+  minRating: number;
+  maxRating: number;
+  distribution: Record<number, RatingDistribution>;
+}
+
+// Number Statistics (backend calculates statistical metrics)
+export interface NumberStatistics {
+  minimum: number;
+  maximum: number;
+  average: number;
+  median: number;
+  standardDeviation: number;
+  count: number;
+  sum: number;
+}
+
+// Date Statistics (backend provides date range and distribution)
+export interface DateFrequency {
+  date: string; // ISO format date from backend (DateTime)
+  count: number;
+  percentage: number;
+  formattedDate: string; // DD.MM.YYYY format
+}
+
+export interface DateStatistics {
+  earliestDate: string | null; // ISO format date
+  latestDate: string | null; // ISO format date
+  dateDistribution: DateFrequency[];
+  count: number;
+}
+
+// Location Statistics
+export interface LocationDataPoint {
+  latitude: number;
+  longitude: number;
+  accuracy?: number | null;
+  timestamp?: string | null;
+  responseId: number;
+}
+
+export interface LocationStatistics {
+  totalLocations: number;
+  minLatitude?: number | null;
+  maxLatitude?: number | null;
+  minLongitude?: number | null;
+  maxLongitude?: number | null;
+  centerLatitude?: number | null;
+  centerLongitude?: number | null;
+  locations: LocationDataPoint[];
+}
+
+// Text Statistics (backend provides text analysis)
+export interface TextStatistics {
+  totalAnswers: number;
+  averageLength: number;
+  minLength: number;
+  maxLength: number;
+  sampleAnswers: string[];
+}
+
 export interface QuestionStatistics {
   questionId: number;
   questionText: string;
   questionType: QuestionType;
   totalAnswers: number;
-  choiceDistribution?: Record<string, ChoiceStatistics>;
-  averageRating?: number;
-  textAnswers?: string[];
+  skippedCount?: number;
+  responseRate?: number;
+
+  // Type-specific statistics (backend provides different stats based on question type)
+  choiceDistribution?: Record<string, ChoiceStatistics>; // SingleChoice, MultipleChoice
+  ratingStatistics?: RatingStatistics; // Rating questions
+  textStatistics?: TextStatistics; // Text questions
+  numberStatistics?: NumberStatistics; // Number questions
+  dateStatistics?: DateStatistics; // Date questions
+  locationStatistics?: LocationStatistics; // Location questions
 }
 
 export interface SurveyStatistics {

@@ -59,8 +59,8 @@ try
             policy.WithOrigins(
                       "http://localhost:3000",                  // Local frontend (React dev server)
                       "http://localhost:5173",                  // Local frontend (Vite)
-                      "https://5167d6c0729b.ngrok-free.app",    // ngrok frontend URL
-                      "https://3c6dfc99c860.ngrok-free.app"     // ngrok backend URL
+                      "https://7e31d418b2ac.ngrok-free.app",    // ngrok frontend URL
+                      "https://4fb96e092b87.ngrok-free.app"     // ngrok backend URL
                    )
                   .SetIsOriginAllowedToAllowWildcardSubdomains() // Allow ngrok subdomains
                   .AllowAnyHeader()
