@@ -35,24 +35,38 @@
   margin-bottom: 0.5em;
 }
 
-/* Code block styling */
+/* Code block styling - dark mode compatible */
 .ql-editor pre.ql-syntax {
-  background-color: #f5f5f5;
+  background-color: rgba(0, 0, 0, 0.05);
   border-radius: 4px;
   padding: 12px;
   overflow-x: auto;
 }
 
-/* Blockquote styling */
+@media (prefers-color-scheme: dark) {
+  .ql-editor pre.ql-syntax {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+/* Blockquote styling - dark mode compatible */
 .ql-editor blockquote {
-  border-left: 4px solid #ccc;
+  border-left: 4px solid rgba(0, 0, 0, 0.2);
   padding-left: 16px;
   margin-left: 0;
-  color: #666;
+  color: rgba(0, 0, 0, 0.6);
   font-style: italic;
 }
 
-/* Link styling */
+@media (prefers-color-scheme: dark) {
+  .ql-editor blockquote {
+    border-left-color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.7);
+  }
+}
+
+/* Link styling - uses theme primary color */
 .ql-editor a {
   color: #1976d2;
   text-decoration: underline;
@@ -60,6 +74,16 @@
 
 .ql-editor a:hover {
   color: #1565c0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ql-editor a {
+    color: #90caf9;
+  }
+
+  .ql-editor a:hover {
+    color: #bbdefb;
+  }
 }
 
 /* List styling */
@@ -73,14 +97,21 @@
   margin-bottom: 0.25em;
 }
 
-/* Media Gallery Styles */
+/* Media Gallery Styles - dark mode compatible */
 
 .media-gallery-section {
   margin-top: 20px;
   padding: 16px;
-  background-color: #f9f9f9;
+  background-color: rgba(0, 0, 0, 0.02);
   border-radius: 4px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  .media-gallery-section {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
 }
 
 .media-gallery-section h3 {
@@ -89,6 +120,12 @@
   font-size: 1.25rem;
   font-weight: 500;
   color: rgba(0, 0, 0, 0.87);
+}
+
+@media (prefers-color-scheme: dark) {
+  .media-gallery-section h3 {
+    color: rgba(255, 255, 255, 0.87);
+  }
 }
 
 /* Media Card Styles */
@@ -110,7 +147,13 @@
   align-items: center;
   justify-content: center;
   font-size: 48px;
-  background-color: #f0f0f0;
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .media-icon-container {
+    background-color: rgba(255, 255, 255, 0.08);
+  }
 }
 
 .media-name {
@@ -122,9 +165,15 @@
 }
 
 .media-size {
-  color: #666;
+  color: rgba(0, 0, 0, 0.6);
   font-size: 12px;
   margin: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .media-size {
+    color: rgba(255, 255, 255, 0.7);
+  }
 }
 
 /* Delete Button Styles */
@@ -153,9 +202,15 @@
 }
 
 .rich-text-editor-container.read-only .ql-container {
-  border-top: 1px solid #ccc;
+  border-top: 1px solid rgba(0, 0, 0, 0.2);
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .rich-text-editor-container.read-only .ql-container {
+    border-top-color: rgba(255, 255, 255, 0.2);
+  }
 }
 
 /* Responsive Styles */
