@@ -1,5 +1,7 @@
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace SurveyBot.Bot.Interfaces;
 
@@ -55,4 +57,51 @@ public interface IBotService
     /// <param name="secretToken">Secret token from webhook request header.</param>
     /// <returns>True if token is valid.</returns>
     bool ValidateWebhookSecret(string? secretToken);
+
+    // Mockable wrapper methods for Telegram.Bot operations
+    // These wrapper methods enable mocking of Telegram.Bot extension methods in tests.
+    // Extension methods are static and cannot be mocked on interfaces, so we wrap them
+    // in instance methods on IBotService for testability.
+
+    /// <summary>
+    /// Sends a text message to the specified chat.
+    /// Wrapper for ITelegramBotClient.SendMessage() extension method.
+    /// </summary>
+    Task<Message> SendMessageAsync(
+        ChatId chatId,
+        string text,
+        ParseMode? parseMode = null,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Edits text of a message.
+    /// Wrapper for ITelegramBotClient.EditMessageText() extension method.
+    /// </summary>
+    Task<Message> EditMessageTextAsync(
+        ChatId chatId,
+        int messageId,
+        string text,
+        ParseMode? parseMode = null,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Answers a callback query.
+    /// Wrapper for ITelegramBotClient.AnswerCallbackQuery() extension method.
+    /// </summary>
+    Task AnswerCallbackQueryAsync(
+        string callbackQueryId,
+        string? text = null,
+        bool showAlert = false,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a message.
+    /// Wrapper for ITelegramBotClient.DeleteMessage() extension method.
+    /// </summary>
+    Task DeleteMessageAsync(
+        ChatId chatId,
+        int messageId,
+        CancellationToken cancellationToken = default);
 }

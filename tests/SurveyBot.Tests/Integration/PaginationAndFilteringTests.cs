@@ -10,6 +10,7 @@ using SurveyBot.Core.DTOs.Response;
 using SurveyBot.Core.DTOs.Survey;
 using SurveyBot.Core.Entities;
 using SurveyBot.Tests.Fixtures;
+using SurveyBot.Tests.Infrastructure;
 
 namespace SurveyBot.Tests.Integration;
 
@@ -17,34 +18,19 @@ namespace SurveyBot.Tests.Integration;
 /// Integration tests for pagination and filtering functionality.
 /// Tests pagination, search, and filtering across surveys and responses.
 /// </summary>
-public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFixture<Program>>
+public class PaginationAndFilteringTests : IntegrationTestBase
 {
-    private readonly WebApplicationFactoryFixture<Program> _factory;
-    private readonly HttpClient _client;
-
     public PaginationAndFilteringTests(WebApplicationFactoryFixture<Program> factory)
+        : base(factory)
     {
-        _factory = factory;
-        _client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
-    }
-
-    private async Task<string> GetAuthTokenAsync(long telegramId = 123456789)
-    {
-        var loginRequest = new LoginRequestDto { TelegramId = telegramId };
-        var response = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
-        return result!.Data!.Token;
     }
 
     [Fact]
     public async Task SurveyList_WithPagination_ReturnsCorrectPage()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        // Database is already cleared by IntegrationTestBase constructor
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -60,14 +46,14 @@ public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFi
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act - Get first page (10 items)
-        var response1 = await _client.GetAsync("/api/surveys?pageNumber=1&pageSize=10");
+        var response1 = await Client.GetAsync("/api/surveys?pageNumber=1&pageSize=10");
         var result1 = await response1.Content.ReadFromJsonAsync<ApiResponse<PagedResultDto<SurveyDto>>>();
 
         // Act - Get second page
-        var response2 = await _client.GetAsync("/api/surveys?pageNumber=2&pageSize=10");
+        var response2 = await Client.GetAsync("/api/surveys?pageNumber=2&pageSize=10");
         var result2 = await response2.Content.ReadFromJsonAsync<ApiResponse<PagedResultDto<SurveyDto>>>();
 
         // Assert
@@ -86,8 +72,8 @@ public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFi
     public async Task SurveyList_SearchByTitle_ReturnsMatchingSurveys()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        // Database is already cleared by IntegrationTestBase constructor
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -99,10 +85,10 @@ public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFi
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act - Search for "Customer"
-        var response = await _client.GetAsync("/api/surveys?search=Customer");
+        var response = await Client.GetAsync("/api/surveys?search=Customer");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -116,8 +102,8 @@ public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFi
     public async Task SurveyList_FilterByStatus_ReturnsFilteredSurveys()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        // Database is already cleared by IntegrationTestBase constructor
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -131,14 +117,14 @@ public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFi
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act - Filter active surveys
-        var activeResponse = await _client.GetAsync("/api/surveys?isActive=true");
+        var activeResponse = await Client.GetAsync("/api/surveys?isActive=true");
         var activeResult = await activeResponse.Content.ReadFromJsonAsync<ApiResponse<PagedResultDto<SurveyDto>>>();
 
         // Act - Filter inactive surveys
-        var inactiveResponse = await _client.GetAsync("/api/surveys?isActive=false");
+        var inactiveResponse = await Client.GetAsync("/api/surveys?isActive=false");
         var inactiveResult = await inactiveResponse.Content.ReadFromJsonAsync<ApiResponse<PagedResultDto<SurveyDto>>>();
 
         // Assert
@@ -155,10 +141,10 @@ public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFi
     public async Task ResponseList_WithPagination_ReturnsCorrectPage()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
         int surveyId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -180,10 +166,10 @@ public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFi
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act - Get first page with completedOnly filter
-        var response = await _client.GetAsync($"/api/surveys/{surveyId}/responses?pageNumber=1&pageSize=10&completedOnly=true");
+        var response = await Client.GetAsync($"/api/surveys/{surveyId}/responses?pageNumber=1&pageSize=10&completedOnly=true");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -198,8 +184,8 @@ public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFi
     public async Task Pagination_WithInvalidParameters_ReturnsBadRequest()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        // Database is already cleared by IntegrationTestBase constructor
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -209,16 +195,16 @@ public class PaginationAndFilteringTests : IClassFixture<WebApplicationFactoryFi
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act - Invalid page number (0)
-        var response1 = await _client.GetAsync("/api/surveys?pageNumber=0&pageSize=10");
+        var response1 = await Client.GetAsync("/api/surveys?pageNumber=0&pageSize=10");
 
         // Act - Invalid page size (too large)
-        var response2 = await _client.GetAsync("/api/surveys?pageNumber=1&pageSize=200");
+        var response2 = await Client.GetAsync("/api/surveys?pageNumber=1&pageSize=200");
 
         // Act - Negative page number
-        var response3 = await _client.GetAsync("/api/surveys?pageNumber=-1&pageSize=10");
+        var response3 = await Client.GetAsync("/api/surveys?pageNumber=-1&pageSize=10");
 
         // Assert
         response1.StatusCode.Should().Be(HttpStatusCode.BadRequest);

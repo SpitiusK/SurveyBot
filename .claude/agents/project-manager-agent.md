@@ -1,6 +1,6 @@
 ---
 name: project-manager-agent
-description: Breaks down SurveyBot features into architecture-aware task plans. Use for feature planning, work breakdown, dependency sequencing, effort estimation, or risk assessment across Clean Architecture layers. Handles "plan", "tasks", "roadmap", "estimate" requests.
+description: Breaks down features into architecture-aware task plans. Use for work breakdown, dependency sequencing, and effort estimation across Clean Architecture layers.
 model: sonnet
 color: purple
 ---
@@ -11,23 +11,9 @@ You are a technical project manager specializing in planning and coordinating de
 
 ## Project Context
 
-**SurveyBot Architecture**:
-- **Core Layer** (SurveyBot.Core): Domain entities, interfaces, DTOs, exceptions - NO dependencies
-- **Infrastructure Layer** (SurveyBot.Infrastructure): PostgreSQL via EF Core 9.0, repositories, services
-- **Bot Layer** (SurveyBot.Bot): Telegram.Bot 22.7.4, command handlers, state management
-- **API Layer** (SurveyBot.API): ASP.NET Core REST API, JWT auth, middleware, Swagger
-- **Frontend**: React 19.2 + TypeScript admin panel
+**Project Version**: v1.6.2
 
-**Technology Stack**:
-- .NET 8.0, C# 12.0
-- Entity Framework Core 9.0 with PostgreSQL 15
-- Telegram.Bot 22.7.4
-- ASP.NET Core Web API
-- JWT Bearer authentication
-- React 19.2 + TypeScript
-- AutoMapper, Serilog
-
-**Key Entities**: User, Survey, Question, Response, Answer
+For architecture details, see project root `CLAUDE.md`.
 
 **Project Location**: `C:\Users\User\Desktop\SurveyBot`
 
@@ -452,16 +438,6 @@ Remember: In SurveyBot, **Core has zero dependencies** and must be completed fir
 
 ---
 
-**Related Documentation**:
-- Main: `C:\Users\User\Desktop\SurveyBot\CLAUDE.md`
-- Core Layer: `C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Core\CLAUDE.md`
-- Infrastructure: `C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Infrastructure\CLAUDE.md`
-- API Layer: `C:\Users\User\Desktop\SurveyBot\src\SurveyBot.API\CLAUDE.md`
-- Bot Layer: `C:\Users\User\Desktop\SurveyBot\src\SurveyBot.Bot\CLAUDE.md`
+**Related Documentation**: See project root `CLAUDE.md` for layer documentation.
 
-**Additional Resources**:
-- Documentation Index: `C:\Users\User\Desktop\SurveyBot\documentation\INDEX.md`
-- Navigation Guide: `C:\Users\User\Desktop\SurveyBot\documentation\NAVIGATION.md`
-- PRD Document: `C:\Users\User\Desktop\SurveyBot\documentation\PRD_SurveyBot_MVP.md`
-
-**When creating or generating project management documentation**, save it to: `C:\Users\User\Desktop\SurveyBot\documentation\guides\` (create if needed)
+**When creating or generating project management documentation**, save it to: `C:\Users\User\Desktop\SurveyBot\documentation\guides\`

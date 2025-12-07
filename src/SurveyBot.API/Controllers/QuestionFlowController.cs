@@ -91,8 +91,8 @@ public class QuestionFlowController : ControllerBase
                 });
             }
 
-            // Get question
-            var question = await _questionService.GetByIdAsync(questionId);
+            // Get question with Options collection for flow configuration
+            var question = await _questionService.GetByIdWithOptionsAsync(questionId);
             if (question == null)
             {
                 _logger.LogWarning("Question {QuestionId} not found", questionId);

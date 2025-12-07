@@ -82,24 +82,22 @@ public class CancellationTests : IClassFixture<BotTestFixture>
         await _cancelCallbackHandler.HandleConfirmAsync(confirmCallback, CancellationToken.None);
 
         // Assert
+        // State should be completely cleared (CancelSurveyAsync + ClearStateAsync)
         var state = await _fixture.StateManager.GetStateAsync(TestUserId);
-        state.Should().NotBeNull();
-        state!.CurrentState.Should().Be(ConversationStateType.Cancelled);
-        state.CurrentSurveyId.Should().BeNull();
-        state.CurrentResponseId.Should().BeNull();
+        state.Should().BeNull();
 
         // Verify response was deleted
         var deletedResponse = await _fixture.ResponseRepository.GetByIdAsync(response.Id);
         deletedResponse.Should().BeNull();
 
-        // Verify cancellation message sent
+        // Verify confirmation message was edited to show cancellation success
         _fixture.MockBotClient.Verify(
             x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
+                It.Is<EditMessageTextRequest>(req =>
                     req.ChatId.Identifier == TestChatId &&
-                    req.Text.Contains("cancelled")),
+                    req.Text.Contains("cancelled successfully")),
                 It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
+            Times.Once);
     }
 
     [Fact]
@@ -134,12 +132,12 @@ public class CancellationTests : IClassFixture<BotTestFixture>
         var existingResponse = await _fixture.ResponseRepository.GetByIdAsync(response.Id);
         existingResponse.Should().NotBeNull();
 
-        // Verify "continue" message sent
+        // Verify confirmation message was edited to show continuation
         _fixture.MockBotClient.Verify(
             x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
+                It.Is<EditMessageTextRequest>(req =>
                     req.ChatId.Identifier == (TestChatId + 1) &&
-                    (req.Text.Contains("continue") || req.Text.Contains("resumed"))),
+                    req.Text.Contains("Continuing survey")),
                 It.IsAny<CancellationToken>()),
             Times.AtLeastOnce);
     }
@@ -162,7 +160,7 @@ public class CancellationTests : IClassFixture<BotTestFixture>
             x => x.SendRequest(
                 It.Is<SendMessageRequest>(req =>
                     req.ChatId.Identifier == (TestChatId + 2) &&
-                    req.Text.Contains("no active survey")),
+                    req.Text.Contains("not currently taking a survey")),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

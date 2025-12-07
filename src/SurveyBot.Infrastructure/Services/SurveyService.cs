@@ -108,12 +108,12 @@ public class SurveyService : ISurveyService
             throw new Core.Exceptions.UnauthorizedAccessException(userId, "Survey", surveyId);
         }
 
-        // Check if survey can be modified
-        if (survey.IsActive && await _surveyRepository.HasResponsesAsync(surveyId))
+        // Check if survey is active - cannot modify active surveys
+        if (survey.IsActive)
         {
-            _logger.LogWarning("Cannot modify active survey {SurveyId} that has responses", surveyId);
+            _logger.LogWarning("Cannot modify active survey {SurveyId}", surveyId);
             throw new SurveyOperationException(
-                "Cannot modify an active survey that has responses. Deactivate the survey first or create a new version.");
+                "Cannot modify an active survey. Deactivate the survey first.");
         }
 
         // Update survey properties

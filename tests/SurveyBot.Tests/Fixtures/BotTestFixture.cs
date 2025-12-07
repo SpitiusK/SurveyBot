@@ -10,6 +10,7 @@ using SurveyBot.Infrastructure.Repositories;
 using Telegram.Bot;
 using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using User = SurveyBot.Core.Entities.User;
 
@@ -97,6 +98,61 @@ public class BotTestFixture : IDisposable
         // Create mock IBotService
         MockBotService = new Mock<IBotService>();
         MockBotService.Setup(x => x.Client).Returns(MockBotClient.Object);
+
+        // Mock IBotService wrapper methods for testability
+        // Extension methods can't be mocked, so we mock the IBotService wrappers instead
+
+        MockBotService
+            .Setup(x => x.SendMessageAsync(
+                It.IsAny<ChatId>(),
+                It.IsAny<string>(),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ChatId chatId, string text, ParseMode? parseMode, InlineKeyboardMarkup? markup, CancellationToken ct) =>
+            {
+                return new Message
+                {
+                    Id = Random.Shared.Next(1000, 9999),
+                    Chat = new Chat { Id = chatId.Identifier ?? 0, Type = Telegram.Bot.Types.Enums.ChatType.Private },
+                    Text = text,
+                    Date = DateTime.UtcNow
+                };
+            });
+
+        MockBotService
+            .Setup(x => x.EditMessageTextAsync(
+                It.IsAny<ChatId>(),
+                It.IsAny<int>(),
+                It.IsAny<string>(),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ChatId chatId, int messageId, string text, ParseMode? parseMode, InlineKeyboardMarkup? markup, CancellationToken ct) =>
+            {
+                return new Message
+                {
+                    Id = messageId,
+                    Chat = new Chat { Id = chatId.Identifier ?? 0, Type = Telegram.Bot.Types.Enums.ChatType.Private },
+                    Text = text,
+                    Date = DateTime.UtcNow
+                };
+            });
+
+        MockBotService
+            .Setup(x => x.AnswerCallbackQueryAsync(
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        MockBotService
+            .Setup(x => x.DeleteMessageAsync(
+                It.IsAny<ChatId>(),
+                It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         // Create conversation state manager
         var stateLoggerMock = new Mock<ILogger<ConversationStateManager>>();

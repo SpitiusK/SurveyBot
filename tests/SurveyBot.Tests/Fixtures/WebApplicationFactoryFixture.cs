@@ -66,9 +66,9 @@ public class WebApplicationFactoryFixture<TProgram> : WebApplicationFactory<TPro
                 ["Serilog:WriteTo:2:Name"] = "Console", // Override Seq with Console
                 ["Serilog:MinimumLevel:Default"] = "Warning", // Reduce log noise in tests
 
-                ["JwtSettings:SecretKey"] = "test-secret-key-for-integration-tests-minimum-32-characters-long",
-                ["JwtSettings:Issuer"] = "SurveyBot.Test",
-                ["JwtSettings:Audience"] = "SurveyBot.Test",
+                ["JwtSettings:SecretKey"] = "SurveyBot-Super-Secret-Key-For-JWT-Token-Generation-2025-Change-In-Production",
+                ["JwtSettings:Issuer"] = "SurveyBot.API",
+                ["JwtSettings:Audience"] = "SurveyBot.Clients",
                 ["JwtSettings:TokenLifetimeHours"] = "24",
                 ["BotConfiguration:BotToken"] = "8540672675:AAHX9frxfMqVRoGEKspNj5Nxlm9JIodtG1Q",
                 ["BotConfiguration:BotUsername"] = "@TestBot",
@@ -253,4 +253,54 @@ public class TestBotService : SurveyBot.Bot.Interfaces.IBotService
     }
 
     public bool ValidateWebhookSecret(string? secretToken) => true;
+
+    public Task<Telegram.Bot.Types.Message> SendMessageAsync(
+        Telegram.Bot.Types.ChatId chatId,
+        string text,
+        Telegram.Bot.Types.Enums.ParseMode? parseMode = null,
+        Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new Telegram.Bot.Types.Message
+        {
+            Id = Random.Shared.Next(1000, 9999),
+            Chat = new Telegram.Bot.Types.Chat { Id = chatId.Identifier ?? 0 },
+            Text = text,
+            Date = DateTime.UtcNow
+        });
+    }
+
+    public Task<Telegram.Bot.Types.Message> EditMessageTextAsync(
+        Telegram.Bot.Types.ChatId chatId,
+        int messageId,
+        string text,
+        Telegram.Bot.Types.Enums.ParseMode? parseMode = null,
+        Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new Telegram.Bot.Types.Message
+        {
+            Id = messageId,
+            Chat = new Telegram.Bot.Types.Chat { Id = chatId.Identifier ?? 0 },
+            Text = text,
+            Date = DateTime.UtcNow
+        });
+    }
+
+    public Task AnswerCallbackQueryAsync(
+        string callbackQueryId,
+        string? text = null,
+        bool showAlert = false,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteMessageAsync(
+        Telegram.Bot.Types.ChatId chatId,
+        int messageId,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
 }

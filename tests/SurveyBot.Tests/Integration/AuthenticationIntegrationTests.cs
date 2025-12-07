@@ -12,6 +12,7 @@ using SurveyBot.Core.DTOs.Auth;
 using SurveyBot.Core.Entities;
 using SurveyBot.Infrastructure.Data;
 using SurveyBot.Tests.Fixtures;
+using SurveyBot.Tests.Infrastructure;
 
 namespace SurveyBot.Tests.Integration;
 
@@ -19,26 +20,19 @@ namespace SurveyBot.Tests.Integration;
 /// Integration tests for authentication functionality.
 /// Tests JWT token generation, validation, and protected endpoint access.
 /// </summary>
-public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactoryFixture<Program>>
+public class AuthenticationIntegrationTests : IntegrationTestBase
 {
-    private readonly WebApplicationFactoryFixture<Program> _factory;
-    private readonly HttpClient _client;
-
     public AuthenticationIntegrationTests(WebApplicationFactoryFixture<Program> factory)
+        : base(factory)
     {
-        _factory = factory;
-        _client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
     }
 
     [Fact]
     public async Task Login_WithValidTelegramId_ReturnsJwtToken()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        // Database is already cleared by IntegrationTestBase constructor
+        SeedDatabase(db =>
         {
             db.Users.Add(EntityBuilder.CreateUser(telegramId: 123456789, username: "testuser"));
         });
@@ -50,7 +44,7 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
+        var response = await Client.PostAsJsonAsync("/api/auth/login", loginRequest);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -76,7 +70,7 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
     public async Task Login_WithNewTelegramId_CreatesUserAndReturnsToken()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var loginRequest = new LoginRequestDto
         {
@@ -85,7 +79,7 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
+        var response = await Client.PostAsJsonAsync("/api/auth/login", loginRequest);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -98,7 +92,7 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
         result.Data.User.TelegramId.Should().Be(999888777);
 
         // Verify user was created in database
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
         var user = await db.Users.FindAsync(result.Data.User.Id);
         user.Should().NotBeNull();
@@ -109,23 +103,23 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
     public async Task ValidateToken_WithValidToken_ReturnsSuccess()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        // Database is already cleared by IntegrationTestBase constructor
+        SeedDatabase(db =>
         {
             db.Users.Add(EntityBuilder.CreateUser(telegramId: 123456789, username: "testuser"));
         });
 
         // Login to get token
         var loginRequest = new LoginRequestDto { TelegramId = 123456789 };
-        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
+        var loginResponse = await Client.PostAsJsonAsync("/api/auth/login", loginRequest);
         var loginResult = await loginResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
         var token = loginResult!.Data!.Token;
 
         // Add token to request headers
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var response = await _client.GetAsync("/api/auth/validate");
+        var response = await Client.GetAsync("/api/auth/validate");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -140,10 +134,10 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
     {
         // Arrange
         var invalidToken = "invalid.jwt.token";
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", invalidToken);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", invalidToken);
 
         // Act
-        var response = await _client.GetAsync("/api/auth/validate");
+        var response = await Client.GetAsync("/api/auth/validate");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -153,12 +147,12 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
     public async Task ProtectedEndpoint_WithoutToken_ReturnsUnauthorized()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         // Don't set any authorization header
 
         // Act
-        var response = await _client.GetAsync("/api/surveys");
+        var response = await Client.GetAsync("/api/surveys");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -171,10 +165,10 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
         // Create a token that's already expired (this would require mocking time or using a very short expiry)
         // For MVP, we'll test with invalid token signature instead
         var expiredToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", expiredToken);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", expiredToken);
 
         // Act
-        var response = await _client.GetAsync("/api/surveys");
+        var response = await Client.GetAsync("/api/surveys");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -184,22 +178,22 @@ public class AuthenticationIntegrationTests : IClassFixture<WebApplicationFactor
     public async Task GetCurrentUser_WithValidToken_ReturnsUserInfo()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        // Database is already cleared by IntegrationTestBase constructor
+        SeedDatabase(db =>
         {
             db.Users.Add(EntityBuilder.CreateUser(telegramId: 123456789, username: "testuser"));
         });
 
         // Login to get token
         var loginRequest = new LoginRequestDto { TelegramId = 123456789, Username = "testuser" };
-        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
+        var loginResponse = await Client.PostAsJsonAsync("/api/auth/login", loginRequest);
         var loginResult = await loginResponse.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
         var token = loginResult!.Data!.Token;
 
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var response = await _client.GetAsync("/api/auth/me");
+        var response = await Client.GetAsync("/api/auth/me");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);

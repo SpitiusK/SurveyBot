@@ -167,6 +167,7 @@ public class PerformanceTests : IClassFixture<BotTestFixture>
             _fixture.ResponseRepository,
             _fixture.StateManager,
             completionHandler,
+            new SurveyCache(Mock.Of<ILogger<SurveyCache>>()),
             _questionHandlers,
             Mock.Of<ILogger<SurveyCommandHandler>>());
     }
@@ -237,8 +238,9 @@ public class PerformanceTests : IClassFixture<BotTestFixture>
 
         // 2. Single choice answer
         stopwatch.Restart();
-        var singleChoiceCallback = _fixture.CreateTestCallbackQuery(TestUserId + 1, TestChatId + 1, "option_0_Red");
         var singleChoiceQuestion = MapToDto(_fixture.TestQuestions[1]);
+        // Callback data format: answer_q{questionId}_opt{optionIndex} (index 0 = "Red")
+        var singleChoiceCallback = _fixture.CreateTestCallbackQuery(TestUserId + 1, TestChatId + 1, $"answer_q{singleChoiceQuestion.Id}_opt0");
         var singleChoiceResult = await _questionHandlers[1].ProcessAnswerAsync(
             null, singleChoiceCallback, singleChoiceQuestion, TestUserId + 1, CancellationToken.None);
         stopwatch.Stop();
@@ -247,8 +249,9 @@ public class PerformanceTests : IClassFixture<BotTestFixture>
 
         // 3. Rating answer
         stopwatch.Restart();
-        var ratingCallback = _fixture.CreateTestCallbackQuery(TestUserId + 1, TestChatId + 1, "rating_5");
         var ratingQuestion = MapToDto(_fixture.TestQuestions[3]);
+        // Callback data format: rating_q{questionId}_r{ratingValue}
+        var ratingCallback = _fixture.CreateTestCallbackQuery(TestUserId + 1, TestChatId + 1, $"rating_q{ratingQuestion.Id}_r5");
         var ratingResult = await _questionHandlers[3].ProcessAnswerAsync(
             null, ratingCallback, ratingQuestion, TestUserId + 1, CancellationToken.None);
         stopwatch.Stop();

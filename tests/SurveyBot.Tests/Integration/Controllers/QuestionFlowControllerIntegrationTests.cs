@@ -11,6 +11,7 @@ using SurveyBot.Core.DTOs.Survey;
 using SurveyBot.Core.Entities;
 using SurveyBot.Core.ValueObjects;
 using SurveyBot.Tests.Fixtures;
+using SurveyBot.Tests.Infrastructure;
 
 namespace SurveyBot.Tests.Integration.Controllers;
 
@@ -19,32 +20,14 @@ namespace SurveyBot.Tests.Integration.Controllers;
 /// Tests HTTP endpoints for flow configuration, validation, and navigation.
 /// TEST-003: 10+ API endpoint tests for Conditional Question Flow feature.
 /// </summary>
-public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicationFactoryFixture<Program>>
+public class QuestionFlowControllerIntegrationTests : IntegrationTestBase
 {
-    private readonly WebApplicationFactoryFixture<Program> _factory;
-    private readonly HttpClient _client;
-
     public QuestionFlowControllerIntegrationTests(WebApplicationFactoryFixture<Program> factory)
+        : base(factory)
     {
-        _factory = factory;
-        _client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
     }
 
     #region Test Helper Methods
-
-    /// <summary>
-    /// Gets authentication token for a test user.
-    /// </summary>
-    private async Task<string> GetAuthTokenAsync(long telegramId = 123456789)
-    {
-        var loginRequest = new LoginRequestDto { TelegramId = telegramId };
-        var response = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
-        return result!.Data!.Token;
-    }
 
     /// <summary>
     /// Seeds database with test data: user, survey, questions with branching flow.
@@ -53,7 +36,7 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     {
         int surveyId = 0, q1Id = 0, q2Id = 0, q3Id = 0, q4Id = 0;
 
-        _factory.SeedDatabase(db =>
+        Factory.SeedDatabase(db =>
         {
             // Create user
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
@@ -138,7 +121,7 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     {
         int surveyId = 0, q1Id = 0, q2Id = 0;
 
-        _factory.SeedDatabase(db =>
+        Factory.SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -189,14 +172,14 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task GetQuestionFlow_ValidQuestion_Returns200WithFlowConfiguration()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, q1Id, _, _, _) = SeedTestSurvey();
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var response = await _client.GetAsync($"/api/surveys/{surveyId}/questions/{q1Id}/flow");
+        var response = await Client.GetAsync($"/api/surveys/{surveyId}/questions/{q1Id}/flow");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -214,16 +197,16 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task GetQuestionFlow_NonExistentQuestion_Returns404NotFound()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, _, _, _, _) = SeedTestSurvey();
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var nonExistentQuestionId = 99999;
 
         // Act
-        var response = await _client.GetAsync($"/api/surveys/{surveyId}/questions/{nonExistentQuestionId}/flow");
+        var response = await Client.GetAsync($"/api/surveys/{surveyId}/questions/{nonExistentQuestionId}/flow");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -237,11 +220,11 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task GetQuestionFlow_WithoutAuthorization_Returns401Unauthorized()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, q1Id, _, _, _) = SeedTestSurvey();
 
         // Don't set authorization header
-        var clientNoAuth = _factory.CreateClient();
+        var clientNoAuth = Factory.CreateClient();
 
         // Act
         var response = await clientNoAuth.GetAsync($"/api/surveys/{surveyId}/questions/{q1Id}/flow");
@@ -258,11 +241,11 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task UpdateQuestionFlow_ValidBranchingUpdate_Returns200WithUpdatedFlow()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, q1Id, q2Id, q3Id, q4Id) = SeedTestSurvey();
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Update branching flow: Option 0 -> Q2, Option 1 -> Q4 (skip Q3)
         var updateDto = new UpdateQuestionFlowDto
@@ -275,7 +258,7 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync(
+        var response = await Client.PutAsJsonAsync(
             $"/api/surveys/{surveyId}/questions/{q1Id}/flow",
             updateDto);
 
@@ -302,11 +285,11 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task UpdateQuestionFlow_ValidNonBranchingUpdate_Returns200WithUpdatedFlow()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, _, q2Id, q3Id, q4Id) = SeedTestSurvey();
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Update non-branching text question (Q2) to point to Q4
         var updateDto = new UpdateQuestionFlowDto
@@ -315,7 +298,7 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync(
+        var response = await Client.PutAsJsonAsync(
             $"/api/surveys/{surveyId}/questions/{q2Id}/flow",
             updateDto);
 
@@ -334,11 +317,11 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task UpdateQuestionFlow_CycleCausingUpdate_Returns400WithCycleDetails()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, q1Id, q2Id, _, _) = SeedTestSurvey();
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Create cycle: Q2 -> Q1 (Q1 already points to Q2 via branching)
         var updateDto = new UpdateQuestionFlowDto
@@ -347,7 +330,7 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync(
+        var response = await Client.PutAsJsonAsync(
             $"/api/surveys/{surveyId}/questions/{q2Id}/flow",
             updateDto);
 
@@ -372,14 +355,14 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task ValidateSurveyFlow_ValidSurvey_Returns200WithSuccess()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, _, _, _, _) = SeedTestSurvey();
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var response = await _client.PostAsync($"/api/surveys/{surveyId}/questions/validate", null);
+        var response = await Client.PostAsync($"/api/surveys/{surveyId}/questions/validate", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -400,14 +383,14 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task ValidateSurveyFlow_SurveyWithCycle_Returns200WithCycleError()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, _, _) = SeedSurveyWithCycle();
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var response = await _client.PostAsync($"/api/surveys/{surveyId}/questions/validate", null);
+        var response = await Client.PostAsync($"/api/surveys/{surveyId}/questions/validate", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK); // Validation endpoint returns 200 even with errors
@@ -439,13 +422,13 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task GetNextQuestion_ValidResponse_Returns200WithNextQuestion()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         int responseId = 0;
 
         var (surveyId, q1Id, q2Id, _, _) = SeedTestSurvey();
 
         // Seed a response
-        _factory.SeedDatabase(db =>
+        Factory.SeedDatabase(db =>
         {
             var response = Response.Start(surveyId: surveyId, respondentTelegramId: 987654321);
             db.Responses.Add(response);
@@ -454,7 +437,7 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         });
 
         // Public endpoint - no auth required
-        var clientNoAuth = _factory.CreateClient();
+        var clientNoAuth = Factory.CreateClient();
 
         // Act
         var response = await clientNoAuth.GetAsync($"/api/responses/{responseId}/next-question");
@@ -473,13 +456,13 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task GetNextQuestion_SurveyComplete_Returns204NoContent()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         int responseId = 0;
 
         var (surveyId, q1Id, q2Id, q3Id, q4Id) = SeedTestSurvey();
 
         // Seed a completed response with all answers
-        _factory.SeedDatabase(db =>
+        Factory.SeedDatabase(db =>
         {
             var response = Response.Start(surveyId: surveyId, respondentTelegramId: 987654321);
             response.SetIsComplete(true);
@@ -511,7 +494,7 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
         });
 
         // Public endpoint - no auth required
-        var clientNoAuth = _factory.CreateClient();
+        var clientNoAuth = Factory.CreateClient();
 
         // Act
         var response = await clientNoAuth.GetAsync($"/api/responses/{responseId}/next-question");
@@ -531,14 +514,14 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task ActivateSurvey_ValidSurvey_Returns200WithActivatedSurvey()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, _, _, _, _) = SeedTestSurvey();
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var response = await _client.PostAsync($"/api/surveys/{surveyId}/activate", null);
+        var response = await Client.PostAsync($"/api/surveys/{surveyId}/activate", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -554,14 +537,14 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task ActivateSurvey_SurveyWithCycle_Returns400WithCycleError()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, _, _) = SeedSurveyWithCycle();
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var response = await _client.PostAsync($"/api/surveys/{surveyId}/activate", null);
+        var response = await Client.PostAsync($"/api/surveys/{surveyId}/activate", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -580,16 +563,16 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task ActivateSurvey_NonExistentSurvey_Returns404NotFound()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         SeedTestSurvey(); // Seed a user
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var nonExistentSurveyId = 99999;
 
         // Act
-        var response = await _client.PostAsync($"/api/surveys/{nonExistentSurveyId}/activate", null);
+        var response = await Client.PostAsync($"/api/surveys/{nonExistentSurveyId}/activate", null);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -603,11 +586,11 @@ public class QuestionFlowControllerIntegrationTests : IClassFixture<WebApplicati
     public async Task ActivateSurvey_WithoutAuthorization_Returns401Unauthorized()
     {
         // Arrange
-        _factory.ClearDatabase();
+        Factory.ClearDatabase();
         var (surveyId, _, _, _, _) = SeedTestSurvey();
 
         // Don't set authorization header
-        var clientNoAuth = _factory.CreateClient();
+        var clientNoAuth = Factory.CreateClient();
 
         // Act
         var response = await clientNoAuth.PostAsync($"/api/surveys/{surveyId}/activate", null);

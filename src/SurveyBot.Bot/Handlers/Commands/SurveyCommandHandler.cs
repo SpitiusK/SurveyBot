@@ -6,6 +6,7 @@ using SurveyBot.Core.DTOs.Response;
 using SurveyBot.Core.Interfaces;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 
 namespace SurveyBot.Bot.Handlers.Commands;
 
@@ -192,9 +193,9 @@ public class SurveyCommandHandler : ICommandHandler
                 "Error processing /survey command for user {TelegramId}",
                 userId);
 
-            await _botService.Client.SendMessage(
-                chatId: chatId,
-                text: "Sorry, an error occurred while starting the survey. Please try again later.",
+            await _botService.SendMessageAsync(
+                chatId,
+                "Sorry, an error occurred while starting the survey. Please try again later.",
                 cancellationToken: cancellationToken);
         }
     }
@@ -273,9 +274,9 @@ public class SurveyCommandHandler : ICommandHandler
         if (!_questionHandlers.TryGetValue(question.QuestionType, out var handler))
         {
             _logger.LogError("No handler found for question type {QuestionType}", question.QuestionType);
-            await _botService.Client.SendMessage(
-                chatId: chatId,
-                text: "Sorry, this question type is not supported yet.",
+            await _botService.SendMessageAsync(
+                chatId,
+                "Sorry, this question type is not supported yet.",
                 cancellationToken: cancellationToken);
             return;
         }
@@ -329,12 +330,12 @@ public class SurveyCommandHandler : ICommandHandler
             await _stateManager.AnswerQuestionAsync(userId, i, "{}"); // Mark as answered
         }
 
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: $"Resuming survey: *{survey.Title}*\n\n" +
+        await _botService.SendMessageAsync(
+            chatId,
+            $"Resuming survey: *{survey.Title}*\n\n" +
                   $"You have answered {answeredQuestionIds.Count} of {totalQuestions} questions.\n" +
                   $"Let's continue...",
-            parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
+            parseMode: ParseMode.Markdown,
             cancellationToken: cancellationToken);
 
         // Display next unanswered question
@@ -396,9 +397,9 @@ public class SurveyCommandHandler : ICommandHandler
 
     private async Task SendUsageMessageAsync(long chatId, CancellationToken cancellationToken)
     {
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: "Usage: /survey <survey_id>\n\n" +
+        await _botService.SendMessageAsync(
+            chatId,
+            "Usage: /survey <survey_id>\n\n" +
                   "Example: /survey 5\n\n" +
                   "To find available surveys, use /surveys command.",
             cancellationToken: cancellationToken);
@@ -406,36 +407,36 @@ public class SurveyCommandHandler : ICommandHandler
 
     private async Task SendSurveyNotFoundAsync(long chatId, string identifier, CancellationToken cancellationToken)
     {
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: $"Survey '{identifier}' not found or is not active.\n\n" +
+        await _botService.SendMessageAsync(
+            chatId,
+            $"Survey '{identifier}' not found or is not active.\n\n" +
                   "Use /surveys to browse available surveys.",
             cancellationToken: cancellationToken);
     }
 
     private async Task SendSurveyInactiveAsync(long chatId, string surveyTitle, CancellationToken cancellationToken)
     {
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: $"Sorry, the survey \"{surveyTitle}\" is not currently accepting responses.\n\n" +
+        await _botService.SendMessageAsync(
+            chatId,
+            $"Sorry, the survey \"{surveyTitle}\" is not currently accepting responses.\n\n" +
                   "Please check back later or use /surveys to find other surveys.",
             cancellationToken: cancellationToken);
     }
 
     private async Task SendSurveyNoQuestionsAsync(long chatId, string surveyTitle, CancellationToken cancellationToken)
     {
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: $"The survey \"{surveyTitle}\" has no questions yet.\n\n" +
+        await _botService.SendMessageAsync(
+            chatId,
+            $"The survey \"{surveyTitle}\" has no questions yet.\n\n" +
                   "Please try another survey using /surveys command.",
             cancellationToken: cancellationToken);
     }
 
     private async Task SendDuplicateResponseErrorAsync(long chatId, string surveyTitle, CancellationToken cancellationToken)
     {
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: $"You have already completed the survey \"{surveyTitle}\".\n\n" +
+        await _botService.SendMessageAsync(
+            chatId,
+            $"You have already completed the survey \"{surveyTitle}\".\n\n" +
                   "This survey does not allow multiple responses.\n\n" +
                   "Use /surveys to find other surveys.",
             cancellationToken: cancellationToken);
@@ -461,10 +462,10 @@ public class SurveyCommandHandler : ICommandHandler
         message += "- Use /cancel to stop at any time\n\n";
         message += "Let's begin...";
 
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: message,
-            parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown,
+        await _botService.SendMessageAsync(
+            chatId,
+            message,
+            ParseMode.Markdown,
             cancellationToken: cancellationToken);
 
         // Small delay before first question

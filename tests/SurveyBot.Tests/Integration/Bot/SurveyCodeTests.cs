@@ -58,6 +58,7 @@ public class SurveyCodeTests : IClassFixture<BotTestFixture>
             _fixture.ResponseRepository,
             _fixture.StateManager,
             completionHandler,
+            new SurveyCache(Mock.Of<ILogger<SurveyCache>>()),
             new List<IQuestionHandler>(),
             Mock.Of<ILogger<SurveyCommandHandler>>());
     }

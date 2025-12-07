@@ -28,7 +28,7 @@ public static class EntityBuilder
         string title = "Test Survey",
         string? description = "Test Description",
         int creatorId = 1,
-        bool isActive = true,
+        bool isActive = false,
         bool allowMultipleResponses = false,
         bool showResults = true)
     {

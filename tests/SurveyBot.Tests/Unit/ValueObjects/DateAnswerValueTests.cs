@@ -233,7 +233,7 @@ public class DateAnswerValueTests
     public void FromJson_ValidJson_CreatesDateAnswer()
     {
         // Arrange
-        var json = """{"date": "2024-06-15T00:00:00", "minDate": "2024-01-01T00:00:00", "maxDate": "2024-12-31T00:00:00"}""";
+        var json = """{"date": "15.06.2024", "minDate": "01.01.2024", "maxDate": "31.12.2024"}""";
 
         // Act
         var result = DateAnswerValue.FromJson(json);

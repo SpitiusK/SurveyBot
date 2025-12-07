@@ -61,6 +61,11 @@ public class ConversationState
     public List<int> AnsweredQuestionIndices { get; set; } = new();
 
     /// <summary>
+    /// Gets or sets the indices of questions that were skipped (optional questions only).
+    /// </summary>
+    public List<int> SkippedQuestionIndices { get; set; } = new();
+
+    /// <summary>
     /// Cached answers before saving to database
     /// Key: question index, Value: JSON answer string
     /// </summary>
@@ -115,11 +120,16 @@ public class ConversationState
     public int AnsweredCount => AnsweredQuestionIndices.Count;
 
     /// <summary>
-    /// Checks if all questions have been answered
+    /// Gets the count of skipped questions.
+    /// </summary>
+    public int SkippedCount => SkippedQuestionIndices.Count;
+
+    /// <summary>
+    /// Gets whether all questions have been addressed (answered or skipped).
     /// </summary>
     public bool IsAllAnswered => CurrentQuestionIndex.HasValue &&
                                  TotalQuestions.HasValue &&
-                                 AnsweredCount == TotalQuestions;
+                                 (AnsweredCount + SkippedCount) == TotalQuestions;
 
     /// <summary>
     /// Checks if currently on first question
@@ -143,6 +153,29 @@ public class ConversationState
             AnsweredQuestionIndices.Add(questionIndex);
             AnsweredQuestionIndices.Sort();
         }
+    }
+
+    /// <summary>
+    /// Marks a question as skipped (for optional questions only).
+    /// </summary>
+    /// <param name="questionIndex">The 0-based index of the skipped question.</param>
+    public void MarkQuestionSkipped(int questionIndex)
+    {
+        if (!SkippedQuestionIndices.Contains(questionIndex))
+        {
+            SkippedQuestionIndices.Add(questionIndex);
+            SkippedQuestionIndices.Sort();
+        }
+    }
+
+    /// <summary>
+    /// Checks if a specific question has been skipped.
+    /// </summary>
+    /// <param name="questionIndex">The 0-based index of the question.</param>
+    /// <returns>True if the question was skipped; otherwise, false.</returns>
+    public bool IsQuestionSkipped(int questionIndex)
+    {
+        return SkippedQuestionIndices.Contains(questionIndex);
     }
 
     /// <summary>
@@ -219,6 +252,7 @@ public class ConversationState
         TotalQuestions = null;
         CurrentSurveyVersion = null;
         AnsweredQuestionIndices.Clear();
+        SkippedQuestionIndices.Clear();
         CachedAnswers.Clear();
         Metadata.Clear();
         ClearVisitedQuestions();

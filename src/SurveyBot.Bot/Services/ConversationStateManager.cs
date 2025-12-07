@@ -293,16 +293,26 @@ public class ConversationStateManager : IConversationStateManager
     {
         var state = await GetStateAsync(userId);
         if (state == null)
-            return false;
-
-        // Cannot skip required questions
-        if (isRequired)
         {
-            _logger.LogWarning($"Cannot skip required question for user {userId}");
+            _logger.LogWarning("No active conversation state for user {UserId}", userId);
             return false;
         }
 
-        // Skip is same as answer with null
+        if (isRequired)
+        {
+            _logger.LogWarning("Cannot skip required question for user {UserId}", userId);
+            return false;
+        }
+
+        // Record the skip action for tracking purposes
+        if (state.CurrentQuestionIndex.HasValue)
+        {
+            state.MarkQuestionSkipped(state.CurrentQuestionIndex.Value);
+            state.UpdateActivity();
+            _logger.LogInformation("User {UserId} skipped optional question at index {QuestionIndex}",
+                userId, state.CurrentQuestionIndex.Value);
+        }
+
         return await NextQuestionAsync(userId);
     }
 

@@ -98,7 +98,7 @@ public class TextQuestionHandler : IQuestionHandler
         CancellationToken cancellationToken = default)
     {
         // Text questions only accept message input, not callback queries
-        if (message == null || string.IsNullOrWhiteSpace(message.Text))
+        if (message == null || message.Text == null)
         {
             _logger.LogDebug("Text question requires text message input");
             return null;

@@ -1,7 +1,32 @@
 ---
-description: orchestrator for this project, uses task.yaml
+description: "[DEPRECATED] Use /analyze-bug, /fix-bug, /add-feature instead. Legacy MVP orchestrator."
+model: sonnet
+color: gray
 ---
-# Orchestrator Agent
+
+> **⚠️ DEPRECATED COMMAND**
+>
+> This command was designed for MVP build-out (pre-v1.0) and is **no longer recommended** for SurveyBot v1.6.2.
+>
+> **Use these focused commands instead:**
+> - `/analyze-bug` - Deep bug analysis with comprehensive report
+> - `/fix-bug` - Bug fix implementation based on analysis report
+> - `/add-feature` - Feature implementation with architectural alignment
+> - `/update-docs` - Documentation synchronization
+> - `/diagnose-runtime` - Runtime log analysis and diagnostics
+>
+> **Why deprecated?**
+> - Assumes MVP greenfield development (project is mature)
+> - 621 lines with complex decision trees (new commands: 150-400 lines)
+> - 60%+ content overlap with task-execution-agent
+> - Missing integration with 8 newer specialist agents
+> - Does not enforce v1.6.2 DDD patterns (factory methods, value objects)
+>
+> **See**: `.claude/out/SLASH_COMMANDS_ANALYSIS_REPORT.md` for full analysis.
+
+---
+
+# Orchestrator Agent (LEGACY)
 
 You are a task execution orchestrator that coordinates work between all specialist agents to build the Telegram Survey Bot MVP efficiently.
 

@@ -6,12 +6,14 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using SurveyBot.API.Models;
 using SurveyBot.Core.DTOs.Auth;
+using SurveyBot.Core.DTOs.Common;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.DTOs.Statistics;
 using SurveyBot.Core.DTOs.Survey;
 using SurveyBot.Core.Entities;
 using SurveyBot.Infrastructure.Data;
 using SurveyBot.Tests.Fixtures;
+using SurveyBot.Tests.Infrastructure;
 
 namespace SurveyBot.Tests.Integration;
 
@@ -19,40 +21,24 @@ namespace SurveyBot.Tests.Integration;
 /// Integration tests for end-to-end survey flow.
 /// Tests the complete lifecycle: create survey, add questions, activate, and prevent modifications.
 /// </summary>
-public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFixture<Program>>
+public class SurveyFlowIntegrationTests : IntegrationTestBase
 {
-    private readonly WebApplicationFactoryFixture<Program> _factory;
-    private readonly HttpClient _client;
-
     public SurveyFlowIntegrationTests(WebApplicationFactoryFixture<Program> factory)
+        : base(factory)
     {
-        _factory = factory;
-        _client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
-    }
-
-    private async Task<string> GetAuthTokenAsync(long telegramId = 123456789)
-    {
-        var loginRequest = new LoginRequestDto { TelegramId = telegramId };
-        var response = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
-        return result!.Data!.Token;
     }
 
     [Fact]
     public async Task CompleteSurveyFlow_CreateAddQuestionsActivate_Success()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(EntityBuilder.CreateUser(telegramId: 123456789));
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Step 1: Create survey
         var createSurveyDto = new CreateSurveyDto
@@ -62,7 +48,7 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
             IsActive = false
         };
 
-        var createResponse = await _client.PostAsJsonAsync("/api/surveys", createSurveyDto);
+        var createResponse = await Client.PostAsJsonAsync("/api/surveys", createSurveyDto);
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var createResult = await createResponse.Content.ReadFromJsonAsync<ApiResponse<SurveyDto>>();
@@ -76,7 +62,7 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
             IsRequired = true
         };
 
-        var q1Response = await _client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", question1);
+        var q1Response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", question1);
         q1Response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var question2 = new CreateQuestionDto
@@ -87,23 +73,22 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
             Options = new List<string> { "Very Satisfied", "Satisfied", "Neutral", "Dissatisfied" }
         };
 
-        var q2Response = await _client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", question2);
+        var q2Response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", question2);
         q2Response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         // Step 3: Verify survey has questions
-        var questionsResponse = await _client.GetAsync($"/api/surveys/{surveyId}/questions");
+        var questionsResponse = await Client.GetAsync($"/api/surveys/{surveyId}/questions");
         questionsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var questionsResult = await questionsResponse.Content.ReadFromJsonAsync<ApiResponse<List<QuestionDto>>>();
         questionsResult!.Data.Should().HaveCount(2);
 
         // Step 4: Activate survey
-        var toggleDto = new ToggleSurveyStatusDto { IsActive = true };
-        var activateResponse = await _client.PatchAsJsonAsync($"/api/surveys/{surveyId}/status", toggleDto);
+        var activateResponse = await Client.PostAsync($"/api/surveys/{surveyId}/activate", null);
         activateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Step 5: Verify survey is active
-        var surveyResponse = await _client.GetAsync($"/api/surveys/{surveyId}");
+        var surveyResponse = await Client.GetAsync($"/api/surveys/{surveyId}");
         var surveyResult = await surveyResponse.Content.ReadFromJsonAsync<ApiResponse<SurveyDto>>();
         surveyResult!.Data!.IsActive.Should().BeTrue();
     }
@@ -112,8 +97,8 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
     public async Task ActivateSurvey_ThenTryToModify_ShouldFail()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        int surveyId = 0;
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -122,17 +107,13 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
             var survey = EntityBuilder.CreateSurvey(creatorId: user.Id, isActive: true);
             db.Surveys.Add(survey);
             db.SaveChanges();
+            surveyId = survey.Id;
 
             db.Questions.Add(EntityBuilder.CreateQuestion(surveyId: survey.Id, questionText: "Question 1"));
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        // Get survey ID
-        var surveysResponse = await _client.GetAsync("/api/surveys");
-        var surveysResult = await surveysResponse.Content.ReadFromJsonAsync<ApiResponse<List<SurveyDto>>>();
-        var surveyId = surveysResult!.Data![0].Id;
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act: Try to add question to active survey
         var newQuestion = new CreateQuestionDto
@@ -141,7 +122,7 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
             QuestionType = QuestionType.Text
         };
 
-        var response = await _client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", newQuestion);
+        var response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", newQuestion);
 
         // Assert: Should fail
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -151,8 +132,8 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
     public async Task ViewStatistics_AsCreator_ReturnsStatistics()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        int surveyId = 0;
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -161,6 +142,7 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
             var survey = EntityBuilder.CreateSurvey(creatorId: user.Id, isActive: true);
             db.Surveys.Add(survey);
             db.SaveChanges();
+            surveyId = survey.Id;
 
             var question = EntityBuilder.CreateQuestion(surveyId: survey.Id);
             db.Questions.Add(question);
@@ -175,15 +157,10 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        // Get survey ID
-        var surveysResponse = await _client.GetAsync("/api/surveys");
-        var surveysResult = await surveysResponse.Content.ReadFromJsonAsync<ApiResponse<List<SurveyDto>>>();
-        var surveyId = surveysResult!.Data![0].Id;
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var statsResponse = await _client.GetAsync($"/api/surveys/{surveyId}/statistics");
+        var statsResponse = await Client.GetAsync($"/api/surveys/{surveyId}/statistics");
 
         // Assert
         statsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -198,8 +175,8 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
     public async Task ViewOtherUsersSurvey_ShouldFail()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        int surveyId = 0;
+        SeedDatabase(db =>
         {
             var user1 = EntityBuilder.CreateUser(telegramId: 111111111, username: "user1");
             var user2 = EntityBuilder.CreateUser(telegramId: 222222222, username: "user2");
@@ -209,19 +186,16 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
             // Create survey owned by user1
             var survey = EntityBuilder.CreateSurvey(creatorId: user1.Id);
             db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
         });
 
         // Login as user2
         var token = await GetAuthTokenAsync(222222222);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        // Get user1's survey ID
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
-        var surveyId = db.Surveys.First().Id;
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act: User2 tries to view User1's survey
-        var response = await _client.GetAsync($"/api/surveys/{surveyId}");
+        var response = await Client.GetAsync($"/api/surveys/{surveyId}");
 
         // Assert: Should fail (403 Forbidden or 404 Not Found)
         response.StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.NotFound);
@@ -231,8 +205,8 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
     public async Task DeleteSurvey_AsOwner_Success()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        int surveyId = 0;
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -240,24 +214,21 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
 
             var survey = EntityBuilder.CreateSurvey(creatorId: user.Id, isActive: false);
             db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        // Get survey ID
-        var surveysResponse = await _client.GetAsync("/api/surveys");
-        var surveysResult = await surveysResponse.Content.ReadFromJsonAsync<ApiResponse<List<SurveyDto>>>();
-        var surveyId = surveysResult!.Data![0].Id;
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var deleteResponse = await _client.DeleteAsync($"/api/surveys/{surveyId}");
+        var deleteResponse = await Client.DeleteAsync($"/api/surveys/{surveyId}");
 
         // Assert
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Verify survey is deleted
-        var getResponse = await _client.GetAsync($"/api/surveys/{surveyId}");
+        var getResponse = await Client.GetAsync($"/api/surveys/{surveyId}");
         getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -265,8 +236,8 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
     public async Task UpdateSurvey_WhileInactive_Success()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        int surveyId = 0;
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -277,15 +248,12 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
                 creatorId: user.Id,
                 isActive: false);
             db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        // Get survey ID
-        var surveysResponse = await _client.GetAsync("/api/surveys");
-        var surveysResult = await surveysResponse.Content.ReadFromJsonAsync<ApiResponse<List<SurveyDto>>>();
-        var surveyId = surveysResult!.Data![0].Id;
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
         var updateDto = new UpdateSurveyDto
@@ -294,7 +262,7 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
             Description = "Updated Description"
         };
 
-        var updateResponse = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}", updateDto);
+        var updateResponse = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}", updateDto);
 
         // Assert
         updateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -308,8 +276,8 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
     public async Task UpdateSurvey_WhileActive_ShouldFail()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        int surveyId = 0;
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -320,15 +288,12 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
                 creatorId: user.Id,
                 isActive: true);
             db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        // Get survey ID
-        var surveysResponse = await _client.GetAsync("/api/surveys");
-        var surveysResult = await surveysResponse.Content.ReadFromJsonAsync<ApiResponse<List<SurveyDto>>>();
-        var surveyId = surveysResult!.Data![0].Id;
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
         var updateDto = new UpdateSurveyDto
@@ -337,7 +302,7 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
             Description = "Updated Description"
         };
 
-        var updateResponse = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}", updateDto);
+        var updateResponse = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}", updateDto);
 
         // Assert: Should fail because survey is active
         updateResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -347,8 +312,7 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
     public async Task ListSurveys_AsUser_ReturnsOnlyOwnSurveys()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user1 = EntityBuilder.CreateUser(telegramId: 111111111);
             var user2 = EntityBuilder.CreateUser(telegramId: 222222222);
@@ -362,16 +326,19 @@ public class SurveyFlowIntegrationTests : IClassFixture<WebApplicationFactoryFix
 
         // Login as user1
         var token = await GetAuthTokenAsync(111111111);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var response = await _client.GetAsync("/api/surveys");
+        var response = await Client.GetAsync("/api/surveys");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<List<SurveyDto>>>();
-        result!.Data.Should().HaveCount(1);
-        result.Data![0].Title.Should().Be("User 1 Survey");
+        // API returns paginated result: ApiResponse<PagedResultDto<SurveyListDto>>
+        var result = await response.Content.ReadFromJsonAsync<ApiResponse<PagedResultDto<SurveyListDto>>>();
+        result.Should().NotBeNull();
+        result!.Data.Should().NotBeNull();
+        result.Data!.Items.Should().HaveCount(1);
+        result.Data.Items[0].Title.Should().Be("User 1 Survey");
     }
 }

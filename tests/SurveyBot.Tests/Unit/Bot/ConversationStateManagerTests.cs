@@ -319,6 +319,102 @@ public class ConversationStateManagerTests
     }
 
     [Fact]
+    public async Task SkipQuestionAsync_RecordsSkipInState()
+    {
+        // Arrange
+        var userId = TestUserId + 100;
+        await _manager.StartSurveyAsync(userId, surveyId: 1, responseId: 1, totalQuestions: 4);
+        await _manager.NextQuestionAsync(userId); // Move to question index 1
+
+        // Act
+        var result = await _manager.SkipQuestionAsync(userId, isRequired: false);
+
+        // Assert
+        Assert.True(result);
+        var state = await _manager.GetStateAsync(userId);
+        Assert.NotNull(state);
+        Assert.Contains(1, state.SkippedQuestionIndices);
+        Assert.Equal(1, state.SkippedCount);
+    }
+
+    [Fact]
+    public async Task SkipQuestionAsync_RequiredQuestion_ReturnsFalseAndDoesNotRecord()
+    {
+        // Arrange
+        var userId = TestUserId + 101;
+        await _manager.StartSurveyAsync(userId, surveyId: 1, responseId: 1, totalQuestions: 4);
+
+        // Act
+        var result = await _manager.SkipQuestionAsync(userId, isRequired: true);
+
+        // Assert
+        Assert.False(result);
+        var state = await _manager.GetStateAsync(userId);
+        Assert.NotNull(state);
+        Assert.Empty(state.SkippedQuestionIndices);
+    }
+
+    [Fact]
+    public async Task SkipQuestionAsync_MultipleSkips_RecordsAll()
+    {
+        // Arrange
+        var userId = TestUserId + 102;
+        await _manager.StartSurveyAsync(userId, surveyId: 1, responseId: 1, totalQuestions: 5);
+
+        // Act - Skip questions at index 0, 2, and 4
+        // NOTE: SkipQuestionAsync calls NextQuestionAsync internally, so we don't need to call it separately
+        await _manager.SkipQuestionAsync(userId, isRequired: false); // Skips index 0, moves to 1
+        await _manager.NextQuestionAsync(userId); // Move to index 2
+        await _manager.SkipQuestionAsync(userId, isRequired: false); // Skips index 2, moves to 3
+        await _manager.NextQuestionAsync(userId); // Move to index 4
+        await _manager.SkipQuestionAsync(userId, isRequired: false); // Skips index 4
+
+        // Assert
+        var state = await _manager.GetStateAsync(userId);
+        Assert.NotNull(state);
+        Assert.Equal(3, state.SkippedCount);
+        Assert.Contains(0, state.SkippedQuestionIndices);
+        Assert.Contains(2, state.SkippedQuestionIndices);
+        Assert.Contains(4, state.SkippedQuestionIndices);
+    }
+
+    [Fact]
+    public async Task SkipQuestionAsync_NoActiveState_ReturnsFalse()
+    {
+        // Arrange
+        var userId = TestUserId + 103;
+
+        // Act
+        var result = await _manager.SkipQuestionAsync(userId, isRequired: false);
+
+        // Assert
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task SkipQuestionAsync_AndAnswerQuestion_BothRecorded()
+    {
+        // Arrange - Verify answered and skipped are independent
+        var userId = TestUserId + 104;
+        await _manager.StartSurveyAsync(userId, surveyId: 1, responseId: 1, totalQuestions: 4);
+
+        // Act
+        await _manager.AnswerQuestionAsync(userId, 0, "{\"text\":\"answer\"}");
+        await _manager.NextQuestionAsync(userId); // Move to index 1
+        await _manager.SkipQuestionAsync(userId, isRequired: false); // Skips index 1, moves to 2
+        await _manager.AnswerQuestionAsync(userId, 2, "{\"text\":\"answer2\"}");
+
+        // Assert
+        var state = await _manager.GetStateAsync(userId);
+        Assert.NotNull(state);
+        Assert.Equal(2, state.AnsweredCount);
+        Assert.Equal(1, state.SkippedCount);
+        Assert.Contains(0, state.AnsweredQuestionIndices);
+        Assert.Contains(2, state.AnsweredQuestionIndices);
+        Assert.Contains(1, state.SkippedQuestionIndices);
+    }
+
+    [Fact]
     public async Task CompleteSurvey_TransitionsToComplete_Successfully()
     {
         // Arrange

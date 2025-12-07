@@ -484,7 +484,7 @@ public class AnswerValidatorTests
     {
         // Arrange
         var question = CreateQuestion(QuestionType.Date, isRequired: true);
-        var answerJson = JsonSerializer.Serialize(new { date = new DateTime(2024, 6, 15) });
+        var answerJson = JsonSerializer.Serialize(new { date = "15.06.2024" });
 
         // Act
         var result = _validator.ValidateAnswer(answerJson, question);
@@ -545,8 +545,8 @@ public class AnswerValidatorTests
         var question = CreateQuestion(QuestionType.Date, isRequired: true);
         var answerJson = JsonSerializer.Serialize(new
         {
-            date = new DateTime(2024, 1, 1),
-            minDate = new DateTime(2024, 6, 1)
+            date = "01.01.2024",
+            minDate = "01.06.2024"
         });
 
         // Act
@@ -565,8 +565,8 @@ public class AnswerValidatorTests
         var question = CreateQuestion(QuestionType.Date, isRequired: true);
         var answerJson = JsonSerializer.Serialize(new
         {
-            date = new DateTime(2024, 12, 31),
-            maxDate = new DateTime(2024, 6, 30)
+            date = "31.12.2024",
+            maxDate = "30.06.2024"
         });
 
         // Act
@@ -585,9 +585,9 @@ public class AnswerValidatorTests
         var question = CreateQuestion(QuestionType.Date, isRequired: true);
         var answerJson = JsonSerializer.Serialize(new
         {
-            date = new DateTime(2024, 6, 15),
-            minDate = new DateTime(2024, 1, 1),
-            maxDate = new DateTime(2024, 12, 31)
+            date = "15.06.2024",
+            minDate = "01.01.2024",
+            maxDate = "31.12.2024"
         });
 
         // Act
@@ -604,8 +604,8 @@ public class AnswerValidatorTests
         var question = CreateQuestion(QuestionType.Date, isRequired: true);
         var answerJson = JsonSerializer.Serialize(new
         {
-            date = new DateTime(2024, 6, 1),
-            minDate = new DateTime(2024, 6, 1)
+            date = "01.06.2024",
+            minDate = "01.06.2024"
         });
 
         // Act
@@ -622,8 +622,8 @@ public class AnswerValidatorTests
         var question = CreateQuestion(QuestionType.Date, isRequired: true);
         var answerJson = JsonSerializer.Serialize(new
         {
-            date = new DateTime(2024, 6, 30),
-            maxDate = new DateTime(2024, 6, 30)
+            date = "30.06.2024",
+            maxDate = "30.06.2024"
         });
 
         // Act
@@ -640,8 +640,8 @@ public class AnswerValidatorTests
         var question = CreateQuestion(QuestionType.Date, isRequired: true);
         var answerJson = JsonSerializer.Serialize(new
         {
-            date = new DateTime(2024, 12, 31),
-            minDate = new DateTime(2024, 1, 1)
+            date = "31.12.2024",
+            minDate = "01.01.2024"
         });
 
         // Act
@@ -658,8 +658,8 @@ public class AnswerValidatorTests
         var question = CreateQuestion(QuestionType.Date, isRequired: true);
         var answerJson = JsonSerializer.Serialize(new
         {
-            date = new DateTime(2024, 1, 1),
-            maxDate = new DateTime(2024, 12, 31)
+            date = "01.01.2024",
+            maxDate = "31.12.2024"
         });
 
         // Act

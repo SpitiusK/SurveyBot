@@ -65,6 +65,14 @@ public class QuestionService : IQuestionService
             throw new Core.Exceptions.UnauthorizedAccessException(userId, "Survey", surveyId);
         }
 
+        // Check if survey is active - cannot modify active surveys
+        if (survey.IsActive)
+        {
+            _logger.LogWarning("Cannot add question to active survey {SurveyId}", surveyId);
+            throw new SurveyOperationException(
+                "Cannot add questions to an active survey. Deactivate the survey first.");
+        }
+
         // Check if survey has responses - cannot add questions if survey has responses
         var hasResponses = await _surveyRepository.HasResponsesAsync(surveyId);
         if (hasResponses)

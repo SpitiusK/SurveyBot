@@ -9,6 +9,7 @@ using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.DTOs.Survey;
 using SurveyBot.Core.Entities;
 using SurveyBot.Tests.Fixtures;
+using SurveyBot.Tests.Infrastructure;
 
 namespace SurveyBot.Tests.Integration.Controllers;
 
@@ -23,32 +24,14 @@ namespace SurveyBot.Tests.Integration.Controllers;
 /// - Success: Complete update, new question IDs, metadata changes
 /// - Errors: Survey not found, cycle detection
 /// </summary>
-public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplicationFactoryFixture<Program>>
+public class SurveysControllerCompleteUpdateTests : IntegrationTestBase
 {
-    private readonly WebApplicationFactoryFixture<Program> _factory;
-    private readonly HttpClient _client;
-
     public SurveysControllerCompleteUpdateTests(WebApplicationFactoryFixture<Program> factory)
+        : base(factory)
     {
-        _factory = factory;
-        _client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
     }
 
     #region Helper Methods
-
-    /// <summary>
-    /// Gets a valid JWT token for the specified Telegram user ID.
-    /// </summary>
-    private async Task<string> GetAuthTokenAsync(long telegramId = 123456789)
-    {
-        var loginRequest = new LoginRequestDto { TelegramId = telegramId };
-        var response = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
-        return result!.Data!.Token;
-    }
 
     /// <summary>
     /// Creates a test survey owned by the specified user.
@@ -57,7 +40,7 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     {
         var survey = EntityBuilder.CreateSurvey(title: title, creatorId: userId, isActive: false);
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Surveys.Add(survey);
         });
@@ -106,13 +89,12 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithoutAuthentication_Returns401Unauthorized()
     {
         // Arrange
-        _factory.ClearDatabase();
         var dto = BuildValidUpdateDto();
 
         // Don't set Authorization header - no token
 
         // Act
-        var response = await _client.PutAsJsonAsync("/api/surveys/1/complete", dto);
+        var response = await Client.PutAsJsonAsync("/api/surveys/1/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -122,14 +104,13 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithInvalidToken_Returns401Unauthorized()
     {
         // Arrange
-        _factory.ClearDatabase();
         var dto = BuildValidUpdateDto();
 
         // Set invalid token
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "invalid-token-xyz");
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "invalid-token-xyz");
 
         // Act
-        var response = await _client.PutAsJsonAsync("/api/surveys/1/complete", dto);
+        var response = await Client.PutAsJsonAsync("/api/surveys/1/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -140,14 +121,13 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     {
         // Arrange - This test assumes token expiration logic is in place
         // For now, we test with an obviously malformed token
-        _factory.ClearDatabase();
         var dto = BuildValidUpdateDto();
 
         // Malformed token that will fail validation
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.expired.token");
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.expired.token");
 
         // Act
-        var response = await _client.PutAsJsonAsync("/api/surveys/1/complete", dto);
+        var response = await Client.PutAsJsonAsync("/api/surveys/1/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -157,22 +137,20 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithValidToken_ProceedsToNextStage()
     {
         // Arrange
-        _factory.ClearDatabase();
-
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto();
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         // Should not be 401, might be 200 OK or other status depending on validation
@@ -187,13 +165,11 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WhenUserDoesNotOwnSurvey_Returns403Forbidden()
     {
         // Arrange
-        _factory.ClearDatabase();
-
         // Create two users
         var owner = EntityBuilder.CreateUser(telegramId: 111111111, username: "owner");
         var otherUser = EntityBuilder.CreateUser(telegramId: 222222222, username: "otherUser");
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(owner);
             db.Users.Add(otherUser);
@@ -204,12 +180,12 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
 
         // Get token for second user (not the owner)
         var token = await GetAuthTokenAsync(otherUser.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto();
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -224,22 +200,20 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WhenUserOwnsSurvey_Returns200OK()
     {
         // Arrange
-        _factory.ClearDatabase();
-
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto();
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -253,23 +227,23 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithEmptyTitle_Returns400BadRequest()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto();
         dto.Title = ""; // Invalid: empty title
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -283,23 +257,23 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithShortTitle_Returns400BadRequest()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto();
         dto.Title = "AB"; // Invalid: < 3 characters
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -309,23 +283,23 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithEmptyQuestions_Returns400BadRequest()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto();
         dto.Questions = new List<CreateQuestionWithFlowDto>(); // Invalid: no questions
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -340,24 +314,24 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithInvalidQuestionIndexReference_Returns400BadRequest()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto(questionCount: 2);
         // Set invalid index reference - pointing beyond array bounds
         dto.Questions[0].DefaultNextQuestionIndex = 999; // Out of bounds (only 2 questions: indexes 0-1)
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -372,24 +346,24 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithSelfReferencingQuestion_Returns400BadRequest()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto(questionCount: 3);
         // Question 1 points to itself (invalid)
         dto.Questions[1].DefaultNextQuestionIndex = 1;
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -408,22 +382,22 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithValidData_Returns200AndUpdatedSurvey()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id, "Original Title");
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto(title: "Updated Title", questionCount: 3);
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -440,22 +414,22 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_CreatesNewQuestionIds_DifferentFromTemporaryIds()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto(questionCount: 3);
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -480,17 +454,17 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_UpdatesSurveyMetadata_Correctly()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id, "Original Survey");
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = new UpdateSurveyWithQuestionsDto
         {
@@ -512,7 +486,7 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -530,17 +504,17 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithQuestionsInCorrectOrder_MaintainsOrderIndex()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = new UpdateSurveyWithQuestionsDto
         {
@@ -570,7 +544,7 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -589,22 +563,22 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithActivateAfterUpdate_ActivatesSurvey()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto(activateAfterUpdate: true);
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -623,22 +597,22 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithNonExistentSurvey_Returns404NotFound()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = BuildValidUpdateDto();
         var nonExistentSurveyId = 99999;
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{nonExistentSurveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{nonExistentSurveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -653,17 +627,17 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithCycleInFlow_Returns409Conflict()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Create a cycle: Q0 -> Q1 -> Q2 -> Q0
         var dto = new UpdateSurveyWithQuestionsDto
@@ -698,7 +672,7 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         // Should return 400 Bad Request with cycle error (validation fails before activation)
@@ -714,17 +688,17 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithSingleChoiceAndInvalidOptionFlow_Returns400BadRequest()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = new UpdateSurveyWithQuestionsDto
         {
@@ -748,7 +722,7 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -766,17 +740,17 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_WithMultipleQuestionTypes_CreatesAllCorrectly()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
 
         var surveyId = await CreateTestSurveyAsync(user.Id);
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var dto = new UpdateSurveyWithQuestionsDto
         {
@@ -818,7 +792,7 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -839,10 +813,10 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
     public async Task UpdateSurveyComplete_ReplacesOldQuestions_WithNewOnes()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // Database is already cleared by IntegrationTestBase constructor
 
         var user = EntityBuilder.CreateUser(telegramId: 123456789);
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             db.Users.Add(user);
         });
@@ -850,7 +824,7 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
         // Create survey with initial questions
         var surveyId = await CreateTestSurveyAsync(user.Id, "Survey with Old Questions");
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var survey = db.Surveys.Find(surveyId);
             if (survey != null)
@@ -862,7 +836,7 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
         });
 
         var token = await GetAuthTokenAsync(user.TelegramId);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Create new questions that will replace old ones
         var dto = new UpdateSurveyWithQuestionsDto
@@ -894,7 +868,7 @@ public class SurveysControllerCompleteUpdateTests : IClassFixture<WebApplication
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
+        var response = await Client.PutAsJsonAsync($"/api/surveys/{surveyId}/complete", dto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);

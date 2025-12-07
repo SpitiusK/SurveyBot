@@ -4,6 +4,8 @@ using SurveyBot.Bot.Configuration;
 using SurveyBot.Bot.Interfaces;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace SurveyBot.Bot.Services;
 
@@ -198,4 +200,72 @@ public class BotService : IBotService
 
         return isValid;
     }
+
+    #region Wrapper Methods for Telegram.Bot Operations
+
+    // These wrapper methods enable mocking of Telegram.Bot extension methods in tests.
+    // Extension methods are static and cannot be mocked on interfaces, so we wrap them
+    // in instance methods on IBotService for testability.
+
+    /// <inheritdoc/>
+    public async Task<Message> SendMessageAsync(
+        ChatId chatId,
+        string text,
+        ParseMode? parseMode = null,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await _botClient.SendMessage(
+            chatId,
+            text,
+            parseMode: parseMode ?? default,
+            replyMarkup: replyMarkup,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<Message> EditMessageTextAsync(
+        ChatId chatId,
+        int messageId,
+        string text,
+        ParseMode? parseMode = null,
+        InlineKeyboardMarkup? replyMarkup = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await _botClient.EditMessageText(
+            chatId,
+            messageId,
+            text,
+            parseMode: parseMode ?? default,
+            replyMarkup: replyMarkup,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task AnswerCallbackQueryAsync(
+        string callbackQueryId,
+        string? text = null,
+        bool showAlert = false,
+        CancellationToken cancellationToken = default)
+    {
+        await _botClient.AnswerCallbackQuery(
+            callbackQueryId,
+            text,
+            showAlert,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task DeleteMessageAsync(
+        ChatId chatId,
+        int messageId,
+        CancellationToken cancellationToken = default)
+    {
+        await _botClient.DeleteMessage(
+            chatId,
+            messageId,
+            cancellationToken: cancellationToken);
+    }
+
+    #endregion
 }

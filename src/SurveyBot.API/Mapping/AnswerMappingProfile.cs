@@ -28,6 +28,9 @@ public class AnswerMappingProfile : Profile
             .ForMember(dest => dest.Longitude, opt => opt.Ignore())
             .ForMember(dest => dest.LocationAccuracy, opt => opt.Ignore())
             .ForMember(dest => dest.LocationTimestamp, opt => opt.Ignore())
+            .ForMember(dest => dest.NumberValue, opt => opt.Ignore())
+            .ForMember(dest => dest.DateValue, opt => opt.Ignore())
+            .ForMember(dest => dest.DisplayValue, opt => opt.Ignore())
             // Use AfterMap for pattern matching on Value - much cleaner than separate resolvers
             .AfterMap((src, dest) =>
             {
@@ -42,6 +45,8 @@ public class AnswerMappingProfile : Profile
                         dest.Longitude = null;
                         dest.LocationAccuracy = null;
                         dest.LocationTimestamp = null;
+                        dest.NumberValue = null;
+                        dest.DateValue = null;
                         break;
 
                     case SingleChoiceAnswerValue singleChoice:
@@ -52,6 +57,8 @@ public class AnswerMappingProfile : Profile
                         dest.Longitude = null;
                         dest.LocationAccuracy = null;
                         dest.LocationTimestamp = null;
+                        dest.NumberValue = null;
+                        dest.DateValue = null;
                         break;
 
                     case MultipleChoiceAnswerValue multipleChoice:
@@ -62,6 +69,8 @@ public class AnswerMappingProfile : Profile
                         dest.Longitude = null;
                         dest.LocationAccuracy = null;
                         dest.LocationTimestamp = null;
+                        dest.NumberValue = null;
+                        dest.DateValue = null;
                         break;
 
                     case RatingAnswerValue ratingValue:
@@ -72,6 +81,8 @@ public class AnswerMappingProfile : Profile
                         dest.Longitude = null;
                         dest.LocationAccuracy = null;
                         dest.LocationTimestamp = null;
+                        dest.NumberValue = null;
+                        dest.DateValue = null;
                         break;
 
                     case LocationAnswerValue locationValue:
@@ -82,6 +93,32 @@ public class AnswerMappingProfile : Profile
                         dest.Longitude = locationValue.Longitude;
                         dest.LocationAccuracy = locationValue.Accuracy;
                         dest.LocationTimestamp = locationValue.Timestamp;
+                        dest.NumberValue = null;
+                        dest.DateValue = null;
+                        break;
+
+                    case NumberAnswerValue numberValue:
+                        dest.NumberValue = numberValue.Value;
+                        dest.AnswerText = null;
+                        dest.SelectedOptions = null;
+                        dest.RatingValue = null;
+                        dest.Latitude = null;
+                        dest.Longitude = null;
+                        dest.LocationAccuracy = null;
+                        dest.LocationTimestamp = null;
+                        dest.DateValue = null;
+                        break;
+
+                    case DateAnswerValue dateValue:
+                        dest.DateValue = dateValue.Date;
+                        dest.AnswerText = null;
+                        dest.SelectedOptions = null;
+                        dest.RatingValue = null;
+                        dest.Latitude = null;
+                        dest.Longitude = null;
+                        dest.LocationAccuracy = null;
+                        dest.LocationTimestamp = null;
+                        dest.NumberValue = null;
                         break;
 
                     case null:
@@ -102,6 +139,8 @@ public class AnswerMappingProfile : Profile
                                     dest.Longitude = null;
                                     dest.LocationAccuracy = null;
                                     dest.LocationTimestamp = null;
+                                    dest.NumberValue = null;
+                                    dest.DateValue = null;
                                     break;
                                 case SingleChoiceAnswerValue single:
                                     dest.AnswerText = null;
@@ -111,6 +150,8 @@ public class AnswerMappingProfile : Profile
                                     dest.Longitude = null;
                                     dest.LocationAccuracy = null;
                                     dest.LocationTimestamp = null;
+                                    dest.NumberValue = null;
+                                    dest.DateValue = null;
                                     break;
                                 case MultipleChoiceAnswerValue multiple:
                                     dest.AnswerText = null;
@@ -120,6 +161,8 @@ public class AnswerMappingProfile : Profile
                                     dest.Longitude = null;
                                     dest.LocationAccuracy = null;
                                     dest.LocationTimestamp = null;
+                                    dest.NumberValue = null;
+                                    dest.DateValue = null;
                                     break;
                                 case RatingAnswerValue rating:
                                     dest.AnswerText = null;
@@ -129,6 +172,8 @@ public class AnswerMappingProfile : Profile
                                     dest.Longitude = null;
                                     dest.LocationAccuracy = null;
                                     dest.LocationTimestamp = null;
+                                    dest.NumberValue = null;
+                                    dest.DateValue = null;
                                     break;
                                 case LocationAnswerValue location:
                                     dest.AnswerText = null;
@@ -138,6 +183,30 @@ public class AnswerMappingProfile : Profile
                                     dest.Longitude = location.Longitude;
                                     dest.LocationAccuracy = location.Accuracy;
                                     dest.LocationTimestamp = location.Timestamp;
+                                    dest.NumberValue = null;
+                                    dest.DateValue = null;
+                                    break;
+                                case NumberAnswerValue number:
+                                    dest.NumberValue = number.Value;
+                                    dest.AnswerText = null;
+                                    dest.SelectedOptions = null;
+                                    dest.RatingValue = null;
+                                    dest.Latitude = null;
+                                    dest.Longitude = null;
+                                    dest.LocationAccuracy = null;
+                                    dest.LocationTimestamp = null;
+                                    dest.DateValue = null;
+                                    break;
+                                case DateAnswerValue date:
+                                    dest.DateValue = date.Date;
+                                    dest.AnswerText = null;
+                                    dest.SelectedOptions = null;
+                                    dest.RatingValue = null;
+                                    dest.Latitude = null;
+                                    dest.Longitude = null;
+                                    dest.LocationAccuracy = null;
+                                    dest.LocationTimestamp = null;
+                                    dest.NumberValue = null;
                                     break;
                                 default:
                                     // No value could be extracted
@@ -152,6 +221,9 @@ public class AnswerMappingProfile : Profile
                         }
                         break;
                 }
+
+                // Set DisplayValue from AnswerValue if available
+                dest.DisplayValue = src.Value?.DisplayValue;
             });
 
         // CreateAnswerDto -> Answer (DTO to Entity for creation)

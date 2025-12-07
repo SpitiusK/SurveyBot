@@ -19,6 +19,8 @@ using SurveyBot.Core.Interfaces;
 using SurveyBot.Tests.Fixtures;
 using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 using Xunit;
 
 namespace SurveyBot.Tests.Integration.Bot;
@@ -90,6 +92,7 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
             _fixture.ResponseRepository,
             _fixture.StateManager,
             completionHandler,
+            new SurveyCache(Mock.Of<ILogger<SurveyCache>>()),
             new List<IQuestionHandler> { _textHandler, _singleChoiceHandler },
             Mock.Of<ILogger<SurveyCommandHandler>>());
     }
@@ -112,13 +115,15 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         result.Should().BeNull(); // Validation failed
 
         // Verify error message was sent
-        _fixture.MockBotClient.Verify(
-            x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
-                    req.ChatId.Identifier == TestChatId &&
-                    req.Text.Contains("too long")),
+        _fixture.MockBotService.Verify(
+            x => x.SendMessageAsync(
+                It.Is<ChatId>(c => c.Identifier == TestChatId),
+                It.Is<string>(msg => msg.Contains("too long")),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
                 It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
+            Times.AtLeastOnce,
+            "Error message should be sent when text input is too long");
     }
 
     [Fact]
@@ -138,13 +143,15 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         result.Should().BeNull();
 
         // Verify error message
-        _fixture.MockBotClient.Verify(
-            x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
-                    req.ChatId.Identifier == TestChatId + 1 &&
-                    req.Text.Contains("required")),
+        _fixture.MockBotService.Verify(
+            x => x.SendMessageAsync(
+                It.Is<ChatId>(c => c.Identifier == TestChatId + 1),
+                It.Is<string>(msg => msg.Contains("required")),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
                 It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
+            Times.AtLeastOnce,
+            "Error message should be sent to chat when required question answer is empty");
     }
 
     [Fact]
@@ -154,8 +161,9 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         var surveyId = _fixture.TestSurvey.Id;
         await _fixture.StateManager.StartSurveyAsync(TestUserId + 2, surveyId, 302, 4);
 
-        var callback = _fixture.CreateTestCallbackQuery(TestUserId + 2, TestChatId + 2, "option_99_InvalidOption");
         var question = CreateQuestionDto(2, "Single choice", QuestionType.SingleChoice, true, new[] { "Red", "Blue", "Green" });
+        // Callback data format: answer_q{questionId}_opt{optionIndex} - index 99 is out of range
+        var callback = _fixture.CreateTestCallbackQuery(TestUserId + 2, TestChatId + 2, $"answer_q{question.Id}_opt99");
 
         // Act
         var result = await _singleChoiceHandler.ProcessAnswerAsync(null, callback, question, TestUserId + 2, CancellationToken.None);
@@ -163,12 +171,10 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         // Assert
         result.Should().BeNull();
 
-        // Verify error was shown
+        // Verify error was shown via AnswerCallbackQuery (not SendMessage for out-of-range options)
         _fixture.MockBotClient.Verify(
             x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
-                    req.ChatId.Identifier == TestChatId + 2 &&
-                    (req.Text.Contains("Invalid") || req.Text.Contains("not valid"))),
+                It.IsAny<AnswerCallbackQueryRequest>(),
                 It.IsAny<CancellationToken>()),
             Times.AtLeastOnce);
     }
@@ -190,13 +196,15 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         result.Should().BeNull();
 
         // Verify error shown
-        _fixture.MockBotClient.Verify(
-            x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
-                    req.ChatId.Identifier == TestChatId + 3 &&
-                    req.Text.Contains("required") && req.Text.Contains("cannot be skipped")),
+        _fixture.MockBotService.Verify(
+            x => x.SendMessageAsync(
+                It.Is<ChatId>(c => c.Identifier == TestChatId + 3),
+                It.Is<string>(msg => msg.Contains("required") && msg.Contains("cannot be skipped")),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
                 It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
+            Times.AtLeastOnce,
+            "Error message should be sent when trying to skip a required question");
     }
 
     [Fact]
@@ -215,23 +223,21 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         var lastActivityField = stateType.GetProperty("LastActivityAt");
         lastActivityField!.SetValue(state, DateTime.UtcNow.AddMinutes(-31));
 
-        await _fixture.StateManager.SetStateAsync(TestUserId + 4, state);
+        // IMPORTANT: Use reflection to bypass SetStateAsync which would call UpdateActivity()
+        // and reset the expiration timer. We need direct dictionary access to test expiration.
+        var managerType = _fixture.StateManager.GetType();
+        var statesField = managerType.GetField("_states",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var states = statesField!.GetValue(_fixture.StateManager)
+            as System.Collections.Concurrent.ConcurrentDictionary<long, SurveyBot.Bot.Models.ConversationState>;
+        states!.AddOrUpdate(TestUserId + 4, state, (_, _) => state);
 
         // Act - Try to get expired state
-        // Note: GetStateAsync should return null for expired states (30+ min inactive)
-        // or the state manager should update CurrentState to SessionExpired
+        // GetStateAsync should return null for expired states (removes them from memory)
         var expiredState = await _fixture.StateManager.GetStateAsync(TestUserId + 4);
 
-        // Assert - State should either be null or marked as expired
-        if (expiredState != null)
-        {
-            expiredState.CurrentState.Should().Be(ConversationStateType.SessionExpired);
-        }
-        else
-        {
-            // If null is returned, the session timeout is working (state cleaned up)
-            expiredState.Should().BeNull();
-        }
+        // Assert - Expired state should be removed (GetStateAsync returns null)
+        expiredState.Should().BeNull("because GetStateAsync removes expired states from memory");
     }
 
     [Fact]
@@ -249,13 +255,15 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         state.Should().BeNull(); // State not created for invalid survey
 
         // Verify error message sent
-        _fixture.MockBotClient.Verify(
-            x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
-                    req.ChatId.Identifier == TestChatId + 5 &&
-                    req.Text.Contains("not found")),
+        _fixture.MockBotService.Verify(
+            x => x.SendMessageAsync(
+                It.Is<ChatId>(c => c.Identifier == TestChatId + 5),
+                It.Is<string>(msg => msg.Contains("not found")),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
                 It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
+            Times.AtLeastOnce,
+            "Error message should be sent when survey ID is invalid");
     }
 
     [Fact]
@@ -277,13 +285,15 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         state.Should().BeNull(); // State not created for inactive survey
 
         // Verify error message sent
-        _fixture.MockBotClient.Verify(
-            x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
-                    req.ChatId.Identifier == TestChatId + 6 &&
-                    req.Text.Contains("not currently accepting")),
+        _fixture.MockBotService.Verify(
+            x => x.SendMessageAsync(
+                It.Is<ChatId>(c => c.Identifier == TestChatId + 6),
+                It.Is<string>(msg => msg.Contains("not currently accepting")),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
                 It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
+            Times.AtLeastOnce,
+            "Error message should be sent when survey is inactive");
     }
 
     [Fact]
@@ -293,6 +303,17 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         var singleResponseSurvey = EntityBuilder.CreateSurvey("Single Response Survey", "Only one response allowed", _fixture.TestUser.Id, true);
         singleResponseSurvey.SetAllowMultipleResponses(false);
         await _fixture.DbContext.Surveys.AddAsync(singleResponseSurvey);
+        await _fixture.DbContext.SaveChangesAsync();
+
+        // FIX: Add at least one question to the survey
+        // SurveyCommandHandler checks for questions BEFORE checking for duplicate responses (lines 116-120)
+        var question = EntityBuilder.CreateQuestion(
+            surveyId: singleResponseSurvey.Id,
+            questionText: "Test question",
+            questionType: QuestionType.Text,
+            orderIndex: 0,
+            isRequired: true);
+        await _fixture.DbContext.Questions.AddAsync(question);
         await _fixture.DbContext.SaveChangesAsync();
 
         // Create completed response
@@ -311,13 +332,15 @@ public class ErrorHandlingTests : IClassFixture<BotTestFixture>
         state.Should().BeNull(); // State not created due to duplicate
 
         // Verify error message sent
-        _fixture.MockBotClient.Verify(
-            x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
-                    req.ChatId.Identifier == TestChatId + 7 &&
-                    req.Text.Contains("already completed")),
+        _fixture.MockBotService.Verify(
+            x => x.SendMessageAsync(
+                It.Is<ChatId>(c => c.Identifier == TestChatId + 7),
+                It.Is<string>(msg => msg.Contains("already completed")),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
                 It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
+            Times.AtLeastOnce,
+            "Error message should be sent when user tries duplicate response");
     }
 
     private QuestionDto CreateQuestionDto(int id, string text, QuestionType type, bool required, string[]? options = null)

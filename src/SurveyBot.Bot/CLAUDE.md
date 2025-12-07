@@ -1,6 +1,6 @@
 # SurveyBot.Bot - Telegram Bot Layer
 
-**Version**: 1.6.2 | **Framework**: .NET 8.0 | **Telegram.Bot**: 22.7.4
+**Version**: 1.6.3 | **Framework**: .NET 8.0 | **Telegram.Bot**: 22.7.4
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [API Layer](../SurveyBot.API/CLAUDE.md)
@@ -532,10 +532,14 @@ public class ConversationState
     // NEW in v1.4.0: Conditional flow - runtime cycle prevention
     public List<int> VisitedQuestionIds { get; set; } = new();  // Actual question IDs visited
 
+    // NEW in v1.6.3: Skip tracking for optional questions (TEST-002 fix)
+    public List<int> SkippedQuestionIndices { get; set; } = new();  // Indices of skipped questions
+    public int SkippedCount => SkippedQuestionIndices.Count;        // Computed count of skips
+
     // Computed properties
     public bool IsExpired { get; }          // > 30 min inactive
     public int ProgressPercent { get; }     // Answered / Total * 100
-    public bool IsAllAnswered { get; }
+    public bool IsAllAnswered { get; }      // (AnsweredCount + SkippedCount) == TotalQuestions
 }
 
 // NEW in v1.4.0: Helper methods for visited question tracking
@@ -567,6 +571,38 @@ public partial class ConversationState
         VisitedQuestionIds.Clear();
     }
 }
+
+// NEW in v1.6.3: Helper methods for skip tracking (TEST-002 fix)
+// Tracks skipped optional questions for correct survey completion detection
+public partial class ConversationState
+{
+    /// <summary>
+    /// Mark a question as skipped. Used for optional questions.
+    /// Prevents duplicate entries and maintains sorted order.
+    /// </summary>
+    public void MarkQuestionSkipped(int questionIndex)
+    {
+        if (!SkippedQuestionIndices.Contains(questionIndex))
+        {
+            SkippedQuestionIndices.Add(questionIndex);
+            SkippedQuestionIndices.Sort();
+        }
+    }
+
+    /// <summary>
+    /// Check if a specific question was skipped.
+    /// </summary>
+    public bool IsQuestionSkipped(int questionIndex) =>
+        SkippedQuestionIndices.Contains(questionIndex);
+
+    /// <summary>
+    /// Clear skipped questions (internal use, called on survey completion).
+    /// </summary>
+    public void ClearSkippedQuestions()
+    {
+        SkippedQuestionIndices.Clear();
+    }
+}
 ```
 
 **Updated in v1.4.0**:
@@ -574,6 +610,13 @@ public partial class ConversationState
 - `VisitedQuestionIds` - Actual question IDs user has answered (for cycle detection)
 - Helper methods prevent re-answering same question when conditional flow creates cycles
 - Separation: Index tracks progress, QuestionId tracks actual questions visited
+
+**Updated in v1.6.3 (TEST-002 Fix)**:
+- `SkippedQuestionIndices` - Tracks which questions were skipped (optional questions)
+- `SkippedCount` - Computed property for efficient skip counting
+- `IsAllAnswered` logic updated: `(AnsweredCount + SkippedCount) == TotalQuestions`
+- Helper methods: `MarkQuestionSkipped()`, `IsQuestionSkipped()`, `ClearSkippedQuestions()`
+- Fix: Surveys with optional questions now complete correctly when those questions are skipped
 
 **State Types**:
 - `Idle` - No active survey
@@ -1835,4 +1878,4 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 ---
 
-**Last Updated**: 2025-12-02 | **Version**: 1.6.2 (Cache Invalidation Bug Fix)
+**Last Updated**: 2025-12-07 | **Version**: 1.6.3 (Skip-Aware Completion Fix)

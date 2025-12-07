@@ -39,7 +39,8 @@ public class SurveyMappingProfile : Profile
             .ForMember(dest => dest.Questions, opt => opt.Ignore())
             .ForMember(dest => dest.Responses, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
-            .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
+            .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())
+            .ForMember(dest => dest.Version, opt => opt.Ignore()); // Version is auto-managed
 
         // UpdateSurveyDto -> Survey (DTO to Entity for update)
         CreateMap<UpdateSurveyDto, Survey>()
@@ -51,6 +52,7 @@ public class SurveyMappingProfile : Profile
             .ForMember(dest => dest.Questions, opt => opt.Ignore())
             .ForMember(dest => dest.Responses, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
-            .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
+            .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())
+            .ForMember(dest => dest.Version, opt => opt.Ignore()); // Version is auto-managed
     }
 }

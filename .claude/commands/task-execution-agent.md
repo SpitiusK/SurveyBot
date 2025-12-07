@@ -1,10 +1,39 @@
 ---
-description: Intelligent task coordinator that analyzes user requests, performs deep codebase analysis to identify relevant files and root causes, and orchestrates specialist agents to efficiently implement bug fixes, new features, and project improvements through coordinated task distribution and result analysis. Interacts with users to clarify ambiguous requirements before execution. Can delegate to docker-log-analyzer for runtime diagnostics and architecture-deep-dive-agent for comprehensive architectural analysis.
+description: "[DEPRECATED] Use /analyze-bug, /fix-bug, /add-feature instead. Legacy task coordinator."
 model: sonnet
-color: orange
+color: gray
 ---
 
-# Task Execution Agent
+> **⚠️ DEPRECATED COMMAND**
+>
+> This command was designed for general task handling (pre-v1.4.0) and is **no longer recommended** for SurveyBot v1.6.2.
+>
+> **Use these focused commands instead:**
+> - `/analyze-bug` - Deep bug analysis (Phase 1 of two-phase workflow)
+> - `/fix-bug` - Bug fix implementation (Phase 2, based on analysis report)
+> - `/add-feature` - Feature implementation with architectural alignment
+> - `/update-docs` - Documentation synchronization
+> - `/diagnose-runtime` - Runtime log analysis and diagnostics
+>
+> **Why deprecated?**
+> - 1,415 lines with 6 execution phases (new commands: 150-400 lines)
+> - 30+ decision points causing cognitive overload
+> - 60%+ content overlap with orchestrator-agent
+> - Shallow integration with specialist agents
+> - Does not enforce v1.6.2 DDD patterns (factory methods, value objects)
+> - No separation between bug analysis and bug fixing phases
+>
+> **Migration Guide:**
+> - For bugs: Run `/analyze-bug` first, then `/fix-bug`
+> - For features: Run `/add-feature`
+> - For runtime issues: Run `/diagnose-runtime`
+> - For documentation: Run `/update-docs`
+>
+> **See**: `.claude/out/SLASH_COMMANDS_ANALYSIS_REPORT.md` for full analysis.
+
+---
+
+# Task Execution Agent (LEGACY)
 
 You are an intelligent task execution coordinator that bridges user requirements and specialist agent capabilities. Your primary focus is **analyzing**, **planning**, and **orchestrating** the implementation of:
 
@@ -341,7 +370,7 @@ Use structured format to guide user thinking with clear sections starting with e
 
 **Analysis Configuration** - When calling @codebase-analyzer provide: project_path as /path/to/SurveyBot, file_patterns like **/*.cs or **/*.tsx, analyzed_object as bug-description-or-feature-name, compilation_mode as strict, root_cause_analysis as true, fix_suggestions as true.
 
-**Codebase Analyzer Report Location** - Reports are saved to: project/agents/out/codebase-analysis/codebase-analysis-YYYY-MM-DD-[analyzed-object].md
+**Codebase Analyzer Report Location** - Reports are saved to: project/out/codebase-analysis/codebase-analysis-YYYY-MM-DD-[analyzed-object].md
 
 **Extract from report**:
 - Files with compilation errors

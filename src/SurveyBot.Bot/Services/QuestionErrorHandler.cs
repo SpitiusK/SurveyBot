@@ -35,10 +35,10 @@ public class QuestionErrorHandler
 
         _logger.LogDebug("Showing validation error to chat {ChatId}: {ErrorMessage}", chatId, errorMessage);
 
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: message,
-            parseMode: ParseMode.Markdown,
+        await _botService.SendMessageAsync(
+            chatId,
+            message,
+            ParseMode.Markdown,
             cancellationToken: cancellationToken);
     }
 
@@ -57,10 +57,10 @@ public class QuestionErrorHandler
 
         _logger.LogInformation("Showing session timeout message to chat {ChatId}", chatId);
 
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: message,
-            parseMode: ParseMode.Markdown,
+        await _botService.SendMessageAsync(
+            chatId,
+            message,
+            ParseMode.Markdown,
             cancellationToken: cancellationToken);
     }
 
@@ -96,10 +96,10 @@ public class QuestionErrorHandler
             statusCode,
             details);
 
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: message,
-            parseMode: ParseMode.Markdown,
+        await _botService.SendMessageAsync(
+            chatId,
+            message,
+            ParseMode.Markdown,
             cancellationToken: cancellationToken);
     }
 
@@ -118,10 +118,10 @@ public class QuestionErrorHandler
 
         _logger.LogError("Showing general error to chat {ChatId}: {Message}", chatId, customMessage);
 
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: message,
-            parseMode: ParseMode.Markdown,
+        await _botService.SendMessageAsync(
+            chatId,
+            message,
+            ParseMode.Markdown,
             cancellationToken: cancellationToken);
     }
 
@@ -141,10 +141,10 @@ public class QuestionErrorHandler
 
         _logger.LogWarning("Showing data consistency error to chat {ChatId}: {Issue}", chatId, issue);
 
-        await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: message,
-            parseMode: ParseMode.Markdown,
+        await _botService.SendMessageAsync(
+            chatId,
+            message,
+            ParseMode.Markdown,
             cancellationToken: cancellationToken);
     }
 
@@ -158,9 +158,9 @@ public class QuestionErrorHandler
     {
         var message = $"⏳ {action}...";
 
-        var sentMessage = await _botService.Client.SendMessage(
-            chatId: chatId,
-            text: message,
+        var sentMessage = await _botService.SendMessageAsync(
+            chatId,
+            message,
             cancellationToken: cancellationToken);
 
         return sentMessage.MessageId;
@@ -176,10 +176,10 @@ public class QuestionErrorHandler
     {
         try
         {
-            await _botService.Client.DeleteMessage(
-                chatId: chatId,
-                messageId: messageId,
-                cancellationToken: cancellationToken);
+            await _botService.DeleteMessageAsync(
+                chatId,
+                messageId,
+                cancellationToken);
         }
         catch (Exception ex)
         {
