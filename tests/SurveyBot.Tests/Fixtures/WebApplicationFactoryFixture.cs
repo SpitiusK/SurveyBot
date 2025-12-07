@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -89,6 +90,10 @@ public class WebApplicationFactoryFixture<TProgram> : WebApplicationFactory<TPro
             {
                 options.UseInMemoryDatabase(_databaseName, _databaseRoot);
                 options.EnableSensitiveDataLogging();
+                // Suppress transaction warning - InMemory database doesn't support transactions
+                // but all operations are atomic by default, so this is safe for testing
+                options.ConfigureWarnings(warnings =>
+                    warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning));
             });
 
             // Remove any existing hosted services (background tasks)

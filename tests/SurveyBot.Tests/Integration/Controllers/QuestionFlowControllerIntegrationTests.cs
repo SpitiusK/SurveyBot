@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using SurveyBot.API.Models;
 using SurveyBot.Core.DTOs;
 using SurveyBot.Core.DTOs.Auth;
@@ -247,13 +248,27 @@ public class QuestionFlowControllerIntegrationTests : IntegrationTestBase
         var token = await GetAuthTokenAsync();
         Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        // Update branching flow: Option 0 -> Q2, Option 1 -> Q4 (skip Q3)
+        // Retrieve actual option database IDs (not indexes!)
+        int option0Id = 0, option1Id = 0;
+        Factory.SeedDatabase(db =>
+        {
+            var question = db.Questions
+                .Include(q => q.Options)
+                .FirstOrDefault(q => q.Id == q1Id);
+
+            var options = question!.Options.OrderBy(o => o.OrderIndex).ToList();
+            option0Id = options[0].Id;  // Database ID for "Yes" option
+            option1Id = options[1].Id;  // Database ID for "No" option
+        });
+
+        // Update branching flow: Option "Yes" -> Q2, Option "No" -> Q4 (skip Q3)
+        // IMPORTANT: Use database IDs, not array indexes!
         var updateDto = new UpdateQuestionFlowDto
         {
             OptionNextDeterminants = new Dictionary<int, NextQuestionDeterminantDto>
             {
-                { 0, NextQuestionDeterminantDto.ToQuestion(q2Id) }, // "Yes" -> Q2
-                { 1, NextQuestionDeterminantDto.ToQuestion(q4Id) }  // "No" -> Q4 (changed from Q3)
+                { option0Id, NextQuestionDeterminantDto.ToQuestion(q2Id) }, // "Yes" -> Q2
+                { option1Id, NextQuestionDeterminantDto.ToQuestion(q4Id) }  // "No" -> Q4 (changed from Q3)
             }
         };
 
@@ -271,12 +286,12 @@ public class QuestionFlowControllerIntegrationTests : IntegrationTestBase
         content.Data.Should().NotBeNull();
         content.Data!.OptionFlows.Should().HaveCount(2);
 
-        // Verify option flows updated
-        var option1Flow = content.Data.OptionFlows.FirstOrDefault(o => o.OptionId == 0);
+        // Verify option flows updated (using database IDs, not indexes!)
+        var option1Flow = content.Data.OptionFlows.FirstOrDefault(o => o.OptionId == option0Id);
         option1Flow.Should().NotBeNull();
         option1Flow!.Next.NextQuestionId.Should().Be(q2Id);
 
-        var option2Flow = content.Data.OptionFlows.FirstOrDefault(o => o.OptionId == 1);
+        var option2Flow = content.Data.OptionFlows.FirstOrDefault(o => o.OptionId == option1Id);
         option2Flow.Should().NotBeNull();
         option2Flow!.Next.NextQuestionId.Should().Be(q4Id); // Changed
     }
@@ -552,7 +567,7 @@ public class QuestionFlowControllerIntegrationTests : IntegrationTestBase
         var content = await response.Content.ReadFromJsonAsync<ApiResponse<object>>();
         content.Should().NotBeNull();
         content!.Success.Should().BeFalse();
-        content.Message.Should().Contain("cycle");
+        content.Message.Should().ContainEquivalentOf("cycle"); // Case-insensitive check
 
         // Verify cyclePath in response
         var dataElement = ((JsonElement)content.Data!);

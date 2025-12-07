@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using SurveyBot.API.Models;
 using SurveyBot.Core.DTOs.Auth;
+using SurveyBot.Core.DTOs.Common;
 using SurveyBot.Core.DTOs.Survey;
 using SurveyBot.Core.Entities;
 using SurveyBot.Tests.Fixtures;
@@ -176,6 +177,7 @@ public class SurveysControllerIntegrationTests : IClassFixture<WebApplicationFac
 
             // Add at least one question (required for activation)
             db.Questions.Add(EntityBuilder.CreateQuestion(surveyId: survey.Id));
+            db.SaveChanges();
         });
 
         var token = await GetAuthTokenAsync();
@@ -183,12 +185,11 @@ public class SurveysControllerIntegrationTests : IClassFixture<WebApplicationFac
 
         // Get survey ID
         var surveysResponse = await _client.GetAsync("/api/surveys");
-        var surveysResult = await surveysResponse.Content.ReadFromJsonAsync<ApiResponse<List<SurveyDto>>>();
-        var surveyId = surveysResult!.Data![0].Id;
+        var surveysResult = await surveysResponse.Content.ReadFromJsonAsync<ApiResponse<PagedResultDto<SurveyListDto>>>();
+        var surveyId = surveysResult!.Data!.Items[0].Id;
 
         // Act - Activate
-        var activateDto = new ToggleSurveyStatusDto { IsActive = true };
-        var activateResponse = await _client.PatchAsJsonAsync($"/api/surveys/{surveyId}/status", activateDto);
+        var activateResponse = await _client.PostAsync($"/api/surveys/{surveyId}/activate", null);
 
         // Assert - Activation
         activateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -197,8 +198,7 @@ public class SurveysControllerIntegrationTests : IClassFixture<WebApplicationFac
         activateResult!.Data!.IsActive.Should().BeTrue();
 
         // Act - Deactivate
-        var deactivateDto = new ToggleSurveyStatusDto { IsActive = false };
-        var deactivateResponse = await _client.PatchAsJsonAsync($"/api/surveys/{surveyId}/status", deactivateDto);
+        var deactivateResponse = await _client.PostAsync($"/api/surveys/{surveyId}/deactivate", null);
 
         // Assert - Deactivation
         deactivateResponse.StatusCode.Should().Be(HttpStatusCode.OK);

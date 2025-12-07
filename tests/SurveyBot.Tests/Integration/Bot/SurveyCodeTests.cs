@@ -14,6 +14,8 @@ using SurveyBot.Core.Interfaces;
 using SurveyBot.Tests.Fixtures;
 using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 using Xunit;
 
 namespace SurveyBot.Tests.Integration.Bot;
@@ -79,13 +81,15 @@ public class SurveyCodeTests : IClassFixture<BotTestFixture>
         state!.CurrentSurveyId.Should().Be(surveyId);
 
         // Verify intro message was sent
-        _fixture.MockBotClient.Verify(
-            x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
-                    req.ChatId.Identifier == TestChatId &&
-                    req.Text.Contains(_fixture.TestSurvey.Title)),
+        _fixture.MockBotService.Verify(
+            x => x.SendMessageAsync(
+                It.Is<ChatId>(c => c.Identifier == TestChatId),
+                It.Is<string>(msg => msg.Contains(_fixture.TestSurvey.Title)),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
                 It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
+            Times.AtLeastOnce,
+            "Survey intro message should be sent when starting valid survey");
     }
 
     [Fact]
@@ -102,13 +106,15 @@ public class SurveyCodeTests : IClassFixture<BotTestFixture>
         state.Should().BeNull(); // State not created
 
         // Verify error/usage message was sent
-        _fixture.MockBotClient.Verify(
-            x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
-                    req.ChatId.Identifier == TestChatId + 1 &&
-                    (req.Text.Contains("Usage") || req.Text.Contains("not found"))),
+        _fixture.MockBotService.Verify(
+            x => x.SendMessageAsync(
+                It.Is<ChatId>(c => c.Identifier == TestChatId + 1),
+                It.Is<string>(msg => msg.Contains("Usage") || msg.Contains("not found")),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
                 It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
+            Times.AtLeastOnce,
+            "Error or usage message should be sent for invalid survey code");
     }
 
     [Fact]
@@ -125,13 +131,15 @@ public class SurveyCodeTests : IClassFixture<BotTestFixture>
         state.Should().BeNull();
 
         // Verify usage message was sent
-        _fixture.MockBotClient.Verify(
-            x => x.SendRequest(
-                It.Is<SendMessageRequest>(req =>
-                    req.ChatId.Identifier == TestChatId + 2 &&
-                    req.Text.Contains("Usage") && req.Text.Contains("/survey")),
+        _fixture.MockBotService.Verify(
+            x => x.SendMessageAsync(
+                It.Is<ChatId>(c => c.Identifier == TestChatId + 2),
+                It.Is<string>(msg => msg.Contains("Usage") && msg.Contains("/survey")),
+                It.IsAny<ParseMode?>(),
+                It.IsAny<InlineKeyboardMarkup?>(),
                 It.IsAny<CancellationToken>()),
-            Times.Once);
+            Times.Once,
+            "Usage message should be sent when survey identifier is missing");
     }
 
     [Fact]
