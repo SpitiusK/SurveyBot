@@ -2,12 +2,11 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
 using SurveyBot.API.Models;
-using SurveyBot.Core.DTOs.Auth;
 using SurveyBot.Core.DTOs.Question;
 using SurveyBot.Core.Entities;
 using SurveyBot.Tests.Fixtures;
+using SurveyBot.Tests.Infrastructure;
 
 namespace SurveyBot.Tests.Integration.Controllers;
 
@@ -15,36 +14,24 @@ namespace SurveyBot.Tests.Integration.Controllers;
 /// Integration tests for QuestionsController HTTP endpoints.
 /// Tests question CRUD operations, type validation, and ordering.
 /// </summary>
-public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationFactoryFixture<Program>>
+/// <remarks>
+/// Inherits from IntegrationTestBase to ensure proper server initialization
+/// via EnsureServerStarted() and database isolation via ClearDatabase().
+/// </remarks>
+public class QuestionsControllerIntegrationTests : IntegrationTestBase
 {
-    private readonly WebApplicationFactoryFixture<Program> _factory;
-    private readonly HttpClient _client;
-
     public QuestionsControllerIntegrationTests(WebApplicationFactoryFixture<Program> factory)
+        : base(factory)
     {
-        _factory = factory;
-        _client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
-    }
-
-    private async Task<string> GetAuthTokenAsync(long telegramId = 123456789)
-    {
-        var loginRequest = new LoginRequestDto { TelegramId = telegramId };
-        var response = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
-        return result!.Data!.Token;
     }
 
     [Fact]
     public async Task AddQuestion_ToInactiveSurvey_Success()
     {
         // Arrange
-        _factory.ClearDatabase();
         int surveyId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -57,7 +44,7 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
         var createDto = new CreateQuestionDto
@@ -67,7 +54,7 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
             IsRequired = true
         };
 
-        var response = await _client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", createDto);
+        var response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", createDto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -81,10 +68,9 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
     public async Task UpdateQuestion_WithValidData_Success()
     {
         // Arrange
-        _factory.ClearDatabase();
         int surveyId = 0, questionId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -104,7 +90,7 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
         var updateDto = new UpdateQuestionDto
@@ -113,7 +99,7 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
             IsRequired = false
         };
 
-        var response = await _client.PutAsJsonAsync($"/api/questions/{questionId}", updateDto);
+        var response = await Client.PutAsJsonAsync($"/api/questions/{questionId}", updateDto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -127,10 +113,9 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
     public async Task DeleteQuestion_FromInactiveSurvey_Success()
     {
         // Arrange
-        _factory.ClearDatabase();
         int questionId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -147,10 +132,10 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act
-        var response = await _client.DeleteAsync($"/api/questions/{questionId}");
+        var response = await Client.DeleteAsync($"/api/questions/{questionId}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -160,10 +145,9 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
     public async Task CreateQuestion_WithInvalidType_ReturnsBadRequest()
     {
         // Arrange
-        _factory.ClearDatabase();
         int surveyId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -176,7 +160,7 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act - SingleChoice question without options
         var invalidDto = new CreateQuestionDto
@@ -187,7 +171,7 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
             Options = null // Invalid: SingleChoice requires options
         };
 
-        var response = await _client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", invalidDto);
+        var response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", invalidDto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -197,11 +181,10 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
     public async Task ReorderQuestions_InSurvey_Success()
     {
         // Arrange
-        _factory.ClearDatabase();
         int surveyId = 0;
         var questionIds = new List<int>();
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -226,7 +209,7 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act - Reverse the order
         var reorderDto = new ReorderQuestionsDto
@@ -234,13 +217,13 @@ public class QuestionsControllerIntegrationTests : IClassFixture<WebApplicationF
             QuestionIds = new List<int> { questionIds[2], questionIds[1], questionIds[0] }
         };
 
-        var response = await _client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions/reorder", reorderDto);
+        var response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions/reorder", reorderDto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Verify new order
-        var getResponse = await _client.GetAsync($"/api/surveys/{surveyId}/questions");
+        var getResponse = await Client.GetAsync($"/api/surveys/{surveyId}/questions");
         var getResult = await getResponse.Content.ReadFromJsonAsync<ApiResponse<List<QuestionDto>>>();
 
         getResult!.Data!.Should().HaveCount(3);
