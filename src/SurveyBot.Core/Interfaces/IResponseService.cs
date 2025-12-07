@@ -1,3 +1,4 @@
+using SurveyBot.Core.DTOs.Answer;
 using SurveyBot.Core.DTOs.Common;
 using SurveyBot.Core.DTOs.Response;
 using SurveyBot.Core.Models;
@@ -34,12 +35,12 @@ public interface IResponseService
     /// <param name="ratingValue">The rating value (for Rating questions).</param>
     /// <param name="userId">The ID of the user making the request (for authorization).</param>
     /// <param name="answerJson">The JSON answer (for Location questions).</param>
-    /// <returns>The updated response DTO.</returns>
+    /// <returns>The saved answer DTO.</returns>
     /// <exception cref="Exceptions.ResponseNotFoundException">Thrown when the response is not found.</exception>
     /// <exception cref="Exceptions.QuestionNotFoundException">Thrown when the question is not found.</exception>
     /// <exception cref="Exceptions.InvalidAnswerFormatException">Thrown when the answer format is invalid.</exception>
     /// <exception cref="Exceptions.UnauthorizedAccessException">Thrown when the user is not authorized.</exception>
-    Task<ResponseDto> SaveAnswerAsync(
+    Task<AnswerDto> SaveAnswerAsync(
         int responseId,
         int questionId,
         string? answerText = null,

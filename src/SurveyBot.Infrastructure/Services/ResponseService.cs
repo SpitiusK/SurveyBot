@@ -94,7 +94,7 @@ public class ResponseService : IResponseService
     }
 
     /// <inheritdoc/>
-    public async Task<ResponseDto> SaveAnswerAsync(
+    public async Task<AnswerDto> SaveAnswerAsync(
         int responseId,
         int questionId,
         string? answerText = null,
@@ -221,6 +221,8 @@ public class ResponseService : IResponseService
                 question: question);
         }
 
+        Answer savedAnswer;
+
         if (existingAnswer != null)
         {
             // Update existing answer using UpdateValue (not legacy SetAnswerText/SetAnswerJson)
@@ -230,16 +232,15 @@ public class ResponseService : IResponseService
 
             await _answerRepository.UpdateAsync(existingAnswer);
             _logger.LogInformation("Updated existing answer {AnswerId} for response {ResponseId}", existingAnswer.Id, responseId);
+            savedAnswer = existingAnswer;
         }
         else
         {
-            Answer answer;
-
             // Handle null answerValue (optional questions with no answer provided)
             if (answerValue != null)
             {
                 // Create new answer using CreateWithValue for non-null values
-                answer = Answer.CreateWithValue(
+                savedAnswer = Answer.CreateWithValue(
                     responseId,
                     questionId,
                     answerValue,
@@ -249,7 +250,7 @@ public class ResponseService : IResponseService
             {
                 // Use legacy Create for optional questions with null/empty answers
                 // This handles the case where an optional Location/other question has no answer
-                answer = Answer.Create(
+                savedAnswer = Answer.Create(
                     responseId,
                     questionId,
                     answerText: null,
@@ -261,13 +262,12 @@ public class ResponseService : IResponseService
                     questionId, responseId);
             }
 
-            await _answerRepository.CreateAsync(answer);
+            await _answerRepository.CreateAsync(savedAnswer);
             _logger.LogInformation("Created new answer for response {ResponseId}, question {QuestionId}", responseId, questionId);
         }
 
-        // Return updated response
-        var updatedResponse = await _responseRepository.GetByIdWithAnswersAsync(responseId);
-        return await MapToResponseDtoAsync(updatedResponse!);
+        // Return saved answer DTO
+        return await MapToAnswerDtoAsync(savedAnswer);
     }
 
     /// <inheritdoc/>

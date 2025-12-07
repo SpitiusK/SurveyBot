@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SurveyBot.API.Models;
+using SurveyBot.Core.DTOs.Answer;
 using SurveyBot.Core.DTOs.Common;
 using SurveyBot.Core.DTOs.Response;
 using SurveyBot.Core.Exceptions;
@@ -316,7 +317,7 @@ public class ResponsesController : ControllerBase
     /// </summary>
     /// <param name="id">Response ID.</param>
     /// <param name="dto">Answer submission data.</param>
-    /// <returns>Updated response with the new answer.</returns>
+    /// <returns>The saved answer.</returns>
     /// <response code="200">Answer saved successfully.</response>
     /// <response code="400">Invalid answer format or response is already completed.</response>
     /// <response code="404">Response or question not found.</response>
@@ -327,10 +328,10 @@ public class ResponsesController : ControllerBase
         Description = "Saves an individual answer to a question within an ongoing response. Public endpoint used by the Telegram bot.",
         Tags = new[] { "Responses" }
     )]
-    [ProducesResponseType(typeof(ApiResponse<ResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<AnswerDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<ResponseDto>>> SaveAnswer(
+    public async Task<ActionResult<ApiResponse<AnswerDto>>> SaveAnswer(
         int id,
         [FromBody] SubmitAnswerDto dto)
     {
@@ -373,7 +374,7 @@ public class ResponsesController : ControllerBase
                 });
             }
 
-            var response = await _responseService.SaveAnswerAsync(
+            var answer = await _responseService.SaveAnswerAsync(
                 id,
                 dto.Answer.QuestionId,
                 dto.Answer.AnswerText,
@@ -382,7 +383,7 @@ public class ResponsesController : ControllerBase
                 userId: null,
                 answerJson: dto.Answer.AnswerJson);
 
-            return Ok(ApiResponse<ResponseDto>.Ok(response, "Answer saved successfully"));
+            return Ok(ApiResponse<AnswerDto>.Ok(answer, "Answer saved successfully"));
         }
         catch (ResponseNotFoundException ex)
         {
