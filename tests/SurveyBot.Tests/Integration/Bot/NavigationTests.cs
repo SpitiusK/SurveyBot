@@ -135,15 +135,17 @@ public class NavigationTests : IClassFixture<BotTestFixture>
         var botConfig = Options.Create(new BotConfiguration { ApiBaseUrl = "http://localhost:5000" });
         var performanceMonitor = new BotPerformanceMonitor(Mock.Of<ILogger<BotPerformanceMonitor>>());
         var surveyCache = new SurveyCache(Mock.Of<ILogger<SurveyCache>>());
-        var mockSurveyRepo = new Mock<ISurveyRepository>();
-        var mockMapper = new Mock<IMapper>();
+
+        // Use real survey repository and real mapper from fixture
+        // This ensures NavigationHandler can properly fetch surveys and map them to DTOs
+        // Previous bug: Mock<IMapper> returned null for all mappings, causing navigation to fail silently
 
         _navigationHandler = new NavigationHandler(
             _fixture.MockBotService.Object,
             _fixture.StateManager,
             questionHandlers,
-            mockSurveyRepo.Object,
-            mockMapper.Object,
+            _fixture.SurveyRepository,  // Real repository with test data
+            _fixture.Mapper,            // Real AutoMapper with production profiles
             _httpClient,
             botConfig,
             performanceMonitor,

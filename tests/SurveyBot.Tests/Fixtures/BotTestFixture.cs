@@ -1,6 +1,8 @@
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
+using SurveyBot.API.Mapping;
 using SurveyBot.Bot.Interfaces;
 using SurveyBot.Bot.Services;
 using SurveyBot.Core.Entities;
@@ -32,6 +34,12 @@ public class BotTestFixture : IDisposable
     public IAnswerRepository AnswerRepository { get; }
     public IUserRepository UserRepository { get; }
 
+    /// <summary>
+    /// Real AutoMapper instance configured with production mapping profiles.
+    /// Used for NavigationHandler and other components that require entity-to-DTO mapping.
+    /// </summary>
+    public IMapper Mapper { get; }
+
     // Test data
     public User TestUser { get; private set; }
     public Survey TestSurvey { get; private set; }
@@ -51,6 +59,10 @@ public class BotTestFixture : IDisposable
         ResponseRepository = new ResponseRepository(DbContext);
         AnswerRepository = new AnswerRepository(DbContext);
         UserRepository = new UserRepository(DbContext);
+
+        // Create real AutoMapper with production mapping profiles
+        // This ensures tests validate real mapping behavior (not mocked behavior)
+        Mapper = CreateMapper();
 
         // Create mock Telegram bot client
         MockBotClient = new Mock<ITelegramBotClient>();
@@ -268,5 +280,28 @@ public class BotTestFixture : IDisposable
     public void Dispose()
     {
         DbContext?.Dispose();
+    }
+
+    /// <summary>
+    /// Creates a real AutoMapper instance configured with production mapping profiles.
+    /// This allows integration tests to validate actual mapping behavior.
+    /// </summary>
+    private static IMapper CreateMapper()
+    {
+        var config = new MapperConfiguration(cfg =>
+        {
+            // Add all production mapping profiles from SurveyBot.API
+            cfg.AddProfile<SurveyMappingProfile>();
+            cfg.AddProfile<QuestionMappingProfile>();
+            cfg.AddProfile<AnswerMappingProfile>();
+            cfg.AddProfile<ResponseMappingProfile>();
+            cfg.AddProfile<UserMappingProfile>();
+            cfg.AddProfile<StatisticsMappingProfile>();
+        });
+
+        // Validate configuration to catch mapping errors early
+        config.AssertConfigurationIsValid();
+
+        return config.CreateMapper();
     }
 }
