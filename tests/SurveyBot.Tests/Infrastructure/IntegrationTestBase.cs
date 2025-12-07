@@ -23,6 +23,10 @@ public abstract class IntegrationTestBase : IClassFixture<WebApplicationFactoryF
     protected IntegrationTestBase(WebApplicationFactoryFixture<Program> factory)
     {
         Factory = factory;
+
+        // Explicitly ensure server is started before creating client
+        Factory.EnsureServerStarted();
+
         Client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false

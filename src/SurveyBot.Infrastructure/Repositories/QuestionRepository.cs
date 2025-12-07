@@ -54,17 +54,48 @@ public class QuestionRepository : GenericRepository<Question>, IQuestionReposito
             return false;
         }
 
-        using var transaction = await _context.Database.BeginTransactionAsync();
+        // Only use transaction for real databases (not InMemory)
+        var isInMemory = _context.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
 
-        try
+        if (!isInMemory)
         {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                foreach (var (questionId, newOrderIndex) in questionOrders)
+                {
+                    var question = await GetByIdAsync(questionId);
+
+                    if (question == null)
+                    {
+                        await transaction.RollbackAsync();
+                        return false;
+                    }
+
+                    question.SetOrderIndex(newOrderIndex);
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+        else
+        {
+            // InMemory database: skip transaction (operations are atomic by default)
             foreach (var (questionId, newOrderIndex) in questionOrders)
             {
                 var question = await GetByIdAsync(questionId);
 
                 if (question == null)
                 {
-                    await transaction.RollbackAsync();
                     return false;
                 }
 
@@ -72,14 +103,7 @@ public class QuestionRepository : GenericRepository<Question>, IQuestionReposito
             }
 
             await _context.SaveChangesAsync();
-            await transaction.CommitAsync();
-
             return true;
-        }
-        catch
-        {
-            await transaction.RollbackAsync();
-            throw;
         }
     }
 

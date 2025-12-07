@@ -188,8 +188,28 @@ public class ResponseService : IResponseService
         AnswerValue answerValue;
         if (question.QuestionType == QuestionType.Location)
         {
-            // Location answers come pre-serialized from the handler
-            answerValue = LocationAnswerValue.FromJson(answerJson!);
+            // Check if answer is provided
+            if (!string.IsNullOrWhiteSpace(answerJson))
+            {
+                // Location answers come pre-serialized from the handler
+                answerValue = LocationAnswerValue.FromJson(answerJson);
+            }
+            else if (question.IsRequired)
+            {
+                // Required location question with no answer - fail validation
+                throw new InvalidAnswerFormatException(
+                    questionId,
+                    QuestionType.Location,
+                    "Location answer is required");
+            }
+            else
+            {
+                // Optional location question with no answer - allow null value
+                answerValue = null!;  // Will be handled by Answer.CreateWithValue
+                _logger.LogInformation(
+                    "Optional location question {QuestionId} answered with null value",
+                    questionId);
+            }
         }
         else
         {
@@ -213,12 +233,33 @@ public class ResponseService : IResponseService
         }
         else
         {
-            // Create new answer using CreateWithValue (not legacy Create)
-            var answer = Answer.CreateWithValue(
-                responseId,
-                questionId,
-                answerValue,
-                nextStep);
+            Answer answer;
+
+            // Handle null answerValue (optional questions with no answer provided)
+            if (answerValue != null)
+            {
+                // Create new answer using CreateWithValue for non-null values
+                answer = Answer.CreateWithValue(
+                    responseId,
+                    questionId,
+                    answerValue,
+                    nextStep);
+            }
+            else
+            {
+                // Use legacy Create for optional questions with null/empty answers
+                // This handles the case where an optional Location/other question has no answer
+                answer = Answer.Create(
+                    responseId,
+                    questionId,
+                    answerText: null,
+                    answerJson: null,
+                    next: nextStep);
+
+                _logger.LogInformation(
+                    "Created empty answer for optional question {QuestionId} in response {ResponseId}",
+                    questionId, responseId);
+            }
 
             await _answerRepository.CreateAsync(answer);
             _logger.LogInformation("Created new answer for response {ResponseId}, question {QuestionId}", responseId, questionId);

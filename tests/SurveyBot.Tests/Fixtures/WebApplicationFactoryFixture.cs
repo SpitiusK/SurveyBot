@@ -158,20 +158,14 @@ public class WebApplicationFactoryFixture<TProgram> : WebApplicationFactory<TPro
     }
 
     /// <summary>
-    /// Ensures the database is created and seeded after the factory is built.
+    /// Ensures the test server is built and started.
+    /// Safe to call multiple times (idempotent).
     /// </summary>
-    private void EnsureDatabaseCreated()
+    public void EnsureServerStarted()
     {
-        try
-        {
-            using var scope = Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
-            db.Database.EnsureCreated();
-        }
-        catch
-        {
-            // Ignore errors during database creation - it may already exist
-        }
+        // Accessing Server property triggers lazy build if not already built
+        // Subsequent calls are no-ops if server already exists
+        _ = Server;
     }
 
     /// <summary>
