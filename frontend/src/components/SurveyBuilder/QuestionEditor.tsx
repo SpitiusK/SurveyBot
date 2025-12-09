@@ -122,26 +122,13 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 
   useEffect(() => {
     if (open && question) {
-      // Defensive: Ensure Rating has 5-entry structure
-      let optionNextQuestions = question.optionNextQuestions || {};
-
-      if (question.questionType === QuestionType.Rating) {
-        // Force initialization if empty or incomplete
-        if (Object.keys(optionNextQuestions).length === 0) {
-          console.warn('[QuestionEditor] Rating question has empty optionNextQuestions, initializing...');
-          optionNextQuestions = {
-            0: null, 1: null, 2: null, 3: null, 4: null
-          };
-        }
-      }
-
       reset({
         questionText: question.questionText,
         questionType: question.questionType,
         isRequired: question.isRequired,
         options: question.options,
         defaultNextQuestionId: question.defaultNextQuestionId || null,
-        optionNextQuestions,  // Use corrected value
+        optionNextQuestions: question.optionNextQuestions || {},
       });
       setMediaContent(question.mediaContent || undefined);
     } else if (open && !question) {
