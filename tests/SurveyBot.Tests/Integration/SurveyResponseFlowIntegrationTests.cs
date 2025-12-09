@@ -299,4 +299,225 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
         // Assert - Should fail because survey is inactive
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
+
+    /// <summary>
+    /// Regression test for TEST-FAIL-001: VisitedQuestionIds tracking bug.
+    /// Tests that SaveAnswer properly records the question as visited.
+    /// </summary>
+    [Fact]
+    public async Task SaveAnswer_ShouldRecordVisitedQuestion()
+    {
+        // Arrange
+        _factory.ClearDatabase();
+        int surveyId = 0, questionId = 0, responseId = 0;
+
+        _factory.SeedDatabase(db =>
+        {
+            var user = EntityBuilder.CreateUser(telegramId: 123456789);
+            db.Users.Add(user);
+            db.SaveChanges();
+
+            var survey = EntityBuilder.CreateSurvey(creatorId: user.Id, isActive: true);
+            db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
+
+            var question = EntityBuilder.CreateQuestion(surveyId: survey.Id, questionText: "What is your name?");
+            db.Questions.Add(question);
+            db.SaveChanges();
+            questionId = question.Id;
+
+            var response = EntityBuilder.CreateResponse(surveyId: survey.Id, respondentTelegramId: 999888777);
+            db.Responses.Add(response);
+            db.SaveChanges();
+            responseId = response.Id;
+        });
+
+        // Act - Save answer via API
+        var submitAnswerDto = new SubmitAnswerDto
+        {
+            Answer = new CreateAnswerDto
+            {
+                QuestionId = questionId,
+                AnswerText = "John Doe"
+            }
+        };
+
+        var response = await _client.PostAsJsonAsync($"/api/responses/{responseId}/answers", submitAnswerDto);
+
+        // Assert - Response succeeds
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Verify VisitedQuestionIds contains the question
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
+        var updatedResponse = db.Responses.First(r => r.Id == responseId);
+
+        updatedResponse.VisitedQuestionIds.Should().NotBeNull();
+        updatedResponse.VisitedQuestionIds.Should().Contain(questionId);
+    }
+
+    /// <summary>
+    /// Regression test for TEST-FAIL-001: VisitedQuestionIds tracking bug.
+    /// Tests that completing a response with all required questions answered succeeds.
+    /// </summary>
+    [Fact]
+    public async Task CompleteResponse_WithAllRequiredQuestionsAnswered_ShouldSucceed()
+    {
+        // Arrange
+        _factory.ClearDatabase();
+        int surveyId = 0, question1Id = 0, question2Id = 0, responseId = 0;
+
+        _factory.SeedDatabase(db =>
+        {
+            var user = EntityBuilder.CreateUser(telegramId: 123456789);
+            db.Users.Add(user);
+            db.SaveChanges();
+
+            var survey = EntityBuilder.CreateSurvey(creatorId: user.Id, isActive: true);
+            db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
+
+            // Create 2 required questions
+            var question1 = EntityBuilder.CreateQuestion(
+                surveyId: survey.Id,
+                questionText: "Question 1?",
+                isRequired: true,
+                orderIndex: 0);
+            db.Questions.Add(question1);
+            db.SaveChanges();
+            question1Id = question1.Id;
+
+            var question2 = EntityBuilder.CreateQuestion(
+                surveyId: survey.Id,
+                questionText: "Question 2?",
+                isRequired: true,
+                orderIndex: 1);
+            db.Questions.Add(question2);
+            db.SaveChanges();
+            question2Id = question2.Id;
+
+            var response = EntityBuilder.CreateResponse(surveyId: survey.Id, respondentTelegramId: 999888777);
+            db.Responses.Add(response);
+            db.SaveChanges();
+            responseId = response.Id;
+        });
+
+        // Act - Answer both questions via API
+        await _client.PostAsJsonAsync($"/api/responses/{responseId}/answers", new SubmitAnswerDto
+        {
+            Answer = new CreateAnswerDto
+            {
+                QuestionId = question1Id,
+                AnswerText = "Answer 1"
+            }
+        });
+
+        await _client.PostAsJsonAsync($"/api/responses/{responseId}/answers", new SubmitAnswerDto
+        {
+            Answer = new CreateAnswerDto
+            {
+                QuestionId = question2Id,
+                AnswerText = "Answer 2"
+            }
+        });
+
+        // Complete response
+        var completeDto = new CompleteResponseDto();
+        var completeResponse = await _client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
+
+        // Assert - Should succeed with 200 OK
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await completeResponse.Content.ReadFromJsonAsync<ApiResponse<ResponseDto>>();
+        result!.Data!.IsComplete.Should().BeTrue();
+
+        // Verify VisitedQuestionIds contains both questions
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
+        var updatedResponse = db.Responses.First(r => r.Id == responseId);
+
+        updatedResponse.VisitedQuestionIds.Should().NotBeNull();
+        updatedResponse.VisitedQuestionIds.Should().HaveCount(2);
+        updatedResponse.VisitedQuestionIds.Should().Contain(question1Id);
+        updatedResponse.VisitedQuestionIds.Should().Contain(question2Id);
+    }
+
+    /// <summary>
+    /// Regression test for TEST-FAIL-001: VisitedQuestionIds tracking bug.
+    /// Tests that SaveAnswer correctly tracks visited questions for validation.
+    /// When VisitedQuestionIds exists, only visited required questions are validated (conditional flow).
+    /// Unvisited questions are allowed to be skipped (happens in branching surveys).
+    /// </summary>
+    [Fact]
+    public async Task SaveAnswer_TracksVisitedQuestions_ForConditionalFlowValidation()
+    {
+        // Arrange
+        _factory.ClearDatabase();
+        int surveyId = 0, question1Id = 0, question2Id = 0, responseId = 0;
+
+        _factory.SeedDatabase(db =>
+        {
+            var user = EntityBuilder.CreateUser(telegramId: 123456789);
+            db.Users.Add(user);
+            db.SaveChanges();
+
+            var survey = EntityBuilder.CreateSurvey(creatorId: user.Id, isActive: true);
+            db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
+
+            // Create 2 required questions
+            var question1 = EntityBuilder.CreateQuestion(
+                surveyId: survey.Id,
+                questionText: "Question 1?",
+                isRequired: true,
+                orderIndex: 0);
+            db.Questions.Add(question1);
+            db.SaveChanges();
+            question1Id = question1.Id;
+
+            var question2 = EntityBuilder.CreateQuestion(
+                surveyId: survey.Id,
+                questionText: "Question 2?",
+                isRequired: true,
+                orderIndex: 1);
+            db.Questions.Add(question2);
+            db.SaveChanges();
+            question2Id = question2.Id;
+
+            var response = EntityBuilder.CreateResponse(surveyId: survey.Id, respondentTelegramId: 999888777);
+            db.Responses.Add(response);
+            db.SaveChanges();
+            responseId = response.Id;
+        });
+
+        // Act - Answer only question 1 (in conditional flow, user might skip question 2)
+        await _client.PostAsJsonAsync($"/api/responses/{responseId}/answers", new SubmitAnswerDto
+        {
+            Answer = new CreateAnswerDto
+            {
+                QuestionId = question1Id,
+                AnswerText = "Answer 1"
+            }
+        });
+
+        // Try to complete - should succeed because question 2 was never visited
+        // In conditional flow, validation only checks VISITED required questions
+        var completeDto = new CompleteResponseDto();
+        var completeResponse = await _client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
+
+        // Assert - Should succeed (question 2 was never visited, so not validated)
+        completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Verify VisitedQuestionIds contains only question 1
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
+        var updatedResponse = db.Responses.First(r => r.Id == responseId);
+
+        updatedResponse.VisitedQuestionIds.Should().NotBeNull();
+        updatedResponse.VisitedQuestionIds.Should().Contain(question1Id);
+        updatedResponse.VisitedQuestionIds.Should().NotContain(question2Id);
+    }
 }

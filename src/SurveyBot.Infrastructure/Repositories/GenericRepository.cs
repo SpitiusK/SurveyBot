@@ -50,6 +50,12 @@ public class GenericRepository<T> : IRepository<T> where T : class
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// This method explicitly marks the entity as Modified to ensure changes persist
+    /// in both real databases (PostgreSQL) and in-memory databases (integration tests).
+    /// The explicit state management pattern works reliably across all EF Core providers,
+    /// unlike _dbSet.Update() which has known issues with in-memory change tracking.
+    /// </remarks>
     public virtual async Task<T> UpdateAsync(T entity)
     {
         if (entity == null)
@@ -57,7 +63,10 @@ public class GenericRepository<T> : IRepository<T> where T : class
             throw new ArgumentNullException(nameof(entity));
         }
 
-        _dbSet.Update(entity);
+        // Explicitly mark entity as Modified for reliable state tracking
+        // This pattern works correctly with both real and in-memory databases
+        _context.Entry(entity).State = EntityState.Modified;
+
         await _context.SaveChangesAsync();
 
         return entity;

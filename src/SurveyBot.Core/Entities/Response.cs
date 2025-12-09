@@ -186,6 +186,32 @@ public class Response
     /// </summary>
     public int GetAnsweredQuestionCount() => VisitedQuestionIds.Count;
 
+    /// <summary>
+    /// Validates that VisitedQuestionIds is consistent with Answers collection.
+    /// For defensive programming - catches inconsistent state before completing response.
+    /// </summary>
+    /// <returns>True if invariants are valid, false otherwise with error message</returns>
+    public (bool IsValid, string? ErrorMessage) ValidateTrackingConsistency()
+    {
+        if (Answers == null || !Answers.Any())
+        {
+            // No answers yet - invariant is trivially satisfied
+            return (true, null);
+        }
+
+        var answeredQuestionIds = Answers.Select(a => a.QuestionId).Distinct().ToList();
+
+        // Check if any answered questions are missing from visited list
+        var missingFromVisited = answeredQuestionIds.Except(VisitedQuestionIds).ToList();
+
+        if (missingFromVisited.Any())
+        {
+            return (false, $"Questions {string.Join(", ", missingFromVisited)} have answers but are not in VisitedQuestionIds");
+        }
+
+        return (true, null);
+    }
+
     #endregion
 
     #region Internal Methods (for testing and EF Core)

@@ -276,6 +276,11 @@ public class ResponseService : IResponseService
             _logger.LogInformation("Created new answer for response {ResponseId}, question {QuestionId}", responseId, questionId);
         }
 
+        // Record the question as visited for conditional flow tracking
+        response.RecordVisitedQuestion(questionId);
+        await _responseRepository.UpdateAsync(response);
+        _logger.LogInformation("Recorded question {QuestionId} as visited for response {ResponseId}", questionId, responseId);
+
         // Return saved answer DTO
         return await MapToAnswerDtoAsync(savedAnswer);
     }
@@ -349,8 +354,45 @@ public class ResponseService : IResponseService
             .Distinct()
             .ToList();
 
-        // Find missing required questions
+        // Get visited question IDs (for conditional flow support)
+        var visitedQuestionIds = response.VisitedQuestionIds ?? new List<int>();
+
+        // Fallback: If VisitedQuestionIds is empty but we have answers, use answered questions
+        // This handles legacy data and ensures validation works for sequential surveys
+        if (!visitedQuestionIds.Any() && answeredQuestionIds.Any())
+        {
+            _logger.LogWarning(
+                "Response {ResponseId} has answers but empty VisitedQuestionIds - using answered questions as fallback",
+                responseId);
+            visitedQuestionIds = answeredQuestionIds;
+        }
+
+        // For surveys without conditional flow, validate ALL required questions (not just visited)
+        // This ensures sequential surveys check all required questions
+        if (!visitedQuestionIds.Any())
+        {
+            // No questions visited at all - check ALL required questions
+            var missingRequiredQuestions = requiredQuestionList
+                .Where(q => !answeredQuestionIds.Contains(q.Id))
+                .ToList();
+
+            if (missingRequiredQuestions.Any())
+            {
+                var missingQuestionTitles = string.Join(", ", missingRequiredQuestions.Select(q => $"\"{q.QuestionText}\""));
+                var errorMessage = $"Cannot complete response: {missingRequiredQuestions.Count} required question(s) not answered: {missingQuestionTitles}";
+
+                _logger.LogWarning("Response {ResponseId} validation failed: {ErrorMessage}", responseId, errorMessage);
+
+                throw new SurveyValidationException(errorMessage);
+            }
+
+            _logger.LogDebug("All required questions answered for response {ResponseId} (no visited tracking)", responseId);
+            return;
+        }
+
+        // Find missing required questions (only check VISITED required questions for conditional flow)
         var missingQuestions = requiredQuestionList
+            .Where(q => visitedQuestionIds.Contains(q.Id)) // Only validate visited questions
             .Where(q => !answeredQuestionIds.Contains(q.Id))
             .ToList();
 
@@ -364,7 +406,7 @@ public class ResponseService : IResponseService
             throw new SurveyValidationException(errorMessage);
         }
 
-        _logger.LogDebug("All required questions answered for response {ResponseId}", responseId);
+        _logger.LogDebug("All visited required questions answered for response {ResponseId}", responseId);
     }
 
     /// <inheritdoc/>

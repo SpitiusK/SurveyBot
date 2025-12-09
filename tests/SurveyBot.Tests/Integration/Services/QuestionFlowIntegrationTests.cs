@@ -272,8 +272,29 @@ public class QuestionFlowIntegrationTests : IAsyncLifetime
         // Arrange
         var userId = 555666777L;
 
-        // Start and complete first response
+        // Start first response
         var firstResponse = await _responseService.StartResponseAsync(_testSurvey.Id, userId);
+
+        // Answer all required questions to allow completion
+        // Q1: Text - required
+        await _responseService.SaveAnswerAsync(
+            responseId: firstResponse.Id,
+            questionId: _q1_text.Id,
+            answerText: "Test User",
+            selectedOptions: null,
+            ratingValue: null,
+            userId: null);
+
+        // Q2: SingleChoice - required (select "No" to end survey early)
+        await _responseService.SaveAnswerAsync(
+            responseId: firstResponse.Id,
+            questionId: _q2_singleChoice.Id,
+            answerText: null,
+            selectedOptions: new List<string> { "No" }, // "No" - goes to END
+            ratingValue: null,
+            userId: null);
+
+        // Complete first response
         await _responseService.CompleteResponseAsync(firstResponse.Id);
 
         // Survey does not allow multiple responses
@@ -679,6 +700,25 @@ public class QuestionFlowIntegrationTests : IAsyncLifetime
         Assert.NotNull(initialResponse);
         Assert.False(initialResponse.IsComplete);
         Assert.Null(initialResponse.SubmittedAt);
+
+        // Answer all required questions to allow completion
+        // Q1: Text - required
+        await _responseService.SaveAnswerAsync(
+            responseId: response.Id,
+            questionId: _q1_text.Id,
+            answerText: "Test User",
+            selectedOptions: null,
+            ratingValue: null,
+            userId: null);
+
+        // Q2: SingleChoice - required (select "No" to end survey early)
+        await _responseService.SaveAnswerAsync(
+            responseId: response.Id,
+            questionId: _q2_singleChoice.Id,
+            answerText: null,
+            selectedOptions: new List<string> { "No" }, // "No" - goes to END
+            ratingValue: null,
+            userId: null);
 
         // Act - Complete response
         await _responseService.CompleteResponseAsync(response.Id);
