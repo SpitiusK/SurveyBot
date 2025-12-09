@@ -429,6 +429,7 @@ public class ResponsesController : ControllerBase
     /// <param name="id">Response ID.</param>
     /// <returns>Completed response details.</returns>
     /// <response code="200">Response completed successfully.</response>
+    /// <response code="400">Validation failed - required questions not answered.</response>
     /// <response code="404">Response not found.</response>
     /// <response code="409">Response is already completed.</response>
     [HttpPost("responses/{id}/complete")]
@@ -439,6 +440,7 @@ public class ResponsesController : ControllerBase
         Tags = new[] { "Responses" }
     )]
     [ProducesResponseType(typeof(ApiResponse<ResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ApiResponse<ResponseDto>>> CompleteResponse(int id)
@@ -464,6 +466,15 @@ public class ResponsesController : ControllerBase
         {
             _logger.LogWarning(ex, "Cannot complete response {ResponseId}", id);
             return Conflict(new ApiResponse<object>
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+        catch (SurveyValidationException ex)
+        {
+            _logger.LogWarning(ex, "Cannot complete response {ResponseId} - validation failed", id);
+            return BadRequest(new ApiResponse<object>
             {
                 Success = false,
                 Message = ex.Message

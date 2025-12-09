@@ -305,6 +305,9 @@ public class ResponseService : IResponseService
             return await MapToResponseDtoAsync(response);
         }
 
+        // Validate all required questions are answered
+        await ValidateRequiredAnswersAsync(responseId, response.SurveyId);
+
         // Mark as complete
         response.MarkAsComplete();
 
@@ -313,6 +316,55 @@ public class ResponseService : IResponseService
         _logger.LogInformation("Response {ResponseId} marked as complete", responseId);
 
         return await MapToResponseDtoAsync(response);
+    }
+
+    /// <summary>
+    /// Validates that all required questions have been answered for a response.
+    /// </summary>
+    /// <param name="responseId">The response ID</param>
+    /// <param name="surveyId">The survey ID</param>
+    /// <exception cref="SurveyValidationException">Thrown when required questions are missing answers</exception>
+    private async Task ValidateRequiredAnswersAsync(int responseId, int surveyId)
+    {
+        _logger.LogDebug("Validating required answers for response {ResponseId}", responseId);
+
+        // Get all required questions for the survey
+        var requiredQuestions = await _questionRepository
+            .GetBySurveyIdAsync(surveyId);
+
+        var requiredQuestionList = requiredQuestions
+            .Where(q => q.IsRequired)
+            .ToList();
+
+        if (!requiredQuestionList.Any())
+        {
+            _logger.LogDebug("No required questions found for survey {SurveyId}", surveyId);
+            return; // No required questions - validation passes
+        }
+
+        // Get all answered question IDs for this response
+        var response = await _responseRepository.GetByIdWithAnswersAsync(responseId);
+        var answeredQuestionIds = response.Answers
+            .Select(a => a.QuestionId)
+            .Distinct()
+            .ToList();
+
+        // Find missing required questions
+        var missingQuestions = requiredQuestionList
+            .Where(q => !answeredQuestionIds.Contains(q.Id))
+            .ToList();
+
+        if (missingQuestions.Any())
+        {
+            var missingQuestionTitles = string.Join(", ", missingQuestions.Select(q => $"\"{q.QuestionText}\""));
+            var errorMessage = $"Cannot complete response: {missingQuestions.Count} required question(s) not answered: {missingQuestionTitles}";
+
+            _logger.LogWarning("Response {ResponseId} validation failed: {ErrorMessage}", responseId, errorMessage);
+
+            throw new SurveyValidationException(errorMessage);
+        }
+
+        _logger.LogDebug("All required questions answered for response {ResponseId}", responseId);
     }
 
     /// <inheritdoc/>

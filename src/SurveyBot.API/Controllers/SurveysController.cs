@@ -102,7 +102,7 @@ public class SurveysController : ControllerBase
     /// </summary>
     /// <param name="pageNumber">Page number (1-based).</param>
     /// <param name="pageSize">Number of items per page (1-100).</param>
-    /// <param name="searchTerm">Optional search term to filter surveys.</param>
+    /// <param name="searchTerm">Optional search term to filter surveys by title/description (query parameter: "search").</param>
     /// <param name="isActive">Optional filter by active status.</param>
     /// <param name="sortBy">Optional sort field (title, createdat, updatedat, isactive).</param>
     /// <param name="sortDescending">Sort in descending order.</param>
@@ -122,13 +122,34 @@ public class SurveysController : ControllerBase
     public async Task<ActionResult<ApiResponse<PagedResultDto<SurveyListDto>>>> GetSurveys(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
-        [FromQuery] string? searchTerm = null,
+        [FromQuery(Name = "search")] string? searchTerm = null,
         [FromQuery] bool? isActive = null,
         [FromQuery] string? sortBy = null,
         [FromQuery] bool sortDescending = false)
     {
         try
         {
+            // Validate pagination parameters
+            if (pageNumber < 1)
+            {
+                _logger.LogWarning("Invalid pageNumber: {PageNumber}. Must be >= 1", pageNumber);
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "pageNumber must be greater than or equal to 1"
+                });
+            }
+
+            if (pageSize < 1 || pageSize > 100)
+            {
+                _logger.LogWarning("Invalid pageSize: {PageSize}. Must be between 1 and 100", pageSize);
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "pageSize must be between 1 and 100"
+                });
+            }
+
             var userId = GetUserIdFromClaims();
             _logger.LogInformation("Getting surveys for user {UserId}", userId);
 
