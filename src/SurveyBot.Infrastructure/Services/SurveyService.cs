@@ -538,6 +538,45 @@ public class SurveyService : ISurveyService
             throw new Core.Exceptions.UnauthorizedAccessException(userId, "Survey", surveyId);
         }
 
+        // 🔍 DEBUG LOGGING: Check QuestionOptions loading from database
+        _logger.LogInformation(
+            "[GetSurveyByIdAsync] Survey {SurveyId} loaded with {QuestionCount} questions",
+            surveyId, survey.Questions?.Count ?? 0);
+
+        if (survey.Questions != null)
+        {
+            foreach (var question in survey.Questions)
+            {
+                _logger.LogInformation(
+                    "[GetSurveyByIdAsync] QuestionId={QuestionId}, Type={QuestionType}, QuestionOptions count={OptionsCount}",
+                    question.Id,
+                    question.QuestionType,
+                    question.Options?.Count ?? 0);
+
+                // Special attention to Rating questions
+                if (question.QuestionType == QuestionType.Rating)
+                {
+                    _logger.LogWarning(
+                        "[GetSurveyByIdAsync] ⭐ Rating Question {QuestionId}: Options loaded = {OptionsCount}, " +
+                        "OptionsJson = {OptionsJson}, SupportsBranching = {SupportsBranching}",
+                        question.Id,
+                        question.Options?.Count ?? 0,
+                        question.OptionsJson ?? "null",
+                        question.SupportsBranching);
+
+                    if (question.Options != null && question.Options.Any())
+                    {
+                        foreach (var option in question.Options)
+                        {
+                            _logger.LogInformation(
+                                "[GetSurveyByIdAsync]   Option: Id={OptionId}, Text={OptionText}, OrderIndex={OrderIndex}, Next={Next}",
+                                option.Id, option.Text, option.OrderIndex, option.Next?.Type.ToString() ?? "null");
+                        }
+                    }
+                }
+            }
+        }
+
         // Get response counts
         var responseCount = await _surveyRepository.GetResponseCountAsync(surveyId);
         var completedCount = await _responseRepository.GetCompletedCountAsync(surveyId);
@@ -546,6 +585,31 @@ public class SurveyService : ISurveyService
         var result = _mapper.Map<SurveyDto>(survey);
         result.TotalResponses = responseCount;
         result.CompletedResponses = completedCount;
+
+        // 🔍 DEBUG LOGGING: Check mapping results
+        _logger.LogInformation(
+            "[GetSurveyByIdAsync] DTO mapped with {QuestionCount} questions",
+            result.Questions?.Count ?? 0);
+
+        if (result.Questions != null)
+        {
+            foreach (var questionDto in result.Questions)
+            {
+                _logger.LogInformation(
+                    "[GetSurveyByIdAsync] DTO QuestionId={QuestionId}, Type={QuestionType}, OptionDetails count={OptionDetailsCount}",
+                    questionDto.Id,
+                    questionDto.QuestionType,
+                    questionDto.OptionDetails?.Count ?? 0);
+
+                if (questionDto.QuestionType == QuestionType.Rating)
+                {
+                    _logger.LogWarning(
+                        "[GetSurveyByIdAsync] ⭐ Rating Question DTO {QuestionId}: OptionDetails count = {OptionDetailsCount}",
+                        questionDto.Id,
+                        questionDto.OptionDetails?.Count ?? 0);
+                }
+            }
+        }
 
         return result;
     }

@@ -86,6 +86,15 @@ const transformQuestionsFromBackend = (
     }
 
     // Convert optionDetails to optionNextQuestions mapping
+    console.log('[transformQuestionsFromBackend] Processing question:', {
+      id: q.id,
+      questionType: q.questionType,
+      isRating: q.questionType === 3, // QuestionType.Rating
+      hasOptionDetails: !!q.optionDetails,
+      optionDetailsLength: q.optionDetails?.length ?? 0,
+      optionDetails: q.optionDetails,
+    });
+
     let optionNextQuestions: Record<number, string | null> | undefined;
     if (q.optionDetails && q.optionDetails.length > 0) {
       optionNextQuestions = {};
@@ -102,6 +111,13 @@ const transformQuestionsFromBackend = (
         }
       });
     }
+
+    console.log('[transformQuestionsFromBackend] Resulting optionNextQuestions:', {
+      id: q.id,
+      questionType: q.questionType,
+      optionNextQuestions,
+      keys: optionNextQuestions ? Object.keys(optionNextQuestions) : 'undefined',
+    });
 
     const draft: QuestionDraft = {
       id: idMapping.get(q.id)!,

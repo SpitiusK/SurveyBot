@@ -21,11 +21,36 @@ public class SurveyRepository : GenericRepository<Survey>, ISurveyRepository
     /// <inheritdoc />
     public async Task<Survey?> GetByIdWithQuestionsAsync(int id)
     {
-        return await _dbSet
+        var survey = await _dbSet
             .AsNoTracking()
             .Include(s => s.Questions.OrderBy(q => q.OrderIndex))
+                .ThenInclude(q => q.Options)  // 🔍 CRITICAL: Load QuestionOptions for OptionDetails mapping
             .Include(s => s.Creator)
             .FirstOrDefaultAsync(s => s.Id == id);
+
+        // 🔍 DEBUG LOGGING: Verify QuestionOptions loaded
+        if (survey != null)
+        {
+            Console.WriteLine($"[SurveyRepository.GetByIdWithQuestionsAsync] Survey {id} loaded with {survey.Questions?.Count ?? 0} questions");
+            if (survey.Questions != null)
+            {
+                foreach (var question in survey.Questions)
+                {
+                    Console.WriteLine(
+                        $"[SurveyRepository.GetByIdWithQuestionsAsync] QuestionId={question.Id}, " +
+                        $"Type={question.QuestionType}, Options.Count={question.Options?.Count ?? 0}");
+
+                    if (question.QuestionType == QuestionType.Rating)
+                    {
+                        Console.WriteLine(
+                            $"[SurveyRepository.GetByIdWithQuestionsAsync] ⭐ Rating Question {question.Id}: " +
+                            $"Options.Count={question.Options?.Count ?? 0}");
+                    }
+                }
+            }
+        }
+
+        return survey;
     }
 
     /// <inheritdoc />

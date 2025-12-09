@@ -21,11 +21,32 @@ public class QuestionRepository : GenericRepository<Question>, IQuestionReposito
     /// <inheritdoc />
     public async Task<IEnumerable<Question>> GetBySurveyIdAsync(int surveyId)
     {
-        return await _dbSet
+        var questions = await _dbSet
             .Where(q => q.SurveyId == surveyId)
             .Include(q => q.Options.OrderBy(o => o.OrderIndex))  // EAGER LOAD OPTIONS for OptionDetails mapping
             .OrderBy(q => q.OrderIndex)
             .ToListAsync();
+
+        // 🔍 DEBUG LOGGING: Log what was loaded from database
+        Console.WriteLine($"[QuestionRepository.GetBySurveyIdAsync] Loaded {questions.Count()} questions for survey {surveyId}");
+
+        foreach (var question in questions)
+        {
+            Console.WriteLine(
+                $"[QuestionRepository.GetBySurveyIdAsync] QuestionId={question.Id}, " +
+                $"Type={question.QuestionType}, Options.Count={question.Options?.Count ?? 0}");
+
+            if (question.QuestionType == QuestionType.Rating && question.Options != null && question.Options.Any())
+            {
+                Console.WriteLine($"[QuestionRepository.GetBySurveyIdAsync] ⭐ Rating question {question.Id} HAS {question.Options.Count} options:");
+                foreach (var opt in question.Options)
+                {
+                    Console.WriteLine($"  - OptionId={opt.Id}, Text='{opt.Text}', OrderIndex={opt.OrderIndex}");
+                }
+            }
+        }
+
+        return questions;
     }
 
     /// <inheritdoc />
