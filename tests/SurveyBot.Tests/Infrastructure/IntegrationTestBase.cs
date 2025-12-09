@@ -12,28 +12,66 @@ namespace SurveyBot.Tests.Infrastructure;
 /// Each test starts with a clean database to ensure test independence.
 /// </summary>
 /// <remarks>
-/// This base class addresses TEST-FAIL-001: Database State Pollution issue.
-/// By calling ClearDatabase() in the constructor, each test gets a fresh database state.
+/// This base class addresses TEST-FAIL-001: Database State Pollution and TEST-FAIL-002: HttpClient Header Pollution issues.
+/// By implementing IAsyncLifetime, each test method gets a fresh HttpClient instance with no shared state.
+/// By calling ClearDatabase() in InitializeAsync(), each test gets a fresh database state.
 /// </remarks>
-public abstract class IntegrationTestBase : IClassFixture<WebApplicationFactoryFixture<Program>>
+public abstract class IntegrationTestBase : IClassFixture<WebApplicationFactoryFixture<Program>>, IAsyncLifetime
 {
     protected readonly WebApplicationFactoryFixture<Program> Factory;
-    protected readonly HttpClient Client;
+    private HttpClient? _client;
+
+    /// <summary>
+    /// Gets the HttpClient for the current test. Creates a new instance lazily if needed.
+    /// Each test method receives a fresh HttpClient with no shared state.
+    /// </summary>
+    protected HttpClient Client => _client ??= CreateClient();
 
     protected IntegrationTestBase(WebApplicationFactoryFixture<Program> factory)
     {
         Factory = factory;
 
-        // Explicitly ensure server is started before creating client
+        // Explicitly ensure server is started before tests run
         Factory.EnsureServerStarted();
+    }
 
-        Client = factory.CreateClient(new WebApplicationFactoryClientOptions
+    /// <summary>
+    /// Creates a new HttpClient instance for the test.
+    /// Virtual to allow derived classes to customize client creation if needed.
+    /// </summary>
+    protected virtual HttpClient CreateClient()
+    {
+        return Factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false
         });
+    }
+
+    /// <summary>
+    /// Called before each test method runs. Ensures a clean HttpClient and database state.
+    /// </summary>
+    public Task InitializeAsync()
+    {
+        // Dispose old client if it exists
+        _client?.Dispose();
+        _client = null;
 
         // Clear database before each test to ensure isolation
         ClearDatabase();
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Called after each test method completes. Cleans up HttpClient resources.
+    /// </summary>
+    public Task DisposeAsync()
+    {
+        // Clean up HttpClient after each test
+        _client?.Dispose();
+        _client = null;
+
+        return Task.CompletedTask;
     }
 
     /// <summary>
