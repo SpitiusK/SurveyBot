@@ -57,14 +57,15 @@ public class ModelValidationLoggingFilter : IActionFilter
             LogRawRequestBody(context.HttpContext);
 
             _logger.LogWarning(
-                "⚠️ Returning 400 Bad Request with ValidationProblemDetails");
+                "⚠️ Returning 400 Bad Request with ApiResponse format");
 
             // Since we suppressed automatic 400 response, we need to return it manually
-            context.Result = new BadRequestObjectResult(new ValidationProblemDetails(context.ModelState)
+            // Return ApiResponse<object> format to match other endpoints
+            context.Result = new BadRequestObjectResult(new Models.ApiResponse<object>
             {
-                Title = "One or more validation errors occurred.",
-                Status = StatusCodes.Status400BadRequest,
-                Detail = "See the errors property for details."
+                Success = false,
+                Message = "Invalid request data",
+                Data = context.ModelState
             });
         }
     }

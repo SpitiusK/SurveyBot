@@ -492,10 +492,12 @@ public class NextQuestionDeterminantPersistenceTests : IDisposable
         await _context.SaveChangesAsync();
 
         var targetQuestion = Question.CreateTextQuestion(survey.Id, "Target", 1, true);
-        var question = Question.CreateTextQuestion(survey.Id, "Question", 0, true);
-        question.SetDefaultNext(NextQuestionDeterminant.ToQuestion(targetQuestion.Id));
+        await _context.Questions.AddAsync(targetQuestion);
+        await _context.SaveChangesAsync();  // FIX: Save targetQuestion before using its ID
 
-        await _context.Questions.AddRangeAsync(targetQuestion, question);
+        var question = Question.CreateTextQuestion(survey.Id, "Question", 0, true);
+        question.SetDefaultNext(NextQuestionDeterminant.ToQuestion(targetQuestion.Id));  // Now targetQuestion.Id is valid
+        await _context.Questions.AddAsync(question);
         await _context.SaveChangesAsync();
 
         // Act - Change to End

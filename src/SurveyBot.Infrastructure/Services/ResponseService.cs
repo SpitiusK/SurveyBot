@@ -168,6 +168,16 @@ public class ResponseService : IResponseService
                 }
             }
         }
+        // Convert ratingValue to option index for Rating questions
+        // Rating values are 1-5, option indexes are 0-4
+        else if (ratingValue.HasValue && question.QuestionType == QuestionType.Rating)
+        {
+            selectedOptionIndexes = new List<int> { ratingValue.Value - 1 };
+
+            _logger.LogInformation(
+                "Converted rating value {RatingValue} to option index {OptionIndex} for question {QuestionId}",
+                ratingValue.Value, ratingValue.Value - 1, questionId);
+        }
 
         // Determine next question based on conditional flow
         var nextStep = await DetermineNextStepAsync(
@@ -1044,11 +1054,10 @@ public class ResponseService : IResponseService
     /// </summary>
     /// <remarks>
     /// Question type classification for navigation:
-    /// - Branching (SingleChoice): Each option can have individual flow (uses QuestionOption.Next)
-    /// - Non-branching (Text, MultipleChoice, Rating, Number, Date, Location): All answers use same flow (uses Question.DefaultNext)
-    ///
-    /// Note: Rating questions are classified as non-branching because they use a 1-5 scale
-    /// without QuestionOption entities. They should use DefaultNext for navigation.
+    /// - Branching (SingleChoice, Rating): Each option can have individual flow (uses QuestionOption.Next)
+    ///   - Rating: Uses rating value 1-5 as implicit option index 0-4
+    ///   - SingleChoice: Uses actual QuestionOption entities
+    /// - Non-branching (Text, MultipleChoice, Number, Date, Location): All answers use same flow (uses Question.DefaultNext)
     /// </remarks>
     private async Task<NextQuestionDeterminant> DetermineNextStepAsync(
         Question question,
@@ -1056,31 +1065,85 @@ public class ResponseService : IResponseService
         int surveyId,
         CancellationToken cancellationToken)
     {
-        // For branching question types (SingleChoice only)
-        // SingleChoice questions have QuestionOption entities with individual Next flow
-        if (question.QuestionType == QuestionType.SingleChoice)
+        // For branching question types (SingleChoice and Rating)
+        if (question.QuestionType == QuestionType.SingleChoice || question.QuestionType == QuestionType.Rating)
         {
             return await DetermineBranchingNextStepAsync(question, selectedOptions, cancellationToken);
         }
 
-        // For non-branching question types (Text, MultipleChoice, Rating, Number, Date, Location)
-        // These use Question.DefaultNext for navigation (no per-option flow)
+        // For non-branching question types (Text, MultipleChoice, Number, Date, Location)
         return await DetermineNonBranchingNextStepAsync(question, surveyId, cancellationToken);
     }
 
     /// <summary>
-    /// Determines next question for branching question types (SingleChoice only).
+    /// Determines next question for branching question types (SingleChoice, Rating).
     /// Priority: Option's Next → Question's DefaultNext → Sequential fallback → End.
     /// </summary>
     /// <remarks>
-    /// Note: Rating questions were previously classified as branching but have been moved
-    /// to non-branching flow (v1.5.1) because they use a 1-5 scale without QuestionOption entities.
+    /// Note: Both SingleChoice and Rating questions support conditional branching.
+    /// Rating questions may optionally have QuestionOptions for per-rating flow configuration.
+    /// If QuestionOptions are not configured, Rating uses DefaultNext (same as non-branching types).
     /// </remarks>
     private async Task<NextQuestionDeterminant> DetermineBranchingNextStepAsync(
         Question question,
         List<int>? selectedOptions,
         CancellationToken cancellationToken)
     {
+        // For Rating questions without QuestionOptions, fall back to DefaultNext
+        // This maintains backward compatibility with existing Rating questions
+        if (question.QuestionType == QuestionType.Rating && (question.Options == null || !question.Options.Any()))
+        {
+            _logger.LogInformation(
+                "Rating question {QuestionId} has no QuestionOptions, using DefaultNext for all rating values",
+                question.Id);
+
+            if (question.DefaultNext != null)
+            {
+                // Priority 1: Check for explicit EndSurvey configuration
+                if (question.DefaultNext.Type == NextStepType.EndSurvey)
+                {
+                    _logger.LogInformation(
+                        "Rating question {QuestionId} configured to end survey (DefaultNext.Type = EndSurvey)",
+                        question.Id);
+                    return NextQuestionDeterminant.End();
+                }
+
+                // Priority 2: Check for explicit GoToQuestion configuration
+                if (question.DefaultNext.Type == NextStepType.GoToQuestion)
+                {
+                    _logger.LogInformation(
+                        "Rating question {QuestionId} using DefaultNext flow: GoToQuestion({NextQuestionId})",
+                        question.Id, question.DefaultNext.NextQuestionId);
+                    return question.DefaultNext;
+                }
+            }
+
+            // Priority 3: Fall back to sequential navigation (when DefaultNext is null or has unexpected type)
+            _logger.LogDebug(
+                "Rating question {QuestionId} has no explicit DefaultNext configuration, using sequential flow",
+                question.Id);
+
+            var nextId = await GetNextSequentialQuestionIdAsync(
+                question.SurveyId,
+                question.OrderIndex,
+                cancellationToken);
+
+            if (nextId > 0)
+            {
+                _logger.LogInformation(
+                    "Rating question {QuestionId} sequential flow: GoToQuestion({NextQuestionId})",
+                    question.Id, nextId);
+                return NextQuestionDeterminant.ToQuestion(nextId);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Rating question {QuestionId} is the last question, ending survey",
+                    question.Id);
+                return NextQuestionDeterminant.End();
+            }
+        }
+
         // Get the first selected option (single-choice/rating has only one)
         if (selectedOptions == null || !selectedOptions.Any())
         {
@@ -1106,9 +1169,8 @@ public class ResponseService : IResponseService
             return NextQuestionDeterminant.End(); // Invalid option, end survey
         }
 
-        // Priority 1: Check option's conditional flow
-        if (selectedOption.Next != null &&
-            selectedOption.Next.Type == NextStepType.GoToQuestion)
+        // Priority 1: Check option's conditional flow (both GoToQuestion and EndSurvey)
+        if (selectedOption.Next != null)
         {
             _logger.LogInformation(
                 "Using option conditional flow for question {QuestionId}, option {OptionId}: {Next}",
@@ -1116,9 +1178,8 @@ public class ResponseService : IResponseService
             return selectedOption.Next;
         }
 
-        // Priority 2: Check question's default flow
-        if (question.DefaultNext != null &&
-            question.DefaultNext.Type == NextStepType.GoToQuestion)
+        // Priority 2: Check question's default flow (both GoToQuestion and EndSurvey)
+        if (question.DefaultNext != null)
         {
             _logger.LogInformation(
                 "Using question default flow for question {QuestionId}: {DefaultNext}",

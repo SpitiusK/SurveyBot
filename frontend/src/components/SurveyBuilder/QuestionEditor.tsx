@@ -122,13 +122,26 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
 
   useEffect(() => {
     if (open && question) {
+      // Defensive: Ensure Rating has 5-entry structure
+      let optionNextQuestions = question.optionNextQuestions || {};
+
+      if (question.questionType === QuestionType.Rating) {
+        // Force initialization if empty or incomplete
+        if (Object.keys(optionNextQuestions).length === 0) {
+          console.warn('[QuestionEditor] Rating question has empty optionNextQuestions, initializing...');
+          optionNextQuestions = {
+            0: null, 1: null, 2: null, 3: null, 4: null
+          };
+        }
+      }
+
       reset({
         questionText: question.questionText,
         questionType: question.questionType,
         isRequired: question.isRequired,
         options: question.options,
         defaultNextQuestionId: question.defaultNextQuestionId || null,
-        optionNextQuestions: question.optionNextQuestions || {},
+        optionNextQuestions,  // Use corrected value
       });
       setMediaContent(question.mediaContent || undefined);
     } else if (open && !question) {
@@ -161,6 +174,26 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
           before: currentFlow,
           after: updatedFlow,
           optionsCount: options.length,
+        });
+        setValue('optionNextQuestions', updatedFlow, { shouldValidate: true });
+      }
+    }
+
+    // Initialize optionNextQuestions for Rating (5 ratings = 5 implicit options)
+    if (questionType === QuestionType.Rating) {
+      const currentFlow = watch('optionNextQuestions') || {};
+      const updatedFlow: Record<number, string | null> = {};
+
+      // Rating values 1-5 map to indices 0-4
+      [0, 1, 2, 3, 4].forEach((index) => {
+        updatedFlow[index] = currentFlow[index] !== undefined ? currentFlow[index] : null;
+      });
+
+      // Only update if structure changed (different number of keys)
+      if (Object.keys(updatedFlow).length !== Object.keys(currentFlow).length) {
+        console.log('[QuestionEditor] Initializing optionNextQuestions for Rating:', {
+          before: currentFlow,
+          after: updatedFlow,
         });
         setValue('optionNextQuestions', updatedFlow, { shouldValidate: true });
       }
@@ -304,8 +337,16 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         setValue('optionNextQuestions', initialFlow, { shouldDirty: true });
       }
     } else if (newType === QuestionType.Rating) {
-      // Rating uses defaultNextQuestionId
-      setValue('optionNextQuestions', {}, { shouldDirty: true });
+      // Rating uses optionNextQuestions with 5 implicit options (rating values 1-5)
+      const initialFlow: Record<number, string | null> = {
+        0: null,  // 1 star
+        1: null,  // 2 stars
+        2: null,  // 3 stars
+        3: null,  // 4 stars
+        4: null,  // 5 stars
+      };
+      console.log('[QuestionEditor] Initialized Rating optionNextQuestions:', initialFlow);
+      setValue('optionNextQuestions', initialFlow, { shouldDirty: true });
     }
   };
 
@@ -670,37 +711,52 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                       })}
                     </Stack>
                   ) : questionType === QuestionType.Rating ? (
-                    <FormControl fullWidth sx={{ mt: 2 }}>
-                      <FormLabel sx={{ mb: 0.5, fontSize: '0.875rem' }}>
-                        Next question after any rating
-                      </FormLabel>
-                      <Controller
-                        name="defaultNextQuestionId"
-                        control={control}
-                        render={({ field }) => (
-                          <Select
-                            {...field}
-                            value={field.value ?? ''}
-                            onChange={(e) => field.onChange(e.target.value === '' ? null : e.target.value)}
-                            displayEmpty
-                          >
-                            <MenuItem value="">
-                              <em>End Survey</em>
-                            </MenuItem>
-                            {availableQuestions.map((q) => (
-                              <MenuItem key={q.id} value={q.id}>
-                                Q{q.orderIndex + 1}: {stripHtmlAndTruncate(q.questionText, 50)}
-                              </MenuItem>
-                            ))}
-                            {availableQuestions.length === 0 && (
-                              <MenuItem disabled>
-                                <em>No other questions available</em>
-                              </MenuItem>
-                            )}
-                          </Select>
-                        )}
-                      />
-                    </FormControl>
+                    <Stack spacing={2} sx={{ mt: 2 }}>
+                      <Alert severity="info" sx={{ mb: 1 }}>
+                        <Typography variant="body2">
+                          Configure different next questions based on the star rating (1-5 stars).
+                          Example: Low ratings → Feedback question, High ratings → Thank you.
+                        </Typography>
+                      </Alert>
+                      {[1, 2, 3, 4, 5].map((rating) => {
+                        const fieldName = `optionNextQuestions.${rating - 1}` as const;  // Index 0-4
+                        const stars = '⭐'.repeat(rating);
+
+                        return (
+                          <FormControl key={rating} fullWidth>
+                            <FormLabel sx={{ mb: 0.5, fontSize: '0.875rem' }}>
+                              Next question after {rating} {rating === 1 ? 'star' : 'stars'} {stars}
+                            </FormLabel>
+                            <Controller
+                              name={fieldName}
+                              control={control}
+                              render={({ field }) => (
+                                <Select
+                                  {...field}
+                                  value={field.value ?? ''}
+                                  onChange={(e) => field.onChange(e.target.value === '' ? null : e.target.value)}
+                                  displayEmpty
+                                >
+                                  <MenuItem value="">
+                                    <em>End Survey</em>
+                                  </MenuItem>
+                                  {availableQuestions.map((q) => (
+                                    <MenuItem key={q.id} value={q.id}>
+                                      Q{q.orderIndex + 1}: {stripHtmlAndTruncate(q.questionText, 50)}
+                                    </MenuItem>
+                                  ))}
+                                  {availableQuestions.length === 0 && (
+                                    <MenuItem disabled>
+                                      <em>No other questions available</em>
+                                    </MenuItem>
+                                  )}
+                                </Select>
+                              )}
+                            />
+                          </FormControl>
+                        );
+                      })}
+                    </Stack>
                   ) : null}
 
                   <Alert severity="info" sx={{ mt: 2 }}>

@@ -114,46 +114,91 @@ const FlowVisualization: React.FC<FlowVisualizationProps> = ({ questions }) => {
                 {supportsBranching(question.questionType) && question.optionNextQuestions ? (
                   // Branching question - show per-option flow
                   <Stack spacing={1}>
-                    {Object.entries(question.optionNextQuestions).map(([optionIndex, nextId]) => {
-                      const optionText =
-                        question.options?.[parseInt(optionIndex)] || `Option ${parseInt(optionIndex) + 1}`;
-                      const nextQuestion = nextId ? getQuestionById(nextId) : null;
+                    {question.questionType === QuestionType.SingleChoice ? (
+                      // SingleChoice: Show option text
+                      Object.entries(question.optionNextQuestions).map(([optionIndex, nextId]) => {
+                        const optionText =
+                          question.options?.[parseInt(optionIndex)] || `Option ${parseInt(optionIndex) + 1}`;
+                        const nextQuestion = nextId ? getQuestionById(nextId) : null;
 
-                      return (
-                        <Box
-                          key={optionIndex}
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            pl: 2,
-                            borderLeft: 2,
-                            borderColor: 'primary.light',
-                          }}
-                        >
-                          <Typography variant="caption" sx={{ minWidth: 80, color: 'text.secondary' }}>
-                            &quot;{optionText}&quot;
-                          </Typography>
-                          <ArrowIcon fontSize="small" color="action" />
-                          {nextQuestion ? (
-                            <Chip
-                              label={`Q${nextQuestion.orderIndex + 1}`}
-                              size="small"
-                              color="primary"
-                              variant="outlined"
-                            />
-                          ) : (
-                            <Chip
-                              label="End Survey"
-                              size="small"
-                              color="success"
-                              variant="outlined"
-                              icon={<EndIcon />}
-                            />
-                          )}
-                        </Box>
-                      );
-                    })}
+                        return (
+                          <Box
+                            key={optionIndex}
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                              pl: 2,
+                              borderLeft: 2,
+                              borderColor: 'primary.light',
+                            }}
+                          >
+                            <Typography variant="caption" sx={{ minWidth: 80, color: 'text.secondary' }}>
+                              &quot;{optionText}&quot;
+                            </Typography>
+                            <ArrowIcon fontSize="small" color="action" />
+                            {nextQuestion ? (
+                              <Chip
+                                label={`Q${nextQuestion.orderIndex + 1}`}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                            ) : (
+                              <Chip
+                                label="End Survey"
+                                size="small"
+                                color="success"
+                                variant="outlined"
+                                icon={<EndIcon />}
+                              />
+                            )}
+                          </Box>
+                        );
+                      })
+                    ) : question.questionType === QuestionType.Rating ? (
+                      // Rating: Show star count
+                      Object.entries(question.optionNextQuestions).map(([optionIndex, nextId]) => {
+                        const rating = parseInt(optionIndex) + 1; // Index 0-4 → Rating 1-5
+                        const stars = '⭐'.repeat(rating);
+                        const nextQuestion = nextId ? getQuestionById(nextId) : null;
+
+                        return (
+                          <Box
+                            key={optionIndex}
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                              pl: 2,
+                              borderLeft: 2,
+                              borderColor: 'primary.light',
+                            }}
+                          >
+                            <Typography variant="caption" sx={{ minWidth: 80, color: 'text.secondary' }}>
+                              {rating} {rating === 1 ? 'star' : 'stars'} {stars}
+                            </Typography>
+                            <ArrowIcon fontSize="small" color="action" />
+                            {nextQuestion ? (
+                              <Chip
+                                label={`Q${nextQuestion.orderIndex + 1}`}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                            ) : (
+                              <Chip
+                                label="End Survey"
+                                size="small"
+                                color="success"
+                                variant="outlined"
+                                icon={<EndIcon />}
+                              />
+                            )}
+                          </Box>
+                        );
+                      })
+                    ) : null}
                   </Stack>
                 ) : question.defaultNextQuestionId !== undefined ? (
                   // Non-branching question - show default next

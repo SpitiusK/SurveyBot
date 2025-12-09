@@ -130,13 +130,13 @@ public class CreateQuestionWithFlowDto : IValidatableObject
                 new[] { nameof(Options) });
         }
 
-        // Validate OptionNextQuestionIndexes only for SingleChoice
+        // Validate OptionNextQuestionIndexes only for SingleChoice and Rating
         if (OptionNextQuestionIndexes != null && OptionNextQuestionIndexes.Any())
         {
-            if (QuestionType != QuestionType.SingleChoice)
+            if (QuestionType != QuestionType.SingleChoice && QuestionType != QuestionType.Rating)
             {
                 yield return new ValidationResult(
-                    "OptionNextQuestionIndexes can only be used with SingleChoice questions",
+                    "OptionNextQuestionIndexes can only be used with SingleChoice and Rating questions",
                     new[] { nameof(OptionNextQuestionIndexes) });
             }
             else if (Options != null)
@@ -164,5 +164,5 @@ public class CreateQuestionWithFlowDto : IValidatableObject
     /// <summary>
     /// Returns true if this question type supports per-option branching.
     /// </summary>
-    public bool SupportsBranching => QuestionType == QuestionType.SingleChoice;
+    public bool SupportsBranching => QuestionType == QuestionType.SingleChoice || QuestionType == QuestionType.Rating;
 }

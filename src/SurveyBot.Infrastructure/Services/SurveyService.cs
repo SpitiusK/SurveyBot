@@ -236,6 +236,35 @@ public class SurveyService : ISurveyService
                     // Save options
                     await _questionRepository.UpdateAsync(createdQuestion);
                 }
+
+                // Create QuestionOptions for Rating questions (automatic 5-point scale)
+                // Rating questions have implicit options: 1-5 stars
+                if (questionDto.QuestionType == QuestionType.Rating
+                    && questionDto.OptionNextQuestionIndexes != null
+                    && questionDto.OptionNextQuestionIndexes.Any())
+                {
+                    _logger.LogInformation(
+                        "Auto-generating 5 QuestionOptions for Rating question at index {Index} (ID:{QuestionId})",
+                        i, createdQuestion.Id);
+
+                    // Create 5 options for ratings 1-5 (user-facing)
+                    // These map to option indexes 0-4 internally
+                    for (int ratingValue = 0; ratingValue < 5; ratingValue++)
+                    {
+                        var option = QuestionOption.Create(
+                            questionId: createdQuestion.Id,
+                            text: (ratingValue + 1).ToString(),  // "1", "2", "3", "4", "5"
+                            orderIndex: ratingValue);            // 0, 1, 2, 3, 4
+
+                        createdQuestion.AddOptionInternal(option);
+                    }
+
+                    await _questionRepository.UpdateAsync(createdQuestion);
+
+                    _logger.LogDebug(
+                        "Created {OptionCount} QuestionOptions for Rating question {QuestionId}",
+                        5, createdQuestion.Id);
+                }
             }
 
             _logger.LogInformation(
@@ -302,13 +331,14 @@ public class SurveyService : ISurveyService
                         i);
                 }
 
-                // Transform OptionNextQuestionIndexes for SingleChoice questions
-                if (questionDto.QuestionType == QuestionType.SingleChoice &&
+                // Transform OptionNextQuestionIndexes for SingleChoice and Rating questions
+                if ((questionDto.QuestionType == QuestionType.SingleChoice ||
+                     questionDto.QuestionType == QuestionType.Rating) &&
                     questionDto.OptionNextQuestionIndexes != null)
                 {
                     _logger.LogDebug(
-                        "  🔀 Q{Index}: SingleChoice question with {OptionCount} option flow configurations",
-                        i, questionDto.OptionNextQuestionIndexes.Count);
+                        "  🔀 Q{Index}: {QuestionType} question with {OptionCount} option flow configurations",
+                        i, questionDto.QuestionType, questionDto.OptionNextQuestionIndexes.Count);
 
                     // Reload question with options
                     var questionWithOptions = await _questionRepository.GetByIdWithOptionsAsync(question.Id);
@@ -380,7 +410,7 @@ public class SurveyService : ISurveyService
                 else if (questionDto.OptionNextQuestionIndexes != null && questionDto.OptionNextQuestionIndexes.Any())
                 {
                     _logger.LogWarning(
-                        "  ⚠️ Q{Index}: OptionNextQuestionIndexes provided for non-SingleChoice question (Type:{QuestionType}). This will be ignored.",
+                        "  ⚠️ Q{Index}: OptionNextQuestionIndexes provided for non-branching question (Type:{QuestionType}). This will be ignored.",
                         i, questionDto.QuestionType);
                 }
 

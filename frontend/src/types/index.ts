@@ -48,7 +48,6 @@ export type QuestionType = (typeof QuestionType)[keyof typeof QuestionType];
 export const NON_BRANCHING_QUESTION_TYPES: QuestionType[] = [
   QuestionType.Text,           // 0
   QuestionType.MultipleChoice, // 2
-  QuestionType.Rating,         // 3 - Rating uses defaultNextQuestionId, not optionNextQuestions
   QuestionType.Location,       // 4
   QuestionType.Number,         // 5
   QuestionType.Date,           // 6
@@ -57,7 +56,8 @@ export const NON_BRANCHING_QUESTION_TYPES: QuestionType[] = [
 // Branching: Different answers can flow to different questions
 // Uses optionNextQuestions Record
 export const BRANCHING_QUESTION_TYPES: QuestionType[] = [
-  QuestionType.SingleChoice,   // 1 - Only SingleChoice uses optionNextQuestions
+  QuestionType.SingleChoice,   // 1 - Each option can lead to different next question
+  QuestionType.Rating,         // 3 - Each star rating (1-5) can lead to different next question (NEW v1.7.0)
 ];
 
 // Helper functions for type checking
@@ -350,11 +350,14 @@ export interface QuestionDraft {
   questionText: string;
   questionType: QuestionType;
   isRequired: boolean;
-  options: string[];
+  options: string[]; // For SingleChoice/MultipleChoice; empty for Rating (uses implicit 1-5 values)
   orderIndex: number;
   mediaContent?: import('./media').MediaContentDto | null; // Deserialized MediaContentDto object
-  defaultNextQuestionId?: string | null; // For Text/MultipleChoice/Rating questions
-  optionNextQuestions?: Record<number, string | null>; // For SingleChoice: optionIndex -> nextQuestionId
+  defaultNextQuestionId?: string | null; // For non-branching questions (Text/MultipleChoice/Location/Number/Date)
+  optionNextQuestions?: Record<number, string | null>;
+  // For branching questions:
+  //   - SingleChoice: optionIndex → nextQuestionId
+  //   - Rating: rating value index (0=1 star, 1=2 stars, 2=3 stars, 3=4 stars, 4=5 stars) → nextQuestionId
 }
 
 // Wizard Step Types

@@ -685,7 +685,20 @@ function MyComponent() {
 - Question type selector
 - **Media upload and attachment** (NEW in v1.3.0)
 - **Media preview with delete option** (NEW in v1.3.0)
+- **Conditional flow for Rating questions** (NEW in v1.7.0)
 - Validation with Yup
+
+**Conditional Flow** (Enhanced in v1.7.0):
+- **SingleChoice**: Each option can lead to different next question
+- **Rating**: Each star rating (1-5) can lead to different next question (NEW)
+  - Use cases:
+    - Low ratings (1-2 stars) → Feedback question ("What went wrong?")
+    - Mid ratings (3-4 stars) → Improvement suggestions ("How can we improve?")
+    - High ratings (5 stars) → Thank you message or end survey
+  - Star visualization: ⭐ (1 star), ⭐⭐ (2 stars), ..., ⭐⭐⭐⭐⭐ (5 stars)
+  - Data structure: `optionNextQuestions` with keys 0-4 (rating value - 1)
+  - Frontend displays 5 dropdowns (one per star rating)
+- **Non-branching** (Text, MultipleChoice, Number, Date, Location): Single next question for all answers
 
 ### Media Upload (NEW in v1.3.0)
 

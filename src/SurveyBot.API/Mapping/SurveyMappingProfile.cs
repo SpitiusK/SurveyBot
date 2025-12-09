@@ -14,6 +14,8 @@ public class SurveyMappingProfile : Profile
     {
         // Survey -> SurveyDto (Entity to DTO for reading)
         CreateMap<Survey, SurveyDto>()
+            .ForMember(dest => dest.Creator,
+                opt => opt.MapFrom(src => src.Creator))
             .ForMember(dest => dest.Questions,
                 opt => opt.MapFrom(src => src.Questions)) // Map Questions collection using Question->QuestionDto profile
             .ForMember(dest => dest.TotalResponses,

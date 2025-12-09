@@ -21,7 +21,8 @@ import {
 } from '@mui/icons-material';
 import type { BasicInfoFormData } from '@/schemas/surveySchemas';
 import type { QuestionDraft } from '@/schemas/questionSchemas';
-import type { Survey, CreateQuestionWithFlowDto, UpdateSurveyWithQuestionsDto, QuestionType } from '@/types';
+import type { Survey, CreateQuestionWithFlowDto, UpdateSurveyWithQuestionsDto } from '@/types';
+import { QuestionType } from '@/types';
 import { isNonBranchingType, isBranchingType } from '@/types';
 import SurveyPreview from './SurveyPreview';
 import PublishSuccess from './PublishSuccess';
@@ -442,6 +443,28 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
                               nextId === null || nextId === '0'
                                 ? `${option} → End`
                                 : `${option} → Q${questions.findIndex((q) => q.id === nextId) + 1 || '?'}`
+                            }
+                            color={nextId === null || nextId === '0' ? 'success' : 'default'}
+                            variant="outlined"
+                            sx={{ fontSize: '0.7rem' }}
+                          />
+                        );
+                      })}
+                    </Stack>
+                  ) : question.questionType === 3 && question.optionNextQuestions ? (
+                    // Rating branching
+                    <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ gap: 0.5 }}>
+                      {Object.entries(question.optionNextQuestions).map(([index, nextId]) => {
+                        const rating = parseInt(index) + 1; // Index 0-4 → Rating 1-5
+                        const stars = '⭐'.repeat(rating);
+                        return (
+                          <Chip
+                            key={index}
+                            size="small"
+                            label={
+                              nextId === null || nextId === '0'
+                                ? `${rating}${stars} → End`
+                                : `${rating}${stars} → Q${questions.findIndex((q) => q.id === nextId) + 1 || '?'}`
                             }
                             color={nextId === null || nextId === '0' ? 'success' : 'default'}
                             variant="outlined"

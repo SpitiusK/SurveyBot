@@ -1,6 +1,6 @@
 # SurveyBot.Infrastructure - Data Access Layer
 
-**Version**: 1.6.2 | **Target Framework**: .NET 8.0 | **EF Core**: 9.0.10 | **Database**: PostgreSQL 15+
+**Version**: 1.6.2.1 | **Target Framework**: .NET 8.0 | **EF Core**: 9.0.10 | **Database**: PostgreSQL 15+
 
 > **Main Documentation**: [Project Root CLAUDE.md](../../CLAUDE.md)
 > **Related**: [Core Layer](../SurveyBot.Core/CLAUDE.md) | [API Layer](../SurveyBot.API/CLAUDE.md)
@@ -771,7 +771,7 @@ else
 - Only survey creator can activate
 - Logs cycle detection attempts and validation success
 
-**UpdateSurveyWithQuestionsAsync** (NEW in v1.5.2):
+**UpdateSurveyWithQuestionsAsync** (NEW in v1.5.2, UPDATED in v1.7.0):
 
 **Signature**:
 ```csharp
@@ -783,6 +783,12 @@ Task<SurveyDto> UpdateSurveyWithQuestionsAsync(
 ```
 
 **Purpose**: Completely replaces survey metadata and all questions in a single atomic transaction using a three-pass algorithm.
+
+**v1.7.0 Update - Rating Conditional Flow Bug Fix**:
+- **PASS 1**: Now auto-creates 5 QuestionOptions for Rating questions with `optionNextQuestionIndexes`
+- **PASS 2**: Flow transformation now processes Rating questions (not just SingleChoice)
+- Maps rating values 1-5 to option indexes 0-4 for conditional branching
+- Backward compatible: Rating questions without flow config continue using DefaultNext
 
 **Three-Pass Algorithm**:
 
@@ -989,6 +995,158 @@ private async Task<NextQuestionDeterminant> DetermineNonBranchingNextStepAsync(Q
 // NEW BEHAVIOR (FIXED):
 // User answers Q1 → Q2 (Rating: 2/5) → Survey Complete ✓
 ```
+
+**FIXED in v1.6.2.1 (INFRA-FIX-002): DetermineBranchingNextStepAsync Rating Without Options Bug**:
+
+**Problem**: Rating questions without QuestionOptions ignored `DefaultNext = EndSurvey` configuration in branching logic
+- DetermineBranchingNextStepAsync returned DefaultNext without type checking (line 1102)
+- Didn't align with INFRA-FIX-001 pattern already implemented for non-branching questions
+- Caused rating questions to incorrectly navigate even when configured to end survey
+
+**Root Cause Analysis** (lines 1100-1113):
+```csharp
+// OLD CODE (v1.6.2) - BUGGY
+if (question.DefaultNext != null)
+{
+    return question.DefaultNext;  // ❌ No explicit type checking
+}
+
+// Fall back to sequential navigation
+var nextId = await GetNextSequentialQuestionIdAsync(
+    question.SurveyId,
+    question.OrderIndex,
+    cancellationToken);
+
+return nextId > 0
+    ? NextQuestionDeterminant.ToQuestion(nextId)
+    : NextQuestionDeterminant.End();
+```
+
+**Solution**: Added explicit type checking to align with INFRA-FIX-001 pattern
+```csharp
+// NEW CODE (v1.6.2.1) - FIXED
+if (question.DefaultNext != null)
+{
+    // Priority 1: Check for explicit EndSurvey configuration
+    if (question.DefaultNext.Type == NextStepType.EndSurvey)
+    {
+        _logger.LogInformation(
+            "Rating question {QuestionId} configured to end survey (DefaultNext = EndSurvey)",
+            question.Id);
+        return NextQuestionDeterminant.End();
+    }
+
+    // Priority 2: Check for explicit GoToQuestion configuration
+    if (question.DefaultNext.Type == NextStepType.GoToQuestion)
+    {
+        _logger.LogInformation(
+            "Rating question {QuestionId} using DefaultNext flow: GoToQuestion({NextQuestionId})",
+            question.Id, question.DefaultNext.NextQuestionId);
+        return question.DefaultNext;
+    }
+}
+
+// Priority 3: Fall back to sequential navigation
+var nextId = await GetNextSequentialQuestionIdAsync(
+    question.SurveyId,
+    question.OrderIndex,
+    cancellationToken);
+
+if (nextId > 0)
+{
+    _logger.LogInformation(
+        "Rating question {QuestionId} using sequential fallback: NextQuestionId={NextQuestionId}",
+        question.Id, nextId);
+    return NextQuestionDeterminant.ToQuestion(nextId);
+}
+else
+{
+    _logger.LogInformation(
+        "Rating question {QuestionId} has no next question, ending survey",
+        question.Id);
+    return NextQuestionDeterminant.End();
+}
+```
+
+**Impact**:
+- **Affected Question Type**: Rating (without QuestionOptions)
+- **Before**: Rating questions ignored EndSurvey configuration in DefaultNext
+- **After**: Rating questions correctly respect all three navigation priorities
+- **Pattern Alignment**: Now matches INFRA-FIX-001 implementation in DetermineNonBranchingNextStepAsync
+- **Priority Order**: EndSurvey → GoToQuestion → Sequential fallback
+- **Backward Compatibility**: Existing surveys with GoToQuestion or null DefaultNext still work
+
+**Example Scenario**:
+```csharp
+// Survey with rating question (no QuestionOptions) configured to end survey
+// Configuration: Rating.DefaultNext = EndSurvey
+
+// OLD BEHAVIOR (BUGGY v1.6.2):
+// Rating question could incorrectly continue to next question
+
+// NEW BEHAVIOR (FIXED v1.6.2.1):
+// Rating question correctly ends survey when DefaultNext = EndSurvey ✓
+```
+
+**Regression Tests**: Added 7 comprehensive unit tests in ResponseServiceTests.cs
+- SaveAnswerAsync_RatingWithoutOptions_EndSurvey_ReturnsEnd
+- SaveAnswerAsync_RatingWithoutOptions_GoToQuestion_NavigatesToTarget
+- SaveAnswerAsync_RatingWithoutOptions_AllRatingValues_RespectEndSurvey (Theory with 5 data variants)
+
+**Rating Conditional Flow Support** (NEW in v1.7.0):
+- Rating questions now support conditional branching alongside SingleChoice
+- Rating value 1-5 is automatically mapped to option index 0-4
+- Backward compatible: Rating questions without QuestionOptions use DefaultNext
+- With QuestionOptions: Each rating value can have different next question
+- Use case: Low ratings (1-2) → Feedback question, high ratings (5) → End survey
+- **BUG FIX**: SurveyService now auto-creates 5 QuestionOptions for Rating questions with conditional flow
+- **BUG FIX**: Flow transformation (PASS 2) now processes Rating questions, not just SingleChoice
+- **BUG FIX**: Warning log updated to say "non-branching" instead of "non-SingleChoice"
+
+**Implementation Details**:
+```csharp
+// SaveAnswerAsync converts rating value to option index
+else if (ratingValue.HasValue && question.QuestionType == QuestionType.Rating)
+{
+    selectedOptionIndexes = new List<int> { ratingValue.Value - 1 };
+    _logger.LogInformation(
+        "Converted rating value {RatingValue} to option index {OptionIndex} for question {QuestionId}",
+        ratingValue.Value, ratingValue.Value - 1, questionId);
+}
+
+// DetermineNextStepAsync routes Rating questions to branching logic
+if (question.QuestionType == QuestionType.SingleChoice || question.QuestionType == QuestionType.Rating)
+{
+    return await DetermineBranchingNextStepAsync(question, selectedOptions, cancellationToken);
+}
+
+// DetermineBranchingNextStepAsync handles Rating without QuestionOptions
+if (question.QuestionType == QuestionType.Rating && (question.Options == null || !question.Options.Any()))
+{
+    // Fall back to DefaultNext for backward compatibility
+    if (question.DefaultNext != null)
+    {
+        return question.DefaultNext;
+    }
+    // Sequential fallback if DefaultNext is also null
+    var nextId = await GetNextSequentialQuestionIdAsync(question.SurveyId, question.OrderIndex, cancellationToken);
+    return nextId > 0 ? NextQuestionDeterminant.ToQuestion(nextId) : NextQuestionDeterminant.End();
+}
+```
+
+**Rating Value to Option Index Mapping**:
+| Rating Value | Option Index | Use Case |
+|--------------|--------------|----------|
+| 1 (very dissatisfied) | 0 | Can route to "What went wrong?" question |
+| 2 (dissatisfied) | 1 | Can route to "How can we improve?" question |
+| 3 (neutral) | 2 | Can route to sequential next question |
+| 4 (satisfied) | 3 | Can route to "What did you like?" question |
+| 5 (very satisfied) | 4 | Can route directly to end survey |
+
+**Backward Compatibility**:
+- Existing Rating questions without QuestionOptions continue using DefaultNext
+- No database migration required (QuestionOptions are optional)
+- Behavior unchanged for Rating questions that were already using DefaultNext
 
 ### Other Services
 

@@ -6,6 +6,7 @@ using SurveyBot.Core.Entities;
 using SurveyBot.Core.Enums;
 using SurveyBot.Core.Exceptions;
 using SurveyBot.Core.ValueObjects;
+using SurveyBot.Core.ValueObjects.Answers;
 using SurveyBot.Infrastructure.Data;
 using SurveyBot.Infrastructure.Repositories;
 using SurveyBot.Infrastructure.Services;
@@ -742,6 +743,452 @@ public class QuestionFlowIntegrationTests : IAsyncLifetime
         // Act & Assert
         await Assert.ThrowsAsync<ResponseNotFoundException>(
             async () => await _responseService.GetNextQuestionAsync(nonExistentResponseId));
+    }
+
+    #endregion
+
+    #region Rating Conditional Branching Integration Tests (NEW)
+
+    [Fact]
+    public async Task RatingFlow_NPSStyle_LowRatingsFeedback_HighRatingsThanks()
+    {
+        // Arrange - Create NPS-style survey
+        var survey = Survey.Create("NPS Survey", _testUser.Id, "NPS01", isActive: true);
+        await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
+
+        var q1 = Question.CreateRatingQuestion(
+            surveyId: survey.Id,
+            questionText: "How likely are you to recommend us? (1-5)",
+            orderIndex: 0,
+            isRequired: true);
+
+        var q2Feedback = Question.CreateTextQuestion(
+            surveyId: survey.Id,
+            questionText: "What can we improve?",
+            orderIndex: 1,
+            isRequired: true);
+
+        var q3Thanks = Question.CreateTextQuestion(
+            surveyId: survey.Id,
+            questionText: "Thank you! Any additional comments?",
+            orderIndex: 2,
+            isRequired: false);
+
+        await _context.Questions.AddRangeAsync(q1, q2Feedback, q3Thanks);
+        await _context.SaveChangesAsync();
+
+        // Configure conditional flow:
+        // Ratings 1-2 (Detractors) → Feedback question
+        var opt1 = QuestionOption.Create(q1.Id, "1", 0, NextQuestionDeterminant.ToQuestion(q2Feedback.Id));
+        var opt2 = QuestionOption.Create(q1.Id, "2", 1, NextQuestionDeterminant.ToQuestion(q2Feedback.Id));
+
+        // Ratings 3-4 (Passives) → Feedback question
+        var opt3 = QuestionOption.Create(q1.Id, "3", 2, NextQuestionDeterminant.ToQuestion(q2Feedback.Id));
+        var opt4 = QuestionOption.Create(q1.Id, "4", 3, NextQuestionDeterminant.ToQuestion(q2Feedback.Id));
+
+        // Rating 5 (Promoters) → Thank you message
+        var opt5 = QuestionOption.Create(q1.Id, "5", 4, NextQuestionDeterminant.ToQuestion(q3Thanks.Id));
+
+        await _context.QuestionOptions.AddRangeAsync(opt1, opt2, opt3, opt4, opt5);
+        await _context.SaveChangesAsync();
+
+        // Act & Assert - Test low rating (Detractor)
+        var response1 = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 1L);
+        await _responseService.SaveAnswerAsync(response1.Id, q1.Id, ratingValue: 1);
+        await _responseService.RecordVisitedQuestionAsync(response1.Id, q1.Id);
+        var next1 = await _responseService.GetNextQuestionAsync(response1.Id);
+        Assert.Equal(q2Feedback.Id, next1);  // Should go to feedback
+
+        // Act & Assert - Test high rating (Promoter)
+        var response2 = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 2L);
+        await _responseService.SaveAnswerAsync(response2.Id, q1.Id, ratingValue: 5);
+        await _responseService.RecordVisitedQuestionAsync(response2.Id, q1.Id);
+        var next2 = await _responseService.GetNextQuestionAsync(response2.Id);
+        Assert.Equal(q3Thanks.Id, next2);  // Should skip feedback, go to thanks
+
+        // Verify answers were saved correctly
+        var answer1 = await _answerRepository.GetByResponseAndQuestionAsync(response1.Id, q1.Id);
+        Assert.NotNull(answer1);
+        Assert.NotNull(answer1.Value);
+        Assert.IsType<RatingAnswerValue>(answer1.Value);
+        Assert.Equal(1, ((RatingAnswerValue)answer1.Value).Rating);
+        Assert.NotNull(answer1.Next);
+        Assert.Equal(q2Feedback.Id, answer1.Next.NextQuestionId);
+
+        var answer2 = await _answerRepository.GetByResponseAndQuestionAsync(response2.Id, q1.Id);
+        Assert.NotNull(answer2);
+        Assert.NotNull(answer2.Value);
+        Assert.IsType<RatingAnswerValue>(answer2.Value);
+        Assert.Equal(5, ((RatingAnswerValue)answer2.Value).Rating);
+        Assert.NotNull(answer2.Next);
+        Assert.Equal(q3Thanks.Id, answer2.Next.NextQuestionId);
+    }
+
+    [Fact]
+    public async Task RatingFlow_HighRatingEnds_LowRatingContinues()
+    {
+        // Arrange
+        var survey = Survey.Create("Satisfaction Survey", _testUser.Id, "SAT01", isActive: true);
+        await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
+
+        var q1 = Question.CreateRatingQuestion(
+            surveyId: survey.Id,
+            questionText: "Overall satisfaction?",
+            orderIndex: 0,
+            isRequired: true);
+
+        var q2 = Question.CreateTextQuestion(
+            surveyId: survey.Id,
+            questionText: "What went wrong?",
+            orderIndex: 1,
+            isRequired: true);
+
+        await _context.Questions.AddRangeAsync(q1, q2);
+        await _context.SaveChangesAsync();
+
+        // Ratings 1-3 → Feedback
+        var opt1 = QuestionOption.Create(q1.Id, "1", 0, NextQuestionDeterminant.ToQuestion(q2.Id));
+        var opt2 = QuestionOption.Create(q1.Id, "2", 1, NextQuestionDeterminant.ToQuestion(q2.Id));
+        var opt3 = QuestionOption.Create(q1.Id, "3", 2, NextQuestionDeterminant.ToQuestion(q2.Id));
+
+        // Ratings 4-5 → End survey
+        var opt4 = QuestionOption.Create(q1.Id, "4", 3, NextQuestionDeterminant.End());
+        var opt5 = QuestionOption.Create(q1.Id, "5", 4, NextQuestionDeterminant.End());
+
+        await _context.QuestionOptions.AddRangeAsync(opt1, opt2, opt3, opt4, opt5);
+        await _context.SaveChangesAsync();
+
+        // Act - Low rating continues
+        var response1 = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 1L);
+        await _responseService.SaveAnswerAsync(response1.Id, q1.Id, ratingValue: 2);
+        await _responseService.RecordVisitedQuestionAsync(response1.Id, q1.Id);
+        var next1 = await _responseService.GetNextQuestionAsync(response1.Id);
+
+        // Act - High rating ends
+        var response2 = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 2L);
+        await _responseService.SaveAnswerAsync(response2.Id, q1.Id, ratingValue: 5);
+        await _responseService.RecordVisitedQuestionAsync(response2.Id, q1.Id);
+        var next2 = await _responseService.GetNextQuestionAsync(response2.Id);
+
+        // Assert
+        Assert.Equal(q2.Id, next1);  // Low rating → feedback
+        Assert.Null(next2);  // High rating → end survey
+
+        // Verify Next value objects
+        var answer1 = await _answerRepository.GetByResponseAndQuestionAsync(response1.Id, q1.Id);
+        Assert.NotNull(answer1);
+        Assert.NotNull(answer1.Next);
+        Assert.Equal(NextStepType.GoToQuestion, answer1.Next.Type);
+        Assert.Equal(q2.Id, answer1.Next.NextQuestionId);
+
+        var answer2 = await _answerRepository.GetByResponseAndQuestionAsync(response2.Id, q1.Id);
+        Assert.NotNull(answer2);
+        Assert.NotNull(answer2.Next);
+        Assert.Equal(NextStepType.EndSurvey, answer2.Next.Type);
+        Assert.Null(answer2.Next.NextQuestionId);
+    }
+
+    [Fact]
+    public async Task RatingFlow_AllFiveRatings_CorrectBranching()
+    {
+        // Arrange - Test all 5 rating values branch correctly
+        var survey = Survey.Create("Five Rating Survey", _testUser.Id, "FIVE01", isActive: true);
+        await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
+
+        var q1 = Question.CreateRatingQuestion(
+            surveyId: survey.Id,
+            questionText: "Rate your experience",
+            orderIndex: 0,
+            isRequired: true);
+
+        // Create 5 different next questions (one for each rating)
+        var q2 = Question.CreateTextQuestion(survey.Id, "Q2 - Rating 1", orderIndex: 1, isRequired: false);
+        var q3 = Question.CreateTextQuestion(survey.Id, "Q3 - Rating 2", orderIndex: 2, isRequired: false);
+        var q4 = Question.CreateTextQuestion(survey.Id, "Q4 - Rating 3", orderIndex: 3, isRequired: false);
+        var q5 = Question.CreateTextQuestion(survey.Id, "Q5 - Rating 4", orderIndex: 4, isRequired: false);
+        var q6 = Question.CreateTextQuestion(survey.Id, "Q6 - Rating 5", orderIndex: 5, isRequired: false);
+
+        await _context.Questions.AddRangeAsync(q1, q2, q3, q4, q5, q6);
+        await _context.SaveChangesAsync();
+
+        // Each rating goes to a different question
+        var opt1 = QuestionOption.Create(q1.Id, "1", 0, NextQuestionDeterminant.ToQuestion(q2.Id));
+        var opt2 = QuestionOption.Create(q1.Id, "2", 1, NextQuestionDeterminant.ToQuestion(q3.Id));
+        var opt3 = QuestionOption.Create(q1.Id, "3", 2, NextQuestionDeterminant.ToQuestion(q4.Id));
+        var opt4 = QuestionOption.Create(q1.Id, "4", 3, NextQuestionDeterminant.ToQuestion(q5.Id));
+        var opt5 = QuestionOption.Create(q1.Id, "5", 4, NextQuestionDeterminant.ToQuestion(q6.Id));
+
+        await _context.QuestionOptions.AddRangeAsync(opt1, opt2, opt3, opt4, opt5);
+        await _context.SaveChangesAsync();
+
+        // Act - Test all 5 ratings
+        var expectedNextQuestions = new[] { q2.Id, q3.Id, q4.Id, q5.Id, q6.Id };
+
+        for (int rating = 1; rating <= 5; rating++)
+        {
+            var response = await _responseService.StartResponseAsync(survey.Id, telegramUserId: (long)rating);
+            await _responseService.SaveAnswerAsync(response.Id, q1.Id, ratingValue: rating);
+            await _responseService.RecordVisitedQuestionAsync(response.Id, q1.Id);
+            var next = await _responseService.GetNextQuestionAsync(response.Id);
+
+            // Assert
+            Assert.Equal(expectedNextQuestions[rating - 1], next);
+
+            // Verify answer storage
+            var answer = await _answerRepository.GetByResponseAndQuestionAsync(response.Id, q1.Id);
+            Assert.NotNull(answer);
+            Assert.NotNull(answer.Value);
+            Assert.IsType<RatingAnswerValue>(answer.Value);
+            Assert.Equal(rating, ((RatingAnswerValue)answer.Value).Rating);
+            Assert.NotNull(answer.Next);
+            Assert.Equal(expectedNextQuestions[rating - 1], answer.Next.NextQuestionId);
+        }
+    }
+
+    [Fact]
+    public async Task RatingFlow_BackwardCompatibility_NoQuestionOptions_UsesDefaultNext()
+    {
+        // Arrange - Old-style rating question (no QuestionOptions, just DefaultNext)
+        var survey = Survey.Create("Legacy Rating Survey", _testUser.Id, "LEG01", isActive: true);
+        await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
+
+        var q1 = Question.CreateRatingQuestion(
+            surveyId: survey.Id,
+            questionText: "Rate us (legacy)",
+            orderIndex: 0,
+            isRequired: true);
+
+        var q2 = Question.CreateTextQuestion(
+            surveyId: survey.Id,
+            questionText: "Follow up question",
+            orderIndex: 1,
+            isRequired: false);
+
+        await _context.Questions.AddRangeAsync(q1, q2);
+        await _context.SaveChangesAsync();
+
+        // Set DefaultNext but NO QuestionOptions (backward compatibility)
+        q1.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q2.Id));
+        await _context.SaveChangesAsync();
+
+        // Act - Test all ratings go to same next question
+        for (int rating = 1; rating <= 5; rating++)
+        {
+            var response = await _responseService.StartResponseAsync(survey.Id, telegramUserId: (long)(100 + rating));
+            await _responseService.SaveAnswerAsync(response.Id, q1.Id, ratingValue: rating);
+            await _responseService.RecordVisitedQuestionAsync(response.Id, q1.Id);
+            var next = await _responseService.GetNextQuestionAsync(response.Id);
+
+            // Assert - All ratings should go to Q2
+            Assert.Equal(q2.Id, next);
+
+            var answer = await _answerRepository.GetByResponseAndQuestionAsync(response.Id, q1.Id);
+            Assert.NotNull(answer);
+            Assert.NotNull(answer.Value);
+            Assert.IsType<RatingAnswerValue>(answer.Value);
+            Assert.Equal(rating, ((RatingAnswerValue)answer.Value).Rating);
+            Assert.NotNull(answer.Next);
+            Assert.Equal(q2.Id, answer.Next.NextQuestionId);
+        }
+    }
+
+    [Fact]
+    public async Task RatingFlow_MixedBranching_SomeRatingsSamePath_OthersDifferent()
+    {
+        // Arrange - Realistic survey: Low (1-2) → Feedback, Medium (3) → Survey End, High (4-5) → Thanks
+        var survey = Survey.Create("Mixed Rating Survey", _testUser.Id, "MIX01", isActive: true);
+        await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
+
+        var q1 = Question.CreateRatingQuestion(
+            surveyId: survey.Id,
+            questionText: "How was your experience?",
+            orderIndex: 0,
+            isRequired: true);
+
+        var q2Feedback = Question.CreateTextQuestion(
+            surveyId: survey.Id,
+            questionText: "Sorry to hear that. What can we improve?",
+            orderIndex: 1,
+            isRequired: true);
+
+        var q3Thanks = Question.CreateTextQuestion(
+            surveyId: survey.Id,
+            questionText: "Great! Anything else to share?",
+            orderIndex: 2,
+            isRequired: false);
+
+        await _context.Questions.AddRangeAsync(q1, q2Feedback, q3Thanks);
+        await _context.SaveChangesAsync();
+
+        // Low ratings (1-2) → Feedback
+        var opt1 = QuestionOption.Create(q1.Id, "1", 0, NextQuestionDeterminant.ToQuestion(q2Feedback.Id));
+        var opt2 = QuestionOption.Create(q1.Id, "2", 1, NextQuestionDeterminant.ToQuestion(q2Feedback.Id));
+
+        // Medium rating (3) → End survey
+        var opt3 = QuestionOption.Create(q1.Id, "3", 2, NextQuestionDeterminant.End());
+
+        // High ratings (4-5) → Thanks
+        var opt4 = QuestionOption.Create(q1.Id, "4", 3, NextQuestionDeterminant.ToQuestion(q3Thanks.Id));
+        var opt5 = QuestionOption.Create(q1.Id, "5", 4, NextQuestionDeterminant.ToQuestion(q3Thanks.Id));
+
+        await _context.QuestionOptions.AddRangeAsync(opt1, opt2, opt3, opt4, opt5);
+        await _context.SaveChangesAsync();
+
+        // Act & Assert - Test each rating path
+        // Rating 1 → Feedback
+        var r1 = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 1L);
+        await _responseService.SaveAnswerAsync(r1.Id, q1.Id, ratingValue: 1);
+        await _responseService.RecordVisitedQuestionAsync(r1.Id, q1.Id);
+        Assert.Equal(q2Feedback.Id, await _responseService.GetNextQuestionAsync(r1.Id));
+
+        // Rating 2 → Feedback
+        var r2 = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 2L);
+        await _responseService.SaveAnswerAsync(r2.Id, q1.Id, ratingValue: 2);
+        await _responseService.RecordVisitedQuestionAsync(r2.Id, q1.Id);
+        Assert.Equal(q2Feedback.Id, await _responseService.GetNextQuestionAsync(r2.Id));
+
+        // Rating 3 → End
+        var r3 = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 3L);
+        await _responseService.SaveAnswerAsync(r3.Id, q1.Id, ratingValue: 3);
+        await _responseService.RecordVisitedQuestionAsync(r3.Id, q1.Id);
+        Assert.Null(await _responseService.GetNextQuestionAsync(r3.Id));
+
+        // Rating 4 → Thanks
+        var r4 = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 4L);
+        await _responseService.SaveAnswerAsync(r4.Id, q1.Id, ratingValue: 4);
+        await _responseService.RecordVisitedQuestionAsync(r4.Id, q1.Id);
+        Assert.Equal(q3Thanks.Id, await _responseService.GetNextQuestionAsync(r4.Id));
+
+        // Rating 5 → Thanks
+        var r5 = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 5L);
+        await _responseService.SaveAnswerAsync(r5.Id, q1.Id, ratingValue: 5);
+        await _responseService.RecordVisitedQuestionAsync(r5.Id, q1.Id);
+        Assert.Equal(q3Thanks.Id, await _responseService.GetNextQuestionAsync(r5.Id));
+    }
+
+    [Fact]
+    public async Task RatingFlow_CompleteNPSSurvey_EndToEnd()
+    {
+        // Arrange - Complete NPS survey flow
+        var survey = Survey.Create("Complete NPS", _testUser.Id, "NPS99", isActive: true);
+        await _context.Surveys.AddAsync(survey);
+        await _context.SaveChangesAsync();
+
+        var q1Rating = Question.CreateRatingQuestion(
+            surveyId: survey.Id,
+            questionText: "NPS: Recommend us? (1-5)",
+            orderIndex: 0,
+            isRequired: true);
+
+        var q2Detractor = Question.CreateTextQuestion(
+            surveyId: survey.Id,
+            questionText: "What would make you rate us higher?",
+            orderIndex: 1,
+            isRequired: true);
+
+        var q3Promoter = Question.CreateTextQuestion(
+            surveyId: survey.Id,
+            questionText: "What do you love most?",
+            orderIndex: 2,
+            isRequired: false);
+
+        var q4Final = Question.CreateTextQuestion(
+            surveyId: survey.Id,
+            questionText: "Thank you! Any final thoughts?",
+            orderIndex: 3,
+            isRequired: false);
+
+        await _context.Questions.AddRangeAsync(q1Rating, q2Detractor, q3Promoter, q4Final);
+        await _context.SaveChangesAsync();
+
+        // Set up flows for other questions
+        q2Detractor.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q4Final.Id));
+        q3Promoter.SetDefaultNext(NextQuestionDeterminant.ToQuestion(q4Final.Id));
+        await _context.SaveChangesAsync();
+
+        // Rating 1-3 (Detractors) → Improvement question → Final
+        var opt1 = QuestionOption.Create(q1Rating.Id, "1", 0, NextQuestionDeterminant.ToQuestion(q2Detractor.Id));
+        var opt2 = QuestionOption.Create(q1Rating.Id, "2", 1, NextQuestionDeterminant.ToQuestion(q2Detractor.Id));
+        var opt3 = QuestionOption.Create(q1Rating.Id, "3", 2, NextQuestionDeterminant.ToQuestion(q2Detractor.Id));
+
+        // Rating 4-5 (Promoters) → Love question → Final
+        var opt4 = QuestionOption.Create(q1Rating.Id, "4", 3, NextQuestionDeterminant.ToQuestion(q3Promoter.Id));
+        var opt5 = QuestionOption.Create(q1Rating.Id, "5", 4, NextQuestionDeterminant.ToQuestion(q3Promoter.Id));
+
+        await _context.QuestionOptions.AddRangeAsync(opt1, opt2, opt3, opt4, opt5);
+        await _context.SaveChangesAsync();
+
+        // Act - Complete survey as Detractor (rating 2)
+        var detractorResponse = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 1001L);
+
+        // Answer Q1 with low rating
+        await _responseService.SaveAnswerAsync(detractorResponse.Id, q1Rating.Id, ratingValue: 2);
+        await _responseService.RecordVisitedQuestionAsync(detractorResponse.Id, q1Rating.Id);
+        var next1 = await _responseService.GetNextQuestionAsync(detractorResponse.Id);
+        Assert.Equal(q2Detractor.Id, next1);
+
+        // Answer Q2 (detractor path)
+        await _responseService.SaveAnswerAsync(detractorResponse.Id, q2Detractor.Id, answerText: "Better pricing");
+        await _responseService.RecordVisitedQuestionAsync(detractorResponse.Id, q2Detractor.Id);
+        var next2 = await _responseService.GetNextQuestionAsync(detractorResponse.Id);
+        Assert.Equal(q4Final.Id, next2);
+
+        // Answer Q4 final
+        await _responseService.SaveAnswerAsync(detractorResponse.Id, q4Final.Id, answerText: "Thanks");
+        await _responseService.RecordVisitedQuestionAsync(detractorResponse.Id, q4Final.Id);
+        var next3 = await _responseService.GetNextQuestionAsync(detractorResponse.Id);
+        Assert.Null(next3);
+
+        // Complete response
+        await _responseService.CompleteResponseAsync(detractorResponse.Id);
+
+        // Act - Complete survey as Promoter (rating 5)
+        var promoterResponse = await _responseService.StartResponseAsync(survey.Id, telegramUserId: 1002L);
+
+        // Answer Q1 with high rating
+        await _responseService.SaveAnswerAsync(promoterResponse.Id, q1Rating.Id, ratingValue: 5);
+        await _responseService.RecordVisitedQuestionAsync(promoterResponse.Id, q1Rating.Id);
+        var pNext1 = await _responseService.GetNextQuestionAsync(promoterResponse.Id);
+        Assert.Equal(q3Promoter.Id, pNext1);  // Should skip Q2, go to Q3
+
+        // Answer Q3 (promoter path)
+        await _responseService.SaveAnswerAsync(promoterResponse.Id, q3Promoter.Id, answerText: "Great features!");
+        await _responseService.RecordVisitedQuestionAsync(promoterResponse.Id, q3Promoter.Id);
+        var pNext2 = await _responseService.GetNextQuestionAsync(promoterResponse.Id);
+        Assert.Equal(q4Final.Id, pNext2);
+
+        // Answer Q4 final
+        await _responseService.SaveAnswerAsync(promoterResponse.Id, q4Final.Id, answerText: "Keep it up!");
+        await _responseService.RecordVisitedQuestionAsync(promoterResponse.Id, q4Final.Id);
+        var pNext3 = await _responseService.GetNextQuestionAsync(promoterResponse.Id);
+        Assert.Null(pNext3);
+
+        // Complete response
+        await _responseService.CompleteResponseAsync(promoterResponse.Id);
+
+        // Assert - Verify both paths completed correctly
+        var detractorFinal = await _responseRepository.GetByIdWithAnswersAsync(detractorResponse.Id);
+        Assert.NotNull(detractorFinal);
+        Assert.True(detractorFinal.IsComplete);
+        Assert.Equal(3, detractorFinal.VisitedQuestionIds.Count);  // Q1, Q2, Q4
+        Assert.Contains(q1Rating.Id, detractorFinal.VisitedQuestionIds);
+        Assert.Contains(q2Detractor.Id, detractorFinal.VisitedQuestionIds);
+        Assert.DoesNotContain(q3Promoter.Id, detractorFinal.VisitedQuestionIds);  // Skipped
+        Assert.Contains(q4Final.Id, detractorFinal.VisitedQuestionIds);
+
+        var promoterFinal = await _responseRepository.GetByIdWithAnswersAsync(promoterResponse.Id);
+        Assert.NotNull(promoterFinal);
+        Assert.True(promoterFinal.IsComplete);
+        Assert.Equal(3, promoterFinal.VisitedQuestionIds.Count);  // Q1, Q3, Q4
+        Assert.Contains(q1Rating.Id, promoterFinal.VisitedQuestionIds);
+        Assert.DoesNotContain(q2Detractor.Id, promoterFinal.VisitedQuestionIds);  // Skipped
+        Assert.Contains(q3Promoter.Id, promoterFinal.VisitedQuestionIds);
+        Assert.Contains(q4Final.Id, promoterFinal.VisitedQuestionIds);
     }
 
     #endregion
