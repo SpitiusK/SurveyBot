@@ -11,6 +11,7 @@ using SurveyBot.Core.DTOs.Response;
 using SurveyBot.Core.Entities;
 using SurveyBot.Infrastructure.Data;
 using SurveyBot.Tests.Fixtures;
+using SurveyBot.Tests.Infrastructure;
 
 namespace SurveyBot.Tests.Integration;
 
@@ -18,34 +19,20 @@ namespace SurveyBot.Tests.Integration;
 /// Integration tests for survey response submission flow.
 /// Tests the complete response lifecycle: start response, save answers, complete response.
 /// </summary>
-public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFactoryFixture<Program>>
+/// <remarks>
+/// TEST-FLAKY-AUTH-003 (Phase 2): No longer uses IClassFixture pattern.
+/// Factory is created per test in IntegrationTestBase.InitializeAsync() for complete isolation.
+/// TEST-PARALLEL-001 (Phase 3): Each test method gets a unique database via ResetDatabaseName().
+/// </remarks>
+public class SurveyResponseFlowIntegrationTests : IntegrationTestBase
 {
-    private readonly WebApplicationFactoryFixture<Program> _factory;
-    private readonly HttpClient _client;
-
-    public SurveyResponseFlowIntegrationTests(WebApplicationFactoryFixture<Program> factory)
-    {
-        _factory = factory;
-        _client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
-    }
-
-    private async Task<string> GetAuthTokenAsync(long telegramId = 123456789)
-    {
-        var loginRequest = new LoginRequestDto { TelegramId = telegramId };
-        var response = await _client.PostAsJsonAsync("/api/auth/login", loginRequest);
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<LoginResponseDto>>();
-        return result!.Data!.Token;
-    }
+    // No constructor needed - factory is created per test in InitializeAsync()
 
     [Fact]
     public async Task StartResponse_WithValidSurvey_ReturnsResponseId()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -59,7 +46,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
         });
 
         // Get survey ID
-        using (var scope = _factory.Services.CreateScope())
+        using (var scope = Factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
             var surveyId = db.Surveys.First().Id;
@@ -71,7 +58,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
                 RespondentUsername = "respondent"
             };
 
-            var response = await _client.PostAsJsonAsync($"/api/surveys/{surveyId}/responses", createResponseDto);
+            var response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/responses", createResponseDto);
 
             // Assert
             response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -89,10 +76,10 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
     public async Task SubmitAnswers_ForResponse_Success()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // ClearDatabase() is now called automatically by IntegrationTestBase.InitializeAsync()
         int surveyId = 0, questionId = 0, responseId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -124,7 +111,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
             }
         };
 
-        var response = await _client.PostAsJsonAsync($"/api/responses/{responseId}/answers", submitAnswerDto);
+        var response = await Client.PostAsJsonAsync($"/api/responses/{responseId}/answers", submitAnswerDto);
 
         // Assert
         // API evolved to idempotent upsert pattern - returns 200 OK for create/update
@@ -138,10 +125,10 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
     public async Task CompleteResponse_WithAllRequiredAnswers_Success()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // ClearDatabase() is now called automatically by IntegrationTestBase.InitializeAsync()
         int responseId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -166,7 +153,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
 
         // Act
         var completeDto = new CompleteResponseDto();
-        var response = await _client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
+        var response = await Client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -180,10 +167,10 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
     public async Task CompleteResponse_Twice_IsIdempotent()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // ClearDatabase() is now called automatically by IntegrationTestBase.InitializeAsync()
         int responseId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -212,7 +199,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
 
         // Act - Try to complete again (should be idempotent)
         var completeDto = new CompleteResponseDto();
-        var response = await _client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
+        var response = await Client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
 
         // Assert - Should succeed (idempotent operation)
         // Completing an already-complete response is safe and user-friendly
@@ -224,10 +211,10 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
     public async Task StatisticsUpdated_AfterResponseComplete_Success()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // ClearDatabase() is now called automatically by IntegrationTestBase.InitializeAsync()
         int surveyId = 0, responseId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -251,14 +238,14 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
         });
 
         var token = await GetAuthTokenAsync();
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         // Act - Complete the response
         var completeDto = new CompleteResponseDto();
-        await _client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
+        await Client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
 
         // Get statistics
-        var statsResponse = await _client.GetAsync($"/api/surveys/{surveyId}/statistics");
+        var statsResponse = await Client.GetAsync($"/api/surveys/{surveyId}/statistics");
 
         // Assert
         statsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -272,8 +259,8 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
     public async Task StartResponse_OnInactiveSurvey_ShouldFail()
     {
         // Arrange
-        _factory.ClearDatabase();
-        _factory.SeedDatabase(db =>
+        // ClearDatabase() is now called automatically by IntegrationTestBase.InitializeAsync()
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -284,7 +271,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
         });
 
         // Get survey ID
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
         var surveyId = db.Surveys.First().Id;
 
@@ -294,7 +281,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
             RespondentTelegramId = 999888777
         };
 
-        var response = await _client.PostAsJsonAsync($"/api/surveys/{surveyId}/responses", createResponseDto);
+        var response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/responses", createResponseDto);
 
         // Assert - Should fail because survey is inactive
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -308,10 +295,10 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
     public async Task SaveAnswer_ShouldRecordVisitedQuestion()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // ClearDatabase() is now called automatically by IntegrationTestBase.InitializeAsync()
         int surveyId = 0, questionId = 0, responseId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -343,13 +330,13 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
             }
         };
 
-        var response = await _client.PostAsJsonAsync($"/api/responses/{responseId}/answers", submitAnswerDto);
+        var response = await Client.PostAsJsonAsync($"/api/responses/{responseId}/answers", submitAnswerDto);
 
         // Assert - Response succeeds
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Verify VisitedQuestionIds contains the question
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
         var updatedResponse = db.Responses.First(r => r.Id == responseId);
 
@@ -365,10 +352,10 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
     public async Task CompleteResponse_WithAllRequiredQuestionsAnswered_ShouldSucceed()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // ClearDatabase() is now called automatically by IntegrationTestBase.InitializeAsync()
         int surveyId = 0, question1Id = 0, question2Id = 0, responseId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -405,7 +392,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
         });
 
         // Act - Answer both questions via API
-        await _client.PostAsJsonAsync($"/api/responses/{responseId}/answers", new SubmitAnswerDto
+        await Client.PostAsJsonAsync($"/api/responses/{responseId}/answers", new SubmitAnswerDto
         {
             Answer = new CreateAnswerDto
             {
@@ -414,7 +401,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
             }
         });
 
-        await _client.PostAsJsonAsync($"/api/responses/{responseId}/answers", new SubmitAnswerDto
+        await Client.PostAsJsonAsync($"/api/responses/{responseId}/answers", new SubmitAnswerDto
         {
             Answer = new CreateAnswerDto
             {
@@ -425,7 +412,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
 
         // Complete response
         var completeDto = new CompleteResponseDto();
-        var completeResponse = await _client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
+        var completeResponse = await Client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
 
         // Assert - Should succeed with 200 OK
         completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -434,7 +421,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
         result!.Data!.IsComplete.Should().BeTrue();
 
         // Verify VisitedQuestionIds contains both questions
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
         var updatedResponse = db.Responses.First(r => r.Id == responseId);
 
@@ -454,10 +441,10 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
     public async Task SaveAnswer_TracksVisitedQuestions_ForConditionalFlowValidation()
     {
         // Arrange
-        _factory.ClearDatabase();
+        // ClearDatabase() is now called automatically by IntegrationTestBase.InitializeAsync()
         int surveyId = 0, question1Id = 0, question2Id = 0, responseId = 0;
 
-        _factory.SeedDatabase(db =>
+        SeedDatabase(db =>
         {
             var user = EntityBuilder.CreateUser(telegramId: 123456789);
             db.Users.Add(user);
@@ -494,7 +481,7 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
         });
 
         // Act - Answer only question 1 (in conditional flow, user might skip question 2)
-        await _client.PostAsJsonAsync($"/api/responses/{responseId}/answers", new SubmitAnswerDto
+        await Client.PostAsJsonAsync($"/api/responses/{responseId}/answers", new SubmitAnswerDto
         {
             Answer = new CreateAnswerDto
             {
@@ -506,13 +493,13 @@ public class SurveyResponseFlowIntegrationTests : IClassFixture<WebApplicationFa
         // Try to complete - should succeed because question 2 was never visited
         // In conditional flow, validation only checks VISITED required questions
         var completeDto = new CompleteResponseDto();
-        var completeResponse = await _client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
+        var completeResponse = await Client.PostAsJsonAsync($"/api/responses/{responseId}/complete", completeDto);
 
         // Assert - Should succeed (question 2 was never visited, so not validated)
         completeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Verify VisitedQuestionIds contains only question 1
-        using var scope = _factory.Services.CreateScope();
+        using var scope = Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SurveyBotDbContext>();
         var updatedResponse = db.Responses.First(r => r.Id == responseId);
 

@@ -21,12 +21,13 @@ namespace SurveyBot.Tests.Integration;
 /// Integration tests for end-to-end survey flow.
 /// Tests the complete lifecycle: create survey, add questions, activate, and prevent modifications.
 /// </summary>
+/// <remarks>
+/// TEST-FLAKY-AUTH-003 (Phase 2): No longer uses IClassFixture pattern.
+/// Factory is created per test in IntegrationTestBase.InitializeAsync() for complete isolation.
+/// </remarks>
 public class SurveyFlowIntegrationTests : IntegrationTestBase
 {
-    public SurveyFlowIntegrationTests(WebApplicationFactoryFixture<Program> factory)
-        : base(factory)
-    {
-    }
+    // No constructor needed - factory is created per test in InitializeAsync()
 
     [Fact]
     public async Task CompleteSurveyFlow_CreateAddQuestionsActivate_Success()

@@ -18,12 +18,13 @@ namespace SurveyBot.Tests.Integration.Controllers;
 /// Integration tests for ResponsesController HTTP endpoints.
 /// Tests response submission, answer saving, completion, and listing.
 /// </summary>
+/// <remarks>
+/// TEST-FLAKY-AUTH-003 (Phase 2): No longer uses IClassFixture pattern.
+/// Factory is created per test in IntegrationTestBase.InitializeAsync() for complete isolation.
+/// </remarks>
 public class ResponsesControllerIntegrationTests : IntegrationTestBase
 {
-    public ResponsesControllerIntegrationTests(WebApplicationFactoryFixture<Program> factory)
-        : base(factory)
-    {
-    }
+    // No constructor needed - factory is created per test in InitializeAsync()
 
     [Fact]
     public async Task StartResponse_ForActiveSurvey_Success()

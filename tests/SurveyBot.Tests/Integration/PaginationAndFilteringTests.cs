@@ -18,12 +18,13 @@ namespace SurveyBot.Tests.Integration;
 /// Integration tests for pagination and filtering functionality.
 /// Tests pagination, search, and filtering across surveys and responses.
 /// </summary>
+/// <remarks>
+/// TEST-FLAKY-AUTH-003 (Phase 2): No longer uses IClassFixture pattern.
+/// Factory is created per test in IntegrationTestBase.InitializeAsync() for complete isolation.
+/// </remarks>
 public class PaginationAndFilteringTests : IntegrationTestBase
 {
-    public PaginationAndFilteringTests(WebApplicationFactoryFixture<Program> factory)
-        : base(factory)
-    {
-    }
+    // No constructor needed - factory is created per test in InitializeAsync()
 
     [Fact]
     public async Task SurveyList_WithPagination_ReturnsCorrectPage()

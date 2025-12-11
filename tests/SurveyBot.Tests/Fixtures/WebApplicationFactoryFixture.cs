@@ -8,6 +8,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore.Storage;
 using SurveyBot.Infrastructure.Data;
+using System.Collections.Concurrent;
+// ConditionalWeakTable removed - replaced with ConcurrentDictionary (TEST-FAIL-AUTH-004)
 
 namespace SurveyBot.Tests.Fixtures;
 
@@ -17,15 +19,51 @@ namespace SurveyBot.Tests.Fixtures;
 /// </summary>
 public class WebApplicationFactoryFixture<TProgram> : WebApplicationFactory<TProgram> where TProgram : class
 {
-    private readonly string _databaseName;
-    private readonly InMemoryDatabaseRoot _databaseRoot;
+    // Fix TEST-FAIL-AUTH-004: Store database name at instance level instead of AsyncLocal
+    // AsyncLocal doesn't reliably flow through CreateScope() calls, causing new database names
+    // Each factory instance (one per test) gets its own database name, set during InitializeAsync
+    private string? _databaseName;
 
-    public WebApplicationFactoryFixture()
+    // Fix TEST-FAIL-AUTH-004: Use ConcurrentDictionary instead of ConditionalWeakTable
+    // ConditionalWeakTable uses reference equality for strings, causing scope mismatch issues
+    // ConcurrentDictionary uses value equality (string content), ensuring same root for same DB name
+    // Each database name gets its own root for auto-increment isolation
+    private readonly ConcurrentDictionary<string, InMemoryDatabaseRoot> _databaseRoots
+        = new ConcurrentDictionary<string, InMemoryDatabaseRoot>();
+
+    /// <summary>
+    /// Gets or creates a unique database name for the current async context (test method).
+    /// Uses AsyncLocal to ensure thread-safe per-test-method isolation.
+    /// </summary>
+    /// <returns>Unique database name for this test method</returns>
+    public string GetOrCreateDatabaseName()
     {
-        // Use a unique database name for each test run
-        _databaseName = Guid.NewGuid().ToString();
-        // Share the in-memory database root to ensure proper isolation
-        _databaseRoot = new InMemoryDatabaseRoot();
+        if (_databaseName == null)
+        {
+            _databaseName = $"TestDb_{Guid.NewGuid():N}"; // :N for compact format (no hyphens)
+        }
+        return _databaseName;
+    }
+
+    /// <summary>
+    /// Resets the database name for the current factory instance.
+    /// Called by IntegrationTestBase.InitializeAsync() before each test method.
+    /// This ensures each test method gets a fresh unique database.
+    /// </summary>
+    public void ResetDatabaseName()
+    {
+        _databaseName = null;
+    }
+
+    /// <summary>
+    /// Gets or creates the InMemoryDatabaseRoot for the specified database name.
+    /// Uses ConcurrentDictionary.GetOrAdd to ensure thread-safe access with value equality.
+    /// </summary>
+    /// <param name="databaseName">The database name (uses string value equality)</param>
+    /// <returns>The InMemoryDatabaseRoot for this database</returns>
+    private InMemoryDatabaseRoot GetOrCreateDatabaseRoot(string databaseName)
+    {
+        return _databaseRoots.GetOrAdd(databaseName, _ => new InMemoryDatabaseRoot());
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -82,18 +120,29 @@ public class WebApplicationFactoryFixture<TProgram> : WebApplicationFactory<TPro
         // Set environment to Testing
         builder.UseEnvironment("Testing");
 
-        builder.ConfigureServices(services =>
+        builder.ConfigureServices((context, services) =>
         {
             // Program.cs skips DbContext registration in Testing environment
             // so we can safely register our InMemory database here
             services.AddDbContext<SurveyBotDbContext>(options =>
             {
-                options.UseInMemoryDatabase(_databaseName, _databaseRoot);
+                // Get or create unique InMemoryDatabaseRoot for this database name
+                // This isolates auto-increment counters between tests
+                // Fix TEST-FAIL-AUTH-004: Use GetOrCreateDatabaseRoot (ConcurrentDictionary) for value equality
+                var databaseName = GetOrCreateDatabaseName();
+                var root = GetOrCreateDatabaseRoot(databaseName);
+
+                options.UseInMemoryDatabase(databaseName, root);
                 options.EnableSensitiveDataLogging();
-                // Suppress transaction warning - InMemory database doesn't support transactions
-                // but all operations are atomic by default, so this is safe for testing
+                // Suppress warnings for test scenarios
                 options.ConfigureWarnings(warnings =>
-                    warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning));
+                {
+                    // InMemory database doesn't support transactions, but operations are atomic by default
+                    warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning);
+                    // TEST-FLAKY-AUTH-003 (Phase 2): Suppress ManyServiceProvidersCreated warning
+                    // Creating multiple factories per test is expected for complete test isolation
+                    warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.ManyServiceProvidersCreatedWarning);
+                });
             });
 
             // Remove any existing hosted services (background tasks)
@@ -153,6 +202,18 @@ public class WebApplicationFactoryFixture<TProgram> : WebApplicationFactory<TPro
                 logging.SetMinimumLevel(LogLevel.Warning);
             });
 
+            // Fix TEST-FLAKY-AUTH-002: Eager JWT configuration binding (eliminates race condition)
+            // Register JwtSettings as singleton with Options.Create to guarantee immediate availability
+            // This replaces async IOptions<T> binding that caused 90% test failure rate
+            var jwtSettings = new SurveyBot.Core.Configuration.JwtSettings
+            {
+                SecretKey = "SurveyBot-Super-Secret-Key-For-JWT-Token-Generation-2025-Change-In-Production",
+                Issuer = "SurveyBot.API",
+                Audience = "SurveyBot.Clients",
+                TokenLifetimeHours = 24
+            };
+            services.AddSingleton(Microsoft.Extensions.Options.Options.Create(jwtSettings));
+
             // Note: Database is created on demand by the InMemory provider
         });
     }
@@ -182,9 +243,20 @@ public class WebApplicationFactoryFixture<TProgram> : WebApplicationFactory<TPro
     /// </summary>
     public void SeedDatabase(Action<SurveyBotDbContext> seedAction)
     {
+        // Get the unique InMemoryDatabaseRoot for this database name
+        // Fix TEST-FAIL-AUTH-004: Use GetOrCreateDatabaseRoot (ConcurrentDictionary) for value equality
+        var databaseName = GetOrCreateDatabaseName();
+        var root = GetOrCreateDatabaseRoot(databaseName);
+
         // Create a fresh DbContext directly to avoid the dual-provider issue
         var options = new DbContextOptionsBuilder<SurveyBotDbContext>()
-            .UseInMemoryDatabase(_databaseName, _databaseRoot)
+            .UseInMemoryDatabase(databaseName, root)
+            .ConfigureWarnings(warnings =>
+            {
+                warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning);
+                // TEST-FLAKY-AUTH-003 (Phase 2): Suppress warning for instance-per-test pattern
+                warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.ManyServiceProvidersCreatedWarning);
+            })
             .Options;
 
         using var db = new SurveyBotDbContext(options);
@@ -193,24 +265,37 @@ public class WebApplicationFactoryFixture<TProgram> : WebApplicationFactory<TPro
     }
 
     /// <summary>
-    /// Clears all data from the database.
+    /// Clears all data from the database and resets auto-increment counters.
     /// </summary>
+    /// <remarks>
+    /// Uses EnsureDeleted() + EnsureCreated() to reset auto-increment sequences.
+    /// Fix TEST-FLAKY-AUTH-002: Now uses unique InMemoryDatabaseRoot per database name,
+    /// ensuring true isolation of auto-increment counters between tests.
+    /// </remarks>
     public void ClearDatabase()
     {
+        // Get the unique InMemoryDatabaseRoot for this database name
+        // Fix TEST-FAIL-AUTH-004: Use GetOrCreateDatabaseRoot (ConcurrentDictionary) for value equality
+        var databaseName = GetOrCreateDatabaseName();
+        var root = GetOrCreateDatabaseRoot(databaseName);
+
         // Create a fresh DbContext directly to avoid the dual-provider issue
         var options = new DbContextOptionsBuilder<SurveyBotDbContext>()
-            .UseInMemoryDatabase(_databaseName, _databaseRoot)
+            .UseInMemoryDatabase(databaseName, root)
+            .ConfigureWarnings(warnings =>
+            {
+                warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning);
+                // TEST-FLAKY-AUTH-003 (Phase 2): Suppress warning for instance-per-test pattern
+                warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.ManyServiceProvidersCreatedWarning);
+            })
             .Options;
 
         using var db = new SurveyBotDbContext(options);
 
-        db.Answers.RemoveRange(db.Answers);
-        db.Responses.RemoveRange(db.Responses);
-        db.Questions.RemoveRange(db.Questions);
-        db.Surveys.RemoveRange(db.Surveys);
-        db.Users.RemoveRange(db.Users);
-
-        db.SaveChanges();
+        // Drop and recreate database to reset auto-increment counters
+        // This ensures User.Id, Survey.Id, etc. always start at 1 for each test
+        db.Database.EnsureDeleted();
+        db.Database.EnsureCreated();
     }
 }
 

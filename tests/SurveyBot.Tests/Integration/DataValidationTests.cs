@@ -19,12 +19,13 @@ namespace SurveyBot.Tests.Integration;
 /// Integration tests for data validation.
 /// Tests validation of various invalid inputs and error conditions.
 /// </summary>
+/// <remarks>
+/// TEST-FLAKY-AUTH-003 (Phase 2): No longer uses IClassFixture pattern.
+/// Factory is created per test in IntegrationTestBase.InitializeAsync() for complete isolation.
+/// </remarks>
 public class DataValidationTests : IntegrationTestBase
 {
-    public DataValidationTests(WebApplicationFactoryFixture<Program> factory)
-        : base(factory)
-    {
-    }
+    // No constructor needed - factory is created per test in InitializeAsync()
 
     [Fact]
     public async Task CreateSurvey_WithoutTitle_ShouldFail()

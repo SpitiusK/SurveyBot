@@ -27,7 +27,51 @@ public class AuthService : IAuthService
         ILogger<AuthService> logger)
     {
         _userRepository = userRepository;
+
+        // Fix TEST-FLAKY-AUTH-002: Defensive validation for JWT configuration
+        // Ensure JwtSettings were properly bound before service resolution
+        if (jwtSettings?.Value == null)
+        {
+            throw new InvalidOperationException(
+                "JWT configuration not loaded. Ensure JwtSettings are registered in DI container.");
+        }
+
         _jwtSettings = jwtSettings.Value;
+
+        // Fix TEST-FLAKY-AUTH-002: Validate JWT settings properties
+        // Ensures configuration is complete and meets minimum security requirements
+        if (string.IsNullOrWhiteSpace(_jwtSettings.SecretKey))
+        {
+            throw new InvalidOperationException(
+                "JWT SecretKey is null or empty. Configure JwtSettings:SecretKey in appsettings.json.");
+        }
+
+        if (_jwtSettings.SecretKey.Length < 32)
+        {
+            throw new InvalidOperationException(
+                $"JWT SecretKey is too short ({_jwtSettings.SecretKey.Length} bytes). " +
+                "Minimum 32 bytes required for HS256 algorithm.");
+        }
+
+        if (string.IsNullOrWhiteSpace(_jwtSettings.Issuer))
+        {
+            throw new InvalidOperationException(
+                "JWT Issuer is null or empty. Configure JwtSettings:Issuer in appsettings.json.");
+        }
+
+        if (string.IsNullOrWhiteSpace(_jwtSettings.Audience))
+        {
+            throw new InvalidOperationException(
+                "JWT Audience is null or empty. Configure JwtSettings:Audience in appsettings.json.");
+        }
+
+        if (_jwtSettings.TokenLifetimeHours <= 0)
+        {
+            throw new InvalidOperationException(
+                $"JWT TokenLifetimeHours is invalid ({_jwtSettings.TokenLifetimeHours}). " +
+                "Must be greater than 0.");
+        }
+
         _logger = logger;
     }
 

@@ -8,32 +8,34 @@ using SurveyBot.Tests.Fixtures;
 namespace SurveyBot.Tests.Infrastructure;
 
 /// <summary>
-/// Base class for integration tests that provides database isolation and common utilities.
-/// Each test starts with a clean database to ensure test independence.
+/// Base class for integration tests that provides complete test isolation with instance-per-test factory.
+/// Each test method gets its own WebApplicationFactory, TestServer, ServiceProvider, and database.
 /// </summary>
 /// <remarks>
-/// This base class addresses TEST-FAIL-001: Database State Pollution and TEST-FAIL-002: HttpClient Header Pollution issues.
-/// By implementing IAsyncLifetime, each test method gets a fresh HttpClient instance with no shared state.
-/// By calling ClearDatabase() in InitializeAsync(), each test gets a fresh database state.
+/// This base class addresses multiple test isolation issues:
+/// - TEST-FAIL-001: Database State Pollution - Each test gets a unique database
+/// - TEST-FAIL-002: HttpClient Header Pollution - Each test gets a fresh HttpClient
+/// - TEST-FLAKY-AUTH-003 (Phase 2): Factory/TestServer Isolation - Each test gets its own factory instance
+///
+/// By implementing IAsyncLifetime, each test method creates and disposes its own factory,
+/// ensuring complete isolation of TestServer, ServiceProvider, and JWT middleware state.
 /// </remarks>
-public abstract class IntegrationTestBase : IClassFixture<WebApplicationFactoryFixture<Program>>, IAsyncLifetime
+public abstract class IntegrationTestBase : IAsyncLifetime
 {
-    protected readonly WebApplicationFactoryFixture<Program> Factory;
+    private WebApplicationFactoryFixture<Program>? _factory;
     private HttpClient? _client;
 
     /// <summary>
-    /// Gets the HttpClient for the current test. Creates a new instance lazily if needed.
+    /// Gets the WebApplicationFactory for the current test. Created during InitializeAsync().
+    /// Each test method receives its own factory instance for complete isolation.
+    /// </summary>
+    protected WebApplicationFactoryFixture<Program> Factory => _factory!;
+
+    /// <summary>
+    /// Gets the HttpClient for the current test. Created during InitializeAsync().
     /// Each test method receives a fresh HttpClient with no shared state.
     /// </summary>
-    protected HttpClient Client => _client ??= CreateClient();
-
-    protected IntegrationTestBase(WebApplicationFactoryFixture<Program> factory)
-    {
-        Factory = factory;
-
-        // Explicitly ensure server is started before tests run
-        Factory.EnsureServerStarted();
-    }
+    protected HttpClient Client => _client!;
 
     /// <summary>
     /// Creates a new HttpClient instance for the test.
@@ -48,30 +50,64 @@ public abstract class IntegrationTestBase : IClassFixture<WebApplicationFactoryF
     }
 
     /// <summary>
-    /// Called before each test method runs. Ensures a clean HttpClient and database state.
+    /// Called before each test method runs. Creates a new factory, TestServer, HttpClient, and database.
     /// </summary>
+    /// <remarks>
+    /// TEST-FLAKY-AUTH-003 (Phase 2): Creates a NEW factory instance per test method for complete isolation.
+    /// TEST-PARALLEL-001 (Phase 3): Calls ResetDatabaseName() to ensure each test method
+    /// gets a unique database, enabling safe parallel test execution without race conditions.
+    /// </remarks>
     public Task InitializeAsync()
     {
-        // Dispose old client if it exists
-        _client?.Dispose();
-        _client = null;
+        // Create NEW factory per test (instance-per-test pattern)
+        // This ensures complete isolation of TestServer, ServiceProvider, and JWT middleware state
+        _factory = new WebApplicationFactoryFixture<Program>();
+
+        // Fix TEST-PARALLEL-001 (Phase 3): Reset database name BEFORE server starts
+        // This ensures the server and all subsequent operations use the same unique database
+        _factory.ResetDatabaseName();
+
+        // Ensure server is started AFTER database name is set
+        // This ensures ConfigureServices uses the correct database name from AsyncLocal
+        _factory.EnsureServerStarted();
 
         // Clear database before each test to ensure isolation
+        // Now uses the unique database name set above
         ClearDatabase();
+
+        // Create client AFTER factory setup
+        _client = CreateClient();
 
         return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Called after each test method completes. Cleans up HttpClient resources.
+    /// Called after each test method completes. Cleans up HttpClient, TestServer, and factory resources.
     /// </summary>
-    public Task DisposeAsync()
+    /// <remarks>
+    /// TEST-FLAKY-AUTH-003 (Phase 2): Disposes the factory to clean up TestServer and ServiceProvider.
+    /// This ensures no shared state leaks between test methods.
+    /// </remarks>
+    public async Task DisposeAsync()
     {
-        // Clean up HttpClient after each test
+        // Clear authorization header (defensive cleanup)
+        if (_client != null)
+        {
+            _client.DefaultRequestHeaders.Authorization = null;
+            _client.DefaultRequestHeaders.Clear();
+        }
+
+        // Dispose HttpClient
         _client?.Dispose();
         _client = null;
 
-        return Task.CompletedTask;
+        // CRITICAL: Dispose factory to clean up TestServer and ServiceProvider
+        // This prevents Authorization header pollution and JWT middleware state leakage
+        if (_factory != null)
+        {
+            await _factory.DisposeAsync();
+            _factory = null;
+        }
     }
 
     /// <summary>

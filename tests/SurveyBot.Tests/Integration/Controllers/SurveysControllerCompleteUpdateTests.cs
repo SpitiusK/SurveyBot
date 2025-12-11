@@ -24,12 +24,13 @@ namespace SurveyBot.Tests.Integration.Controllers;
 /// - Success: Complete update, new question IDs, metadata changes
 /// - Errors: Survey not found, cycle detection
 /// </summary>
+/// <remarks>
+/// TEST-FLAKY-AUTH-003 (Phase 2): No longer uses IClassFixture pattern.
+/// Factory is created per test in IntegrationTestBase.InitializeAsync() for complete isolation.
+/// </remarks>
 public class SurveysControllerCompleteUpdateTests : IntegrationTestBase
 {
-    public SurveysControllerCompleteUpdateTests(WebApplicationFactoryFixture<Program> factory)
-        : base(factory)
-    {
-    }
+    // No constructor needed - factory is created per test in InitializeAsync()
 
     #region Helper Methods
 

@@ -21,12 +21,13 @@ namespace SurveyBot.Tests.Integration.Controllers;
 /// Tests HTTP endpoints for flow configuration, validation, and navigation.
 /// TEST-003: 10+ API endpoint tests for Conditional Question Flow feature.
 /// </summary>
+/// <remarks>
+/// TEST-FLAKY-AUTH-003 (Phase 2): No longer uses IClassFixture pattern.
+/// Factory is created per test in IntegrationTestBase.InitializeAsync() for complete isolation.
+/// </remarks>
 public class QuestionFlowControllerIntegrationTests : IntegrationTestBase
 {
-    public QuestionFlowControllerIntegrationTests(WebApplicationFactoryFixture<Program> factory)
-        : base(factory)
-    {
-    }
+    // No constructor needed - factory is created per test in InitializeAsync()
 
     #region Test Helper Methods
 

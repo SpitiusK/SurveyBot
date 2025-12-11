@@ -15,15 +15,12 @@ namespace SurveyBot.Tests.Integration.Controllers;
 /// Tests full CRUD cycle, authorization, and validation.
 /// </summary>
 /// <remarks>
-/// Inherits from IntegrationTestBase to ensure proper server initialization
-/// via EnsureServerStarted() and database isolation via ClearDatabase().
+/// TEST-FLAKY-AUTH-003 (Phase 2): No longer uses IClassFixture pattern.
+/// Factory is created per test in IntegrationTestBase.InitializeAsync() for complete isolation.
 /// </remarks>
 public class SurveysControllerIntegrationTests : IntegrationTestBase
 {
-    public SurveysControllerIntegrationTests(WebApplicationFactoryFixture<Program> factory)
-        : base(factory)
-    {
-    }
+    // No constructor needed - factory is created per test in InitializeAsync()
 
     [Fact]
     public async Task FullCrudCycle_CreateReadUpdateDelete_Success()
