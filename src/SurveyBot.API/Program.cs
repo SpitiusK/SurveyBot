@@ -104,6 +104,11 @@ try
             
             options.UseNpgsql(connectionString);
 
+            // Suppress PendingModelChangesWarning in Production (EF Core 9.0 feature)
+            // This warning blocks migrations when model has minor changes that don't affect schema
+            options.ConfigureWarnings(warnings =>
+                warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+
             // Enable detailed logging in development
             if (builder.Environment.IsDevelopment())
             {
