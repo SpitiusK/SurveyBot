@@ -44,24 +44,67 @@
 
 ## Quick Start Guide
 
-### Prerequisites
+### Two Setup Options
 
-**REQUIRED**:
+**Option 1: Docker (Recommended)** - Run entire stack with one command
+- See [Docker Quick Start](DOCKER_QUICKSTART.md) for fastest setup
+- Includes frontend, backend, and database
+- **5 minutes to running application**
+
+**Option 2: Local Development** - Run backend only (for development)
+- Requires .NET 8.0 SDK and manual database setup
+- Suitable for API/backend development
+
+---
+
+### Option 1: Docker Setup (Recommended)
+
+**Prerequisites**:
+1. Docker Desktop - [Download](https://www.docker.com/products/docker-desktop)
+2. Telegram Bot Token - Get from [@BotFather](https://t.me/botfather)
+
+**Quick Start**:
+```bash
+# 1. Clone & navigate
+git clone <repository-url>
+cd SurveyBot
+
+# 2. Configure bot token in docker-compose.yml
+# Edit line 37: BotConfiguration__BotToken=YOUR_TOKEN_HERE
+
+# 3. Start everything (frontend + backend + database)
+docker-compose up -d
+
+# Wait 2-3 minutes for build to complete
+```
+
+**Access Points**:
+- Frontend: http://localhost:3000
+- API (via proxy): http://localhost:3000/api
+- pgAdmin: http://localhost:5050
+
+**For complete Docker guide**: See [DOCKER_SETUP.md](DOCKER_SETUP.md)
+
+---
+
+### Option 2: Local Development Setup
+
+**Prerequisites**:
 1. .NET 8.0 SDK - [Download](https://dotnet.microsoft.com/download)
-2. Docker Desktop - [Download](https://www.docker.com/products/docker-desktop)
+2. Docker Desktop (for PostgreSQL only)
 3. Telegram Bot Token - Get from [@BotFather](https://t.me/botfather)
 
-### 5-Minute Setup
+**5-Minute Setup**:
 
 ```bash
 # 1. Clone & navigate
 git clone <repository-url>
 cd SurveyBot
 
-# 2. Start PostgreSQL
-docker-compose up -d
+# 2. Start PostgreSQL only
+docker-compose up -d postgres
 
-# 3. Configure bot token (edit appsettings.Development.json)
+# 3. Configure bot token (edit src/SurveyBot.API/appsettings.Development.json)
 {
   "BotConfiguration": {
     "BotToken": "YOUR_BOT_TOKEN_HERE",
@@ -74,7 +117,7 @@ docker-compose up -d
 cd src/SurveyBot.API
 dotnet ef database update
 
-# 5. Run
+# 5. Run API
 dotnet run
 ```
 

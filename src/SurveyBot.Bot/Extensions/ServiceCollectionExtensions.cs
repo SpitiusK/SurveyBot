@@ -75,16 +75,29 @@ public static class ServiceCollectionExtensions
             // Setup webhook if enabled in configuration
             if (botConfig.UseWebhook)
             {
-                logger.LogInformation("Webhook mode enabled, setting up webhook...");
-                var webhookSet = await botService.SetWebhookAsync(cancellationToken);
-
-                if (webhookSet)
+                // Check if webhook URL is configured
+                // If empty, webhook will be registered externally (e.g., by webhook-registrar container)
+                if (string.IsNullOrWhiteSpace(botConfig.WebhookUrl))
                 {
-                    logger.LogInformation("Webhook configured successfully");
+                    logger.LogInformation(
+                        "Webhook mode enabled but WebhookUrl is empty. " +
+                        "Webhook will be registered externally (e.g., by webhook-registrar container). " +
+                        "Bot will listen for incoming webhooks on {WebhookPath}",
+                        botConfig.WebhookPath);
                 }
                 else
                 {
-                    logger.LogWarning("Failed to configure webhook");
+                    logger.LogInformation("Webhook mode enabled, setting up webhook...");
+                    var webhookSet = await botService.SetWebhookAsync(cancellationToken);
+
+                    if (webhookSet)
+                    {
+                        logger.LogInformation("Webhook configured successfully");
+                    }
+                    else
+                    {
+                        logger.LogWarning("Failed to configure webhook");
+                    }
                 }
             }
             else

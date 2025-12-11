@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -34,14 +32,17 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=surveybot_db;Username=surveybot_user;Password=surveybot_dev_password;Timeout=30;CommandTimeout=30;Pooling=true;MinPoolSize=0;MaxPoolSize=100;
-      - BotConfiguration__BotToken=8540672675:AAHX9frxfMqVRoGEKspNj5Nxlm9JIodtG1Q
+      - BotConfiguration__BotToken=${BOT_TOKEN:-8540672675:AAHX9frxfMqVRoGEKspNj5Nxlm9JIodtG1Q}
+      # Webhook registration is handled by webhook-registrar container
+      # API just needs to listen for incoming webhooks, not register them
       - BotConfiguration__UseWebhook=true
-      - BotConfiguration__WebhookUrl=https://4fb96e092b87.ngrok-free.app
+      - BotConfiguration__WebhookUrl=
       - BotConfiguration__WebhookPath=/api/bot/webhook
-      - BotConfiguration__WebhookSecret=SurveyBot_Secret_NgrokWebhook_2025_SecureKey123123
-      - BotConfiguration__ApiBaseUrl=https://4fb96e092b87.ngrok-free.app
-    ports:
-      - "5000:8080"
+      - BotConfiguration__WebhookSecret=${WEBHOOK_SECRET:-SurveyBot_Webhook_Secret_2025_SecureKey}
+      # ApiBaseUrl needed for internal bot-to-API communication (navigation, survey queries)
+      - BotConfiguration__ApiBaseUrl=http://surveybot-api:8080
+    expose:
+      - "8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,6 +50,37 @@ services:
       - surveybot-network
     volumes:
       - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/db || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Use relative /api path - Nginx will proxy to backend
+        - VITE_API_BASE_URL=/api
+        - VITE_APP_NAME=SurveyBot Admin Panel
+        - VITE_APP_VERSION=1.0.0
+    container_name: surveybot-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - surveybot-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -67,6 +99,47 @@ services:
       - surveybot-network
     depends_on:
       - postgres
+
+  # Ngrok tunnels for external access (Telegram webhooks, remote testing)
+  # Creates public URLs for API and Frontend services
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: surveybot-ngrok
+    restart: unless-stopped
+    command: start --all --config /etc/ngrok.yml
+    volumes:
+      - ./ngrok.yml:/etc/ngrok.yml:ro
+    ports:
+      # Ngrok web interface for viewing tunnel URLs
+      - "4040:4040"
+    networks:
+      - surveybot-network
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+
+  # Webhook registrar - automatically registers Telegram webhook after ngrok starts
+  # This container runs once, registers the webhook, and exits
+  webhook-registrar:
+    image: curlimages/curl:latest
+    container_name: surveybot-webhook-registrar
+    restart: "no"
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN:-8540672675:AAHX9frxfMqVRoGEKspNj5Nxlm9JIodtG1Q}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-SurveyBot_Webhook_Secret_2025_SecureKey}
+      - NGROK_API_URL=http://ngrok:4040
+    volumes:
+      - ./scripts/register-webhook.sh:/register-webhook.sh:ro
+    entrypoint: ["/bin/sh", "/register-webhook.sh"]
+    networks:
+      - surveybot-network
+    depends_on:
+      ngrok:
+        condition: service_started
+      api:
+        condition: service_healthy
 
 networks:
   surveybot-network:

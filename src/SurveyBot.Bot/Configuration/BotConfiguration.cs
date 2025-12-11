@@ -79,6 +79,11 @@ public class BotConfiguration
     /// Validates the configuration settings.
     /// </summary>
     /// <returns>True if configuration is valid, false otherwise.</returns>
+    /// <remarks>
+    /// When UseWebhook=true but WebhookUrl is empty, the bot expects webhook
+    /// registration to be handled externally (e.g., by a webhook-registrar container).
+    /// In this case, the bot will listen for incoming webhooks but won't register them.
+    /// </remarks>
     public bool IsValid(out List<string> errors)
     {
         errors = new List<string>();
@@ -90,27 +95,22 @@ public class BotConfiguration
 
         if (UseWebhook)
         {
-            if (string.IsNullOrWhiteSpace(WebhookUrl))
-            {
-                errors.Add("WebhookUrl is required when UseWebhook is enabled");
-            }
-
+            // WebhookUrl is optional - if empty, webhook registration is handled externally
+            // (e.g., by webhook-registrar container in Docker setup)
             if (!string.IsNullOrWhiteSpace(WebhookUrl) && !Uri.TryCreate(WebhookUrl, UriKind.Absolute, out _))
             {
                 errors.Add("WebhookUrl must be a valid absolute URL");
             }
 
+            // WebhookSecret is required for security when receiving webhooks
             if (string.IsNullOrWhiteSpace(WebhookSecret))
             {
                 errors.Add("WebhookSecret is required when UseWebhook is enabled");
             }
         }
 
-        if (string.IsNullOrWhiteSpace(ApiBaseUrl))
-        {
-            errors.Add("ApiBaseUrl is required");
-        }
-
+        // ApiBaseUrl is optional - only needed for internal API calls
+        // When empty, bot can still function for receiving webhooks
         if (!string.IsNullOrWhiteSpace(ApiBaseUrl) && !Uri.TryCreate(ApiBaseUrl, UriKind.Absolute, out _))
         {
             errors.Add("ApiBaseUrl must be a valid absolute URL");

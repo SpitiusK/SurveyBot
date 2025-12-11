@@ -1,0 +1,23 @@
+# Ngrok Configuration for SurveyBot Docker
+# This file configures ngrok tunnels for the API and Frontend services
+# running inside the Docker network.
+#
+# Usage: This file is mounted into the ngrok container and used automatically.
+# The authtoken is provided via NGROK_AUTHTOKEN environment variable.
+
+version: "3"
+agent:
+  authtoken: 330qAeZpYhoHFJAaB4pGVCKaSFK_78Q5xC5aPQiYHqrqjxqPJ
+
+tunnels:
+  # API tunnel - for Telegram webhook
+  # Points to the API container's internal Docker address
+  api:
+    proto: http
+    addr: surveybot-api:8080
+
+  # Frontend tunnel - for external access to admin panel
+  # Points to the frontend container's internal Docker address
+  frontend:
+    proto: http
+    addr: surveybot-frontend:80
