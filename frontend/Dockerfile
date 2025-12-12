@@ -31,10 +31,10 @@ ENV VITE_APP_VERSION=${VITE_APP_VERSION}
 
 # Build the application (skip TypeScript type checking, use Vite directly)
 # The project has pre-existing TS errors that don't affect runtime
-# Optimized for low-memory VPS: reduced heap + esbuild minifier (faster, less RAM)
-ENV NODE_OPTIONS="--max-old-space-size=768"
+# Set high memory limit for build
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 ENV NODE_ENV=production
-RUN npx vite build --minify esbuild
+RUN npx vite build
 
 # ================================================
 # Stage 2: Serve with Nginx
