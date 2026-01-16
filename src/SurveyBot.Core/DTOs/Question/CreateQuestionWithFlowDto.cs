@@ -39,6 +39,13 @@ public class CreateQuestionWithFlowDto : IValidatableObject
     public bool IsRequired { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether this question should be displayed in statistics.
+    /// If false, the question will be excluded from the frontend statistics dashboard.
+    /// Defaults to true.
+    /// </summary>
+    public bool IncludeInStatistics { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the position of this question in the survey (0-based).
     /// Questions are displayed in ascending order by OrderIndex.
     /// </summary>

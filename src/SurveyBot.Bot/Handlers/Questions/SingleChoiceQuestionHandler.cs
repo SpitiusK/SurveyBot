@@ -283,6 +283,11 @@ public class SingleChoiceQuestionHandler : IQuestionHandler
                 callbackData: $"nav_skip_q{question.Id}"));
         }
 
+        // Cancel button (always)
+        navigationRow.Add(InlineKeyboardButton.WithCallbackData(
+            text: "❌ Cancel",
+            callbackData: "nav_cancel"));
+
         if (navigationRow.Count > 0)
         {
             buttons.Add(navigationRow.ToArray());

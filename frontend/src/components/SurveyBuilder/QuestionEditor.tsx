@@ -81,6 +81,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
       questionText: question?.questionText || '',
       questionType: question?.questionType ?? QuestionType.Text,
       isRequired: question?.isRequired ?? true,
+      includeInStatistics: question?.includeInStatistics ?? true, // NEW v1.6.3
       options: question?.options || [],
       defaultNextQuestionId: question?.defaultNextQuestionId || null,
       optionNextQuestions: question?.optionNextQuestions || {},
@@ -126,6 +127,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         questionText: question.questionText,
         questionType: question.questionType,
         isRequired: question.isRequired,
+        includeInStatistics: question.includeInStatistics ?? true, // NEW v1.6.3
         options: question.options,
         defaultNextQuestionId: question.defaultNextQuestionId || null,
         optionNextQuestions: question.optionNextQuestions || {},
@@ -136,6 +138,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         questionText: '',
         questionType: QuestionType.Text,
         isRequired: true,
+        includeInStatistics: true, // NEW v1.6.3
         options: [],
         defaultNextQuestionId: null,
         optionNextQuestions: {},
@@ -266,6 +269,7 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
         questionText: data.questionText,
         questionType: data.questionType,
         isRequired: data.isRequired ?? true,
+        includeInStatistics: data.includeInStatistics ?? true, // NEW v1.6.3
         options:
           data.questionType === QuestionType.SingleChoice ||
           data.questionType === QuestionType.MultipleChoice
@@ -616,6 +620,18 @@ const QuestionEditor: React.FC<QuestionEditorProps> = ({
                 <FormControlLabel
                   control={<Switch {...field} checked={field.value} />}
                   label="Required question"
+                />
+              )}
+            />
+
+            {/* Include in Statistics Toggle - NEW v1.6.3 */}
+            <Controller
+              name="includeInStatistics"
+              control={control}
+              render={({ field }) => (
+                <FormControlLabel
+                  control={<Switch {...field} checked={field.value} />}
+                  label="Display in statistics"
                 />
               )}
             />

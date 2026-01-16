@@ -74,6 +74,7 @@ export interface Question {
   questionType: QuestionType;
   orderIndex: number;
   isRequired: boolean;
+  includeInStatistics: boolean; // NEW v1.6.3: Whether to include in statistics dashboard
   options: string[] | null;
   optionDetails?: QuestionOption[] | null; // Detailed option info with IDs
   defaultNext?: NextQuestionDeterminant | null;
@@ -138,6 +139,7 @@ export interface CreateQuestionWithFlowDto {
   questionText: string;
   questionType: QuestionType; // 0=Text, 1=SingleChoice, 2=MultipleChoice, 3=Rating, 4=Location, 5=Number, 6=Date
   isRequired: boolean;
+  includeInStatistics?: boolean; // NEW v1.6.3: Default true
   orderIndex: number;
   options?: string[] | null; // For choice questions
   mediaContent?: MediaContentDto | null; // Deserialized MediaContentDto object (will be serialized by backend)
@@ -163,6 +165,7 @@ export interface CreateQuestionDto {
   questionText: string;
   questionType: QuestionType;
   isRequired: boolean;
+  includeInStatistics?: boolean; // NEW v1.6.3: Default true
   options?: string[];
   defaultNext?: NextQuestionDeterminant | null; // For conditional flow
   mediaContent?: string | null; // JSON string of MediaContentDto
@@ -171,6 +174,7 @@ export interface CreateQuestionDto {
 export interface UpdateQuestionDto {
   questionText?: string;
   isRequired?: boolean;
+  includeInStatistics?: boolean; // NEW v1.6.3
   options?: string[];
   defaultNext?: NextQuestionDeterminant | null; // For conditional flow
   mediaContent?: string | null; // JSON string of MediaContentDto
@@ -181,9 +185,21 @@ export interface Answer {
   id: number;
   responseId: number;
   questionId: number;
-  answerText: string | null;
-  answerData: Record<string, unknown>;
-  displayValue?: string | null;
+  questionText?: string;           // From AnswerDto: question context
+  questionType?: QuestionType;     // From AnswerDto: question type context
+  answerText: string | null;       // For Text questions
+
+  // Type-specific answer properties matching backend AnswerDto
+  selectedOptions?: string[] | null;  // For SingleChoice/MultipleChoice
+  ratingValue?: number | null;        // For Rating (1-5)
+  numberValue?: number | null;        // For Number questions
+  dateValue?: string | null;          // For Date questions (ISO format)
+  latitude?: number | null;           // For Location
+  longitude?: number | null;          // For Location
+  locationAccuracy?: number | null;   // For Location
+  locationTimestamp?: string | null;  // For Location
+
+  displayValue?: string | null;       // Pre-computed display value from backend
   createdAt: string;
 }
 
@@ -350,6 +366,7 @@ export interface QuestionDraft {
   questionText: string;
   questionType: QuestionType;
   isRequired: boolean;
+  includeInStatistics?: boolean; // NEW v1.6.3: Default true - whether to show in statistics
   options: string[]; // For SingleChoice/MultipleChoice; empty for Rating (uses implicit 1-5 values)
   orderIndex: number;
   mediaContent?: import('./media').MediaContentDto | null; // Deserialized MediaContentDto object

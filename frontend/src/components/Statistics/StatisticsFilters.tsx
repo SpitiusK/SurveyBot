@@ -6,6 +6,7 @@ interface StatisticsFiltersProps {
     status: 'all' | 'complete' | 'incomplete';
     dateFrom: Date | null;
     dateTo: Date | null;
+    questionDisplay: 'all' | 'included' | 'excluded'; // NEW v1.6.3: Filter by includeInStatistics
   };
   onFilterChange: (filters: any) => void;
   onReset: () => void;
@@ -26,6 +27,11 @@ const StatisticsFilters = ({ filters, onFilterChange, onReset }: StatisticsFilte
     onFilterChange({ ...filters, dateTo: value });
   };
 
+  // NEW v1.6.3: Handler for question display filter
+  const handleQuestionDisplayChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    onFilterChange({ ...filters, questionDisplay: event.target.value });
+  };
+
   const formatDateForInput = (date: Date | null) => {
     if (!date) return '';
     const year = date.getFullYear();
@@ -35,7 +41,10 @@ const StatisticsFilters = ({ filters, onFilterChange, onReset }: StatisticsFilte
   };
 
   const hasActiveFilters =
-    filters.status !== 'all' || filters.dateFrom !== null || filters.dateTo !== null;
+    filters.status !== 'all' ||
+    filters.dateFrom !== null ||
+    filters.dateTo !== null ||
+    filters.questionDisplay !== 'all'; // NEW v1.6.3
 
   return (
     <Box>
@@ -77,6 +86,20 @@ const StatisticsFilters = ({ filters, onFilterChange, onReset }: StatisticsFilte
           InputLabelProps={{ shrink: true }}
           sx={{ minWidth: 180 }}
         />
+
+        {/* NEW v1.6.3: Question Display Filter */}
+        <TextField
+          select
+          label="Question Display"
+          value={filters.questionDisplay}
+          onChange={handleQuestionDisplayChange}
+          size="small"
+          sx={{ minWidth: 200 }}
+        >
+          <MenuItem value="all">All Questions</MenuItem>
+          <MenuItem value="included">Display in Statistics</MenuItem>
+          <MenuItem value="excluded">Excluded from Statistics</MenuItem>
+        </TextField>
 
         {hasActiveFilters && (
           <Button

@@ -67,6 +67,7 @@ const baseQuestionSchema = z.object({
   questionText: questionTextSchema,
   questionType: z.nativeEnum(QuestionType),
   isRequired: z.boolean(),
+  includeInStatistics: z.boolean().optional(), // NEW v1.6.3: Whether to include in statistics dashboard
   orderIndex: z.number().int().min(0),
 });
 
@@ -133,18 +134,14 @@ export const questionDraftSchema = z.object({
   questionText: questionTextSchema,
   questionType: z.nativeEnum(QuestionType),
   isRequired: z.boolean(),
+  includeInStatistics: z.boolean().optional(), // NEW v1.6.3: Default true in UI
   options: z.array(optionSchema).optional(),
   orderIndex: z.number().int().min(0),
   mediaContent: z.any().optional().nullable(), // MediaContentDto object
   defaultNextQuestionId: z.string().nullable().optional(),
-  // Fix: Make optionNextQuestions accept empty objects, null, undefined, or proper Record
+  // Simplified schema: z.record() handles all cases (empty objects, populated records, null, undefined)
   optionNextQuestions: z
-    .union([
-      z.record(z.string().nullable()), // Valid conditional flow config
-      z.object({}).optional(), // Empty object for no config
-      z.null(), // Null
-      z.undefined(), // Undefined
-    ])
+    .record(z.string(), z.string().nullable())
     .optional()
     .nullable(),
 });
@@ -161,16 +158,12 @@ export const questionEditorFormSchema = z
     questionText: questionTextSchema,
     questionType: z.nativeEnum(QuestionType),
     isRequired: z.boolean().default(true),
+    includeInStatistics: z.boolean().default(true), // NEW v1.6.3: Default to include in statistics
     options: z.array(optionSchema).optional(),
     defaultNextQuestionId: z.string().nullable().optional(),
-    // Fix: Make optionNextQuestions accept empty objects, null, undefined, or proper Record
+    // Simplified schema: z.record() handles all cases (empty objects, populated records, null, undefined)
     optionNextQuestions: z
-      .union([
-        z.record(z.string().nullable()), // Valid conditional flow config
-        z.object({}).optional(), // Empty object for no config
-        z.null(), // Null
-        z.undefined(), // Undefined
-      ])
+      .record(z.string(), z.string().nullable())
       .optional()
       .nullable(),
   })

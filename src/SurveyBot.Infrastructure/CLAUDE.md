@@ -90,6 +90,7 @@ public override Task<int> SaveChangesAsync(CancellationToken cancellationToken =
 **QuestionConfiguration** - `Data/Configurations/QuestionConfiguration.cs`:
 - OptionsJson: JSONB with GIN index (PostgreSQL-specific)
 - MediaContent: JSONB with GIN index for multimedia metadata (NEW in v1.3.0)
+- IncludeInStatistics: BOOLEAN with default TRUE (NEW in v1.6.3 - controls frontend statistics display)
 - Composite unique index: `(SurveyId, OrderIndex)` prevents duplicates
 - Check constraint: `order_index >= 0`
 - Check constraint: `question_type IN ('text', 'multiple_choice', 'single_choice', 'rating', 'yes_no', 'location')`
@@ -833,12 +834,16 @@ Task<SurveyDto> UpdateSurveyWithQuestionsAsync(
 - SurveyValidationException - Empty questions, invalid indexes
 - SurveyCycleException - Flow creates infinite loop
 
-**GetSurveyStatisticsAsync**:
+**GetSurveyStatisticsAsync** (UPDATED in v1.6.3):
 - Total/completed/incomplete responses
 - Completion rate percentage
 - Average completion time (seconds)
 - Unique respondents count
 - Per-question statistics
+- **NEW in v1.6.3**: Respects `IncludeInStatistics` flag - questions with `IncludeInStatistics = false` are excluded from `QuestionStatistics` list
+  - Filtering occurs in `CalculateQuestionStatisticsAsync` method
+  - Pattern: `if (!question.IncludeInStatistics) continue;`
+  - Empty result if all questions excluded (acceptable for MVP)
 
 **GetSurveyByCodeAsync**:
 - Public endpoint (no auth required)
@@ -1207,6 +1212,7 @@ dotnet ef migrations script --project ../SurveyBot.Infrastructure
 6. **RemoveNextQuestionFKConstraints** - Removes problematic FK constraints (v1.4.0)
 7. **CleanSlateNextQuestionDeterminant** - **DESTRUCTIVE** clean slate migration to value objects (v1.4.1)
 8. **AnswerNextStepValueObject** - **DATA PRESERVING** Answer.Next value object migration (v1.4.2)
+9. **AddIncludeInStatisticsToQuestion** - Adds `include_in_statistics` BOOLEAN column with DEFAULT TRUE (v1.6.3)
 
 **Migration v1.4.2 Details** (AnswerNextStepValueObject):
 - **Type**: DATA PRESERVING (transforms existing data)
@@ -1333,7 +1339,7 @@ CREATE INDEX idx_surveys_creator_is_active ON surveys(creator_id, is_active);  -
 CREATE INDEX idx_surveys_created_at_desc ON surveys(created_at DESC);  -- Descending
 ```
 
-**questions** (11 columns + 2 value object columns):
+**questions** (12 columns + 2 value object columns):
 ```sql
 CREATE TABLE questions (
     id SERIAL PRIMARY KEY,
@@ -1343,6 +1349,7 @@ CREATE TABLE questions (
     order_index INT NOT NULL,
     options_json JSONB,
     is_required BOOLEAN NOT NULL DEFAULT TRUE,
+    include_in_statistics BOOLEAN NOT NULL DEFAULT TRUE,  -- NEW v1.6.3: Include in frontend statistics
     media_content JSONB,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
@@ -1861,4 +1868,4 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 ---
 
-**Last Updated**: 2025-12-02 | **Version**: 1.6.2 (ResponseService EndSurvey Bug Fix)
+**Last Updated**: 2025-12-29 | **Version**: 1.6.3 (IncludeInStatistics Feature)

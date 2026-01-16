@@ -14,42 +14,80 @@
  */
 
 /**
- * Backend API ngrok URL
- * Used for all API requests to the backend
- *
- * Set to your ngrok URL when using remote access:
- * Example: https://abc123def45.ngrok-free.app
+ * Safely get environment variable (works in both browser and Node.js build context)
+ * import.meta.env is undefined during Vite config loading in Node.js
  */
-export const BACKEND_NGROK_URL = 'https://4fb96e092b87.ngrok-free.app';
+const getEnvVar = (key: string): string | undefined => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (import.meta as any)?.env?.[key];
+  } catch {
+    return undefined;
+  }
+};
 
 /**
- * Frontend ngrok URL (if running frontend on ngrok)
- * Used in Vite config for CORS allowedHosts
- * Leave as empty string if not using ngrok for frontend
+ * Backend API ngrok URL (for Vite dev server CORS allowedHosts only)
+ *
+ * NOTE: This is NOT used for API calls anymore!
+ * API calls use relative /api path, which nginx proxies to the backend.
+ * This constant is only used for Vite dev server CORS configuration.
+ *
+ * The ngrok URL here can be stale - it won't affect production functionality.
  */
-export const FRONTEND_NGROK_URL = 'https://7e31d418b2ac.ngrok-free.app';
+export const BACKEND_NGROK_URL = getEnvVar('VITE_BACKEND_NGROK_URL') ||
+  'placeholder.ngrok-free.app';
+
+/**
+ * Frontend ngrok URL (for Vite dev server CORS allowedHosts only)
+ *
+ * NOTE: This is NOT critical for production.
+ * Only used in Vite dev server config for allowedHosts.
+ */
+export const FRONTEND_NGROK_URL = getEnvVar('VITE_FRONTEND_NGROK_URL') ||
+  'placeholder.ngrok-free.app';
 
 /**
  * Get the API base URL based on environment
  *
- * - If accessing via ngrok frontend: use ngrok backend URL
- * - If accessing via localhost: use localhost backend URL
- * - Production: Set via environment variables
+ * Priority:
+ * 1. Docker deployment: Use relative /api path (nginx proxies to backend)
+ * 2. ngrok access: Use relative /api path (nginx proxies to backend)
+ * 3. Explicit env var: Use VITE_API_BASE_URL if set
+ * 4. Local development: Use localhost:5000/api
+ *
+ * Key insight: nginx is configured to proxy /api/* to the backend container,
+ * so we don't need separate ngrok URLs - relative paths work for both
+ * localhost and ngrok access!
  */
 export const getApiBaseUrl = (): string => {
-  const customUrl = import.meta.env.VITE_API_BASE_URL;
+  const customUrl = getEnvVar('VITE_API_BASE_URL');
 
-  // Check if we're accessing the frontend via ngrok
-  // If so, we must use the ngrok backend URL (localhost won't work from ngrok)
+  // For Docker deployment (VITE_API_BASE_URL=/api):
+  // Use relative /api path - nginx proxies to backend container
+  // This works for both localhost:3000 and ngrok access!
+  if (customUrl === '/api') {
+    console.log('Using nginx proxy for API (relative /api path)');
+    return '/api';
+  }
+
+  // For ngrok access without Docker's /api env var:
+  // Still use relative path - nginx handles the routing
   if (typeof window !== 'undefined') {
     const currentHost = window.location.hostname;
 
-    // If accessing via ngrok, use ngrok backend URL
     if (currentHost.includes('ngrok-free.app') ||
         currentHost.includes('ngrok.app') ||
         currentHost.includes('ngrok.io')) {
-      console.log('Detected ngrok access, using ngrok backend URL:', `${BACKEND_NGROK_URL}/api`);
-      return `${BACKEND_NGROK_URL}/api`;
+      // Check if explicit ngrok URL is configured via env var (advanced use case)
+      const ngrokUrl = getEnvVar('VITE_BACKEND_NGROK_URL');
+      if (ngrokUrl) {
+        console.log('Using explicit ngrok backend URL:', `${ngrokUrl}/api`);
+        return `${ngrokUrl}/api`;
+      }
+      // Default: use relative path (nginx proxy) - works automatically!
+      console.log('Detected ngrok access, using nginx proxy (relative /api path)');
+      return '/api';
     }
   }
 
@@ -58,7 +96,7 @@ export const getApiBaseUrl = (): string => {
     return customUrl;
   }
 
-  // Default: use localhost for local development
+  // Default: use localhost for local development without Docker
   return 'http://localhost:5000/api';
 };
 
@@ -110,3 +148,17 @@ export const validateNgrokConfig = (): { valid: boolean; message: string } => {
     message: 'ngrok configuration is valid',
   };
 };
+
+/**
+ * Log configuration on startup (development only)
+ * Helps debug API URL configuration
+ */
+if (typeof window !== 'undefined' && getEnvVar('DEV')) {
+  console.log('='.repeat(50));
+  console.log('Frontend API Configuration');
+  console.log('='.repeat(50));
+  console.log('VITE_API_BASE_URL:', getEnvVar('VITE_API_BASE_URL') || '(not set)');
+  console.log('Resolved API base URL:', getApiBaseUrl());
+  console.log('Environment mode:', getEnvVar('MODE'));
+  console.log('='.repeat(50));
+}

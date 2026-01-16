@@ -228,4 +228,176 @@ public class QuestionsControllerIntegrationTests : IntegrationTestBase
         getResult.Data[1].Id.Should().Be(questionIds[1]);
         getResult.Data[2].Id.Should().Be(questionIds[0]);
     }
+
+    #region IncludeInStatistics Integration Tests
+
+    [Fact]
+    public async Task CreateQuestion_WithIncludeInStatisticsTrue_Success()
+    {
+        // Arrange
+        int surveyId = 0;
+
+        SeedDatabase(db =>
+        {
+            var user = EntityBuilder.CreateUser(telegramId: 123456789);
+            db.Users.Add(user);
+            db.SaveChanges();
+
+            var survey = EntityBuilder.CreateSurvey(creatorId: user.Id, isActive: false);
+            db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
+        });
+
+        var token = await GetAuthTokenAsync();
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act - Create with explicit true
+        var createDto = new CreateQuestionDto
+        {
+            QuestionText = "Question included in statistics",
+            QuestionType = QuestionType.Text,
+            IsRequired = true,
+            IncludeInStatistics = true
+        };
+
+        var response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", createDto);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var result = await response.Content.ReadFromJsonAsync<ApiResponse<QuestionDto>>();
+        result!.Data!.IncludeInStatistics.Should().BeTrue(
+            because: "the question should be included in statistics when explicitly set to true");
+    }
+
+    [Fact]
+    public async Task CreateQuestion_WithIncludeInStatisticsFalse_Success()
+    {
+        // Arrange
+        int surveyId = 0;
+
+        SeedDatabase(db =>
+        {
+            var user = EntityBuilder.CreateUser(telegramId: 123456789);
+            db.Users.Add(user);
+            db.SaveChanges();
+
+            var survey = EntityBuilder.CreateSurvey(creatorId: user.Id, isActive: false);
+            db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
+        });
+
+        var token = await GetAuthTokenAsync();
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act - Create with explicit false
+        var createDto = new CreateQuestionDto
+        {
+            QuestionText = "Question excluded from statistics",
+            QuestionType = QuestionType.Rating,
+            IsRequired = false,
+            IncludeInStatistics = false
+        };
+
+        var response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", createDto);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var result = await response.Content.ReadFromJsonAsync<ApiResponse<QuestionDto>>();
+        result!.Data!.IncludeInStatistics.Should().BeFalse(
+            because: "the question should be excluded from statistics when explicitly set to false");
+    }
+
+    [Fact]
+    public async Task CreateQuestion_DefaultsToIncludeInStatisticsTrue()
+    {
+        // Arrange
+        int surveyId = 0;
+
+        SeedDatabase(db =>
+        {
+            var user = EntityBuilder.CreateUser(telegramId: 123456789);
+            db.Users.Add(user);
+            db.SaveChanges();
+
+            var survey = EntityBuilder.CreateSurvey(creatorId: user.Id, isActive: false);
+            db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
+        });
+
+        var token = await GetAuthTokenAsync();
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act - Create WITHOUT specifying IncludeInStatistics (should default to true)
+        var createDto = new CreateQuestionDto
+        {
+            QuestionText = "Question with default statistics setting",
+            QuestionType = QuestionType.Text,
+            IsRequired = true
+            // IncludeInStatistics not specified - should default to true
+        };
+
+        var response = await Client.PostAsJsonAsync($"/api/surveys/{surveyId}/questions", createDto);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var result = await response.Content.ReadFromJsonAsync<ApiResponse<QuestionDto>>();
+        result!.Data!.IncludeInStatistics.Should().BeTrue(
+            because: "questions should default to being included in statistics");
+    }
+
+    [Fact]
+    public async Task UpdateQuestion_ChangesIncludeInStatistics_Success()
+    {
+        // Arrange
+        int surveyId = 0, questionId = 0;
+
+        SeedDatabase(db =>
+        {
+            var user = EntityBuilder.CreateUser(telegramId: 123456789);
+            db.Users.Add(user);
+            db.SaveChanges();
+
+            var survey = EntityBuilder.CreateSurvey(creatorId: user.Id, isActive: false);
+            db.Surveys.Add(survey);
+            db.SaveChanges();
+            surveyId = survey.Id;
+
+            // Create question with IncludeInStatistics = true (default)
+            var question = EntityBuilder.CreateQuestion(
+                surveyId: survey.Id,
+                questionText: "Original Question",
+                includeInStatistics: true);
+            db.Questions.Add(question);
+            db.SaveChanges();
+            questionId = question.Id;
+        });
+
+        var token = await GetAuthTokenAsync();
+        Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // Act - Update to exclude from statistics
+        var updateDto = new UpdateQuestionDto
+        {
+            QuestionText = "Updated Question",
+            IsRequired = true,
+            IncludeInStatistics = false
+        };
+
+        var response = await Client.PutAsJsonAsync($"/api/questions/{questionId}", updateDto);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await response.Content.ReadFromJsonAsync<ApiResponse<QuestionDto>>();
+        result!.Data!.IncludeInStatistics.Should().BeFalse(
+            because: "the question's IncludeInStatistics should be updated to false");
+    }
+
+    #endregion
 }

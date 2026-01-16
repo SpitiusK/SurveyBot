@@ -715,21 +715,21 @@ public class SurveysController : ControllerBase
     [HttpGet("{id}/statistics")]
     [SwaggerOperation(
         Summary = "Get survey statistics",
-        Description = "Gets comprehensive statistics for a survey including response rates, completion times, and question-level analytics.",
+        Description = "Gets comprehensive statistics for a survey including response rates, completion times, and question-level analytics. Use includeAllQuestions=true to include statistics for questions marked as excluded from statistics.",
         Tags = new[] { "Surveys" }
     )]
     [ProducesResponseType(typeof(ApiResponse<SurveyStatisticsDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<SurveyStatisticsDto>>> GetSurveyStatistics(int id)
+    public async Task<ActionResult<ApiResponse<SurveyStatisticsDto>>> GetSurveyStatistics(int id, [FromQuery] bool includeAllQuestions = false)
     {
         try
         {
             var userId = GetUserIdFromClaims();
-            _logger.LogInformation("Getting statistics for survey {SurveyId} for user {UserId}", id, userId);
+            _logger.LogInformation("Getting statistics for survey {SurveyId} for user {UserId} (includeAllQuestions={IncludeAllQuestions})", id, userId, includeAllQuestions);
 
-            var statistics = await _surveyService.GetSurveyStatisticsAsync(id, userId);
+            var statistics = await _surveyService.GetSurveyStatisticsAsync(id, userId, includeAllQuestions);
 
             return Ok(ApiResponse<SurveyStatisticsDto>.Ok(statistics));
         }

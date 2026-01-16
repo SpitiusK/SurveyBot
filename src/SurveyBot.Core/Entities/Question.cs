@@ -45,6 +45,14 @@ public class Question : BaseEntity
     public bool IsRequired { get; private set; } = true;
 
     /// <summary>
+    /// Gets a value indicating whether this question should be displayed in statistics.
+    /// If false, the question will be excluded from the frontend statistics dashboard.
+    /// Defaults to true (questions are shown in statistics by default).
+    /// </summary>
+    [Required]
+    public bool IncludeInStatistics { get; private set; } = true;
+
+    /// <summary>
     /// Gets the JSON options for choice-based questions.
     /// Stored as JSONB in PostgreSQL for efficient querying.
     /// </summary>
@@ -121,6 +129,7 @@ public class Question : BaseEntity
     /// <param name="optionsJson">JSON options for choice-based questions (optional)</param>
     /// <param name="mediaContent">Media content metadata (optional)</param>
     /// <param name="defaultNext">Default next question determinant for conditional flow (optional)</param>
+    /// <param name="includeInStatistics">Whether to include this question in statistics (default: true)</param>
     /// <returns>New question instance with validated data</returns>
     /// <exception cref="ArgumentException">If surveyId is not positive, questionText is empty, or orderIndex is negative</exception>
     public static Question Create(
@@ -131,7 +140,8 @@ public class Question : BaseEntity
         bool isRequired = true,
         string? optionsJson = null,
         string? mediaContent = null,
-        NextQuestionDeterminant? defaultNext = null)
+        NextQuestionDeterminant? defaultNext = null,
+        bool includeInStatistics = true)
     {
         if (surveyId <= 0)
             throw new ArgumentException("Survey ID must be positive", nameof(surveyId));
@@ -149,7 +159,8 @@ public class Question : BaseEntity
             IsRequired = isRequired,
             OptionsJson = optionsJson,
             MediaContent = mediaContent,
-            DefaultNext = defaultNext
+            DefaultNext = defaultNext,
+            IncludeInStatistics = includeInStatistics
         };
 
         return question;
@@ -292,6 +303,16 @@ public class Question : BaseEntity
     public void UpdateIsRequired(bool isRequired)
     {
         IsRequired = isRequired;
+        MarkAsModified();
+    }
+
+    /// <summary>
+    /// Updates whether this question should be included in statistics.
+    /// </summary>
+    /// <param name="includeInStatistics">Whether to include in statistics</param>
+    public void SetIncludeInStatistics(bool includeInStatistics)
+    {
+        IncludeInStatistics = includeInStatistics;
         MarkAsModified();
     }
 

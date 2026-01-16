@@ -215,6 +215,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
             questionText: q.questionText,
             questionType: q.questionType,
             isRequired: q.isRequired,
+            includeInStatistics: q.includeInStatistics ?? true, // NEW v1.6.3
             orderIndex: index,
             options: (q.questionType === 1 || q.questionType === 2) ? q.options ?? null : null,
             mediaContent: q.mediaContent ?? null, // Send as object, axios will serialize
@@ -284,6 +285,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
             questionText: q.questionText,
             questionType: q.questionType,
             isRequired: q.isRequired,
+            includeInStatistics: q.includeInStatistics ?? true, // NEW v1.6.3
             orderIndex: index,
             options: (q.questionType === 1 || q.questionType === 2) ? q.options ?? null : null,
             mediaContent: q.mediaContent ?? null, // Send as object, axios will serialize

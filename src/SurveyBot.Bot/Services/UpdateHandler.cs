@@ -716,8 +716,15 @@ public class UpdateHandler : IUpdateHandler
         CallbackQuery callbackQuery,
         CancellationToken cancellationToken)
     {
-        // Parse navigation callback: "nav_back_q{questionId}" or "nav_skip_q{questionId}"
+        // Parse navigation callback: "nav_back_q{questionId}", "nav_skip_q{questionId}", or "nav_cancel"
         var data = callbackQuery.Data;
+
+        // Handle immediate cancel (no confirmation)
+        if (data == "nav_cancel")
+        {
+            return await _cancelCallbackHandler.HandleImmediateCancelAsync(callbackQuery, cancellationToken);
+        }
+
         var isBack = data.StartsWith("nav_back_");
         var isSkip = data.StartsWith("nav_skip_");
 

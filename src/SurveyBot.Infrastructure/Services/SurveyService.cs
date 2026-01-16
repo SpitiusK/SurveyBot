@@ -210,7 +210,8 @@ public class SurveyService : ISurveyService
                     isRequired: questionDto.IsRequired,
                     optionsJson: questionDto.Options != null ? JsonSerializer.Serialize(questionDto.Options) : null,
                     mediaContent: questionDto.MediaContent != null ? JsonSerializer.Serialize(questionDto.MediaContent) : null,
-                    defaultNext: null); // No flow yet
+                    defaultNext: null, // No flow yet
+                    includeInStatistics: questionDto.IncludeInStatistics); // NEW: Pass from DTO
 
                 // Save to get database ID
                 var createdQuestion = await _questionRepository.CreateAsync(question);
@@ -780,9 +781,9 @@ public class SurveyService : ISurveyService
     }
 
     /// <inheritdoc/>
-    public async Task<SurveyStatisticsDto> GetSurveyStatisticsAsync(int surveyId, int userId)
+    public async Task<SurveyStatisticsDto> GetSurveyStatisticsAsync(int surveyId, int userId, bool includeAllQuestions = false)
     {
-        _logger.LogInformation("Getting statistics for survey {SurveyId} requested by user {UserId}", surveyId, userId);
+        _logger.LogInformation("Getting statistics for survey {SurveyId} requested by user {UserId} (includeAllQuestions={IncludeAllQuestions})", surveyId, userId, includeAllQuestions);
 
         // Get survey with questions and responses
         var survey = await _surveyRepository.GetByIdWithDetailsAsync(surveyId);
@@ -837,7 +838,7 @@ public class SurveyService : ISurveyService
         }
 
         // Calculate question-level statistics
-        statistics.QuestionStatistics = await CalculateQuestionStatisticsAsync(survey.Questions.ToList(), completedResponses);
+        statistics.QuestionStatistics = await CalculateQuestionStatisticsAsync(survey.Questions.ToList(), completedResponses, includeAllQuestions);
 
         _logger.LogInformation("Statistics calculated for survey {SurveyId}", surveyId);
 
@@ -946,12 +947,22 @@ public class SurveyService : ISurveyService
     /// </summary>
     private async Task<List<QuestionStatisticsDto>> CalculateQuestionStatisticsAsync(
         List<Question> questions,
-        List<Response> completedResponses)
+        List<Response> completedResponses,
+        bool includeAllQuestions = false)
     {
         var statistics = new List<QuestionStatisticsDto>();
 
         foreach (var question in questions.OrderBy(q => q.OrderIndex))
         {
+            // Skip questions excluded from statistics (only if includeAllQuestions is false)
+            if (!includeAllQuestions && !question.IncludeInStatistics)
+            {
+                _logger.LogDebug(
+                    "Skipping question {QuestionId} from statistics (IncludeInStatistics = false)",
+                    question.Id);
+                continue;
+            }
+
             var questionStat = new QuestionStatisticsDto
             {
                 QuestionId = question.Id,

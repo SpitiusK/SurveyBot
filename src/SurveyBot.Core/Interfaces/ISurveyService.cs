@@ -84,10 +84,11 @@ public interface ISurveyService
     /// </summary>
     /// <param name="surveyId">The ID of the survey.</param>
     /// <param name="userId">The ID of the user requesting statistics.</param>
+    /// <param name="includeAllQuestions">Whether to include statistics for questions excluded from statistics (includeInStatistics=false). Default: false.</param>
     /// <returns>Survey statistics including question breakdowns.</returns>
     /// <exception cref="SurveyNotFoundException">Thrown when the survey is not found.</exception>
     /// <exception cref="UnauthorizedAccessException">Thrown when the user doesn't own the survey.</exception>
-    Task<SurveyStatisticsDto> GetSurveyStatisticsAsync(int surveyId, int userId);
+    Task<SurveyStatisticsDto> GetSurveyStatisticsAsync(int surveyId, int userId, bool includeAllQuestions = false);
 
     /// <summary>
     /// Checks if a user owns a specific survey.

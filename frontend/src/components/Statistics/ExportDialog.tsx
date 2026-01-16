@@ -21,6 +21,9 @@ export interface ExportOptions {
   includeMetadata: boolean;
   includeTimestamps: boolean;
   exportFormat: 'all' | 'completed' | 'incomplete';
+  questionFilter: 'all' | 'statistics_only';
+  delimiter: ',' | ';';  // CSV delimiter - semicolon recommended for Russian/European Excel
+  encoding: 'utf-8' | 'windows-1251';  // File encoding - Windows-1251 for Russian Excel
 }
 
 interface ExportDialogProps {
@@ -31,6 +34,8 @@ interface ExportDialogProps {
   completedCount: number;
   incompleteCount: number;
   surveyTitle: string;
+  totalQuestionCount: number;
+  statisticsQuestionCount: number;
 }
 
 const ExportDialog = ({
@@ -41,11 +46,16 @@ const ExportDialog = ({
   completedCount,
   incompleteCount,
   surveyTitle,
+  totalQuestionCount,
+  statisticsQuestionCount,
 }: ExportDialogProps) => {
   const [options, setOptions] = useState<ExportOptions>({
     includeMetadata: true,
     includeTimestamps: true,
     exportFormat: 'completed',
+    questionFilter: 'all',
+    delimiter: ';',  // Default semicolon for Russian/European Excel compatibility
+    encoding: 'windows-1251',  // Default Windows-1251 for Russian Excel compatibility
   });
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +178,44 @@ const ExportDialog = ({
           </RadioGroup>
         </Box>
 
+        {/* Question Filter */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Question Filter
+          </Typography>
+          <RadioGroup
+            value={options.questionFilter}
+            onChange={(e) =>
+              setOptions({ ...options, questionFilter: e.target.value as 'all' | 'statistics_only' })
+            }
+          >
+            <FormControlLabel
+              value="all"
+              control={<Radio />}
+              label={
+                <Box>
+                  <Typography variant="body2">All Questions</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {totalQuestionCount} {totalQuestionCount === 1 ? 'question' : 'questions'}
+                  </Typography>
+                </Box>
+              }
+            />
+            <FormControlLabel
+              value="statistics_only"
+              control={<Radio />}
+              label={
+                <Box>
+                  <Typography variant="body2">Display in Statistics Only</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {statisticsQuestionCount} {statisticsQuestionCount === 1 ? 'question' : 'questions'}
+                  </Typography>
+                </Box>
+              }
+            />
+          </RadioGroup>
+        </Box>
+
         {/* Additional Options */}
         <Box sx={{ mb: 2 }}>
           <Typography variant="subtitle2" gutterBottom>
@@ -199,6 +247,62 @@ const ExportDialog = ({
               label="Include timestamps"
             />
           </Tooltip>
+        </Box>
+
+        {/* Delimiter Selection */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            CSV Delimiter
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            Use semicolon for Russian/European Excel locales to display Cyrillic correctly
+          </Typography>
+          <RadioGroup
+            row
+            value={options.delimiter}
+            onChange={(e) =>
+              setOptions({ ...options, delimiter: e.target.value as ',' | ';' })
+            }
+          >
+            <FormControlLabel
+              value=";"
+              control={<Radio />}
+              label="Semicolon (;) - Recommended"
+            />
+            <FormControlLabel
+              value=","
+              control={<Radio />}
+              label="Comma (,) - Standard"
+            />
+          </RadioGroup>
+        </Box>
+
+        {/* Encoding Selection */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            File Encoding
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            Windows-1251 for Russian Excel, UTF-8 for Google Sheets/LibreOffice
+          </Typography>
+          <RadioGroup
+            row
+            value={options.encoding}
+            onChange={(e) =>
+              setOptions({ ...options, encoding: e.target.value as 'utf-8' | 'windows-1251' })
+            }
+          >
+            <FormControlLabel
+              value="windows-1251"
+              control={<Radio />}
+              label="Windows-1251 (Excel RU)"
+            />
+            <FormControlLabel
+              value="utf-8"
+              control={<Radio />}
+              label="UTF-8 (Universal)"
+            />
+          </RadioGroup>
         </Box>
 
         {exportCount > 1000 && (

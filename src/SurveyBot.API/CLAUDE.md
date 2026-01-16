@@ -735,10 +735,12 @@ public class UpdateQuestionFlowDto
 
 **Key Profiles**:
 - `SurveyMappingProfile` - Survey mappings
-- `QuestionMappingProfile` - Question mappings (enhanced v1.4.0)
+- `QuestionMappingProfile` - Question mappings (enhanced v1.4.0, IncludeInStatistics added v1.6.3)
 - `ResponseMappingProfile` - Response mappings
 - `AnswerMappingProfile` - Answer mappings (simplified v1.5.0 with AnswerValue pattern matching)
 - `UserMappingProfile` - User mappings
+
+**NEW in v1.6.3**: `IncludeInStatistics` property added to QuestionDto, CreateQuestionDto, UpdateQuestionDto. Convention-based mapping handles this automatically (no explicit configuration needed).
 
 **Value Resolvers** (legacy, mostly deprecated in v1.5.0):
 - `QuestionOptionsResolver` - Deserialize JSON to List<string>
@@ -1939,4 +1941,4 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 ---
 
-**Last Updated**: 2025-11-27 | **Version**: 1.5.0 (Location Question Type Support Added)
+**Last Updated**: 2025-12-29 | **Version**: 1.6.3 (IncludeInStatistics Feature Added)

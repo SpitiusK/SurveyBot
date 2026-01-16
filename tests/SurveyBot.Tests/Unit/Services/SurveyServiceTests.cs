@@ -658,4 +658,229 @@ public class SurveyServiceTests : IDisposable
     }
 
     #endregion
+
+    #region GetSurveyStatisticsAsync - IncludeInStatistics Filtering Tests
+
+    [Fact]
+    public async Task GetSurveyStatisticsAsync_ExcludesQuestionsWithIncludeInStatisticsFalse()
+    {
+        // Arrange
+        var surveyId = 1;
+        var userId = 1;
+
+        var survey = EntityBuilder.CreateSurvey(
+            title: "Statistics Test Survey",
+            creatorId: userId,
+            isActive: true);
+        survey.SetId(surveyId);
+
+        // Create questions - one included, one excluded
+        var includedQuestion = EntityBuilder.CreateQuestion(
+            surveyId: surveyId,
+            questionText: "Included Question",
+            questionType: QuestionType.Text,
+            orderIndex: 0,
+            includeInStatistics: true);
+        includedQuestion.SetId(1);
+
+        var excludedQuestion = EntityBuilder.CreateQuestion(
+            surveyId: surveyId,
+            questionText: "Excluded Question",
+            questionType: QuestionType.Text,
+            orderIndex: 1,
+            includeInStatistics: false);
+        excludedQuestion.SetId(2);
+
+        survey.AddQuestionInternal(includedQuestion);
+        survey.AddQuestionInternal(excludedQuestion);
+
+        // Create a completed response with answers
+        var response = EntityBuilder.CreateResponse(
+            surveyId: surveyId,
+            respondentTelegramId: 12345,
+            isComplete: true);
+        response.SetId(1);
+        survey.AddResponseInternal(response);
+
+        var answer1 = EntityBuilder.CreateTextAnswer(responseId: 1, questionId: 1, answerText: "Answer 1");
+        answer1.SetId(1);
+        includedQuestion.AddAnswerInternal(answer1);
+        response.AddAnswerInternal(answer1);
+
+        var answer2 = EntityBuilder.CreateTextAnswer(responseId: 1, questionId: 2, answerText: "Answer 2");
+        answer2.SetId(2);
+        excludedQuestion.AddAnswerInternal(answer2);
+        response.AddAnswerInternal(answer2);
+
+        _surveyRepositoryMock.Setup(r => r.GetByIdWithDetailsAsync(surveyId)).ReturnsAsync(survey);
+
+        // Act
+        var result = await _sut.GetSurveyStatisticsAsync(surveyId, userId);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Single(result.QuestionStatistics);
+        Assert.Equal("Included Question", result.QuestionStatistics[0].QuestionText);
+        Assert.DoesNotContain(result.QuestionStatistics, qs => qs.QuestionText == "Excluded Question");
+    }
+
+    [Fact]
+    public async Task GetSurveyStatisticsAsync_IncludesQuestionsWithIncludeInStatisticsTrue()
+    {
+        // Arrange
+        var surveyId = 1;
+        var userId = 1;
+
+        var survey = EntityBuilder.CreateSurvey(
+            title: "All Questions Included Survey",
+            creatorId: userId,
+            isActive: true);
+        survey.SetId(surveyId);
+
+        // Create two questions both included in statistics
+        var question1 = EntityBuilder.CreateQuestion(
+            surveyId: surveyId,
+            questionText: "Question 1",
+            questionType: QuestionType.Text,
+            orderIndex: 0,
+            includeInStatistics: true);
+        question1.SetId(1);
+
+        var question2 = EntityBuilder.CreateQuestion(
+            surveyId: surveyId,
+            questionText: "Question 2",
+            questionType: QuestionType.Rating,
+            orderIndex: 1,
+            includeInStatistics: true);
+        question2.SetId(2);
+
+        survey.AddQuestionInternal(question1);
+        survey.AddQuestionInternal(question2);
+
+        // Create a completed response
+        var response = EntityBuilder.CreateResponse(
+            surveyId: surveyId,
+            respondentTelegramId: 12345,
+            isComplete: true);
+        response.SetId(1);
+        survey.AddResponseInternal(response);
+
+        _surveyRepositoryMock.Setup(r => r.GetByIdWithDetailsAsync(surveyId)).ReturnsAsync(survey);
+
+        // Act
+        var result = await _sut.GetSurveyStatisticsAsync(surveyId, userId);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(2, result.QuestionStatistics.Count);
+        Assert.Contains(result.QuestionStatistics, qs => qs.QuestionText == "Question 1");
+        Assert.Contains(result.QuestionStatistics, qs => qs.QuestionText == "Question 2");
+    }
+
+    [Fact]
+    public async Task GetSurveyStatisticsAsync_ReturnsEmptyQuestionStatistics_WhenAllQuestionsExcluded()
+    {
+        // Arrange
+        var surveyId = 1;
+        var userId = 1;
+
+        var survey = EntityBuilder.CreateSurvey(
+            title: "No Statistics Survey",
+            creatorId: userId,
+            isActive: true);
+        survey.SetId(surveyId);
+
+        // Create questions all excluded from statistics
+        var question1 = EntityBuilder.CreateQuestion(
+            surveyId: surveyId,
+            questionText: "Excluded Question 1",
+            questionType: QuestionType.Text,
+            orderIndex: 0,
+            includeInStatistics: false);
+        question1.SetId(1);
+
+        var question2 = EntityBuilder.CreateQuestion(
+            surveyId: surveyId,
+            questionText: "Excluded Question 2",
+            questionType: QuestionType.Rating,
+            orderIndex: 1,
+            includeInStatistics: false);
+        question2.SetId(2);
+
+        survey.AddQuestionInternal(question1);
+        survey.AddQuestionInternal(question2);
+
+        // Create a completed response
+        var response = EntityBuilder.CreateResponse(
+            surveyId: surveyId,
+            respondentTelegramId: 12345,
+            isComplete: true);
+        response.SetId(1);
+        survey.AddResponseInternal(response);
+
+        _surveyRepositoryMock.Setup(r => r.GetByIdWithDetailsAsync(surveyId)).ReturnsAsync(survey);
+
+        // Act
+        var result = await _sut.GetSurveyStatisticsAsync(surveyId, userId);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Empty(result.QuestionStatistics);
+        // Survey-level stats should still be calculated
+        Assert.Equal(1, result.TotalResponses);
+        Assert.Equal(1, result.CompletedResponses);
+    }
+
+    [Fact]
+    public async Task GetSurveyStatisticsAsync_MixedIncludeInStatistics_OnlyReturnsIncludedQuestions()
+    {
+        // Arrange
+        var surveyId = 1;
+        var userId = 1;
+
+        var survey = EntityBuilder.CreateSurvey(
+            title: "Mixed Statistics Survey",
+            creatorId: userId,
+            isActive: true);
+        survey.SetId(surveyId);
+
+        // Create 5 questions with different IncludeInStatistics values
+        var questions = new List<Question>
+        {
+            EntityBuilder.CreateQuestion(surveyId: surveyId, questionText: "Q1 - Included", orderIndex: 0, includeInStatistics: true),
+            EntityBuilder.CreateQuestion(surveyId: surveyId, questionText: "Q2 - Excluded", orderIndex: 1, includeInStatistics: false),
+            EntityBuilder.CreateQuestion(surveyId: surveyId, questionText: "Q3 - Included", orderIndex: 2, includeInStatistics: true),
+            EntityBuilder.CreateQuestion(surveyId: surveyId, questionText: "Q4 - Excluded", orderIndex: 3, includeInStatistics: false),
+            EntityBuilder.CreateQuestion(surveyId: surveyId, questionText: "Q5 - Included", orderIndex: 4, includeInStatistics: true)
+        };
+
+        for (int i = 0; i < questions.Count; i++)
+        {
+            questions[i].SetId(i + 1);
+            survey.AddQuestionInternal(questions[i]);
+        }
+
+        // Create a completed response
+        var response = EntityBuilder.CreateResponse(
+            surveyId: surveyId,
+            respondentTelegramId: 12345,
+            isComplete: true);
+        response.SetId(1);
+        survey.AddResponseInternal(response);
+
+        _surveyRepositoryMock.Setup(r => r.GetByIdWithDetailsAsync(surveyId)).ReturnsAsync(survey);
+
+        // Act
+        var result = await _sut.GetSurveyStatisticsAsync(surveyId, userId);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(3, result.QuestionStatistics.Count);
+        Assert.Contains(result.QuestionStatistics, qs => qs.QuestionText == "Q1 - Included");
+        Assert.Contains(result.QuestionStatistics, qs => qs.QuestionText == "Q3 - Included");
+        Assert.Contains(result.QuestionStatistics, qs => qs.QuestionText == "Q5 - Included");
+        Assert.DoesNotContain(result.QuestionStatistics, qs => qs.QuestionText.Contains("Excluded"));
+    }
+
+    #endregion
 }

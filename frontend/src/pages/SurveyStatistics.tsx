@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -33,6 +33,7 @@ interface StatisticsFilters {
   status: 'all' | 'complete' | 'incomplete';
   dateFrom: Date | null;
   dateTo: Date | null;
+  questionDisplay: 'all' | 'included' | 'excluded'; // NEW v1.6.3: Filter by includeInStatistics
 }
 
 const SurveyStatistics = () => {
@@ -49,6 +50,7 @@ const SurveyStatistics = () => {
     status: 'all',
     dateFrom: null,
     dateTo: null,
+    questionDisplay: 'all', // NEW v1.6.3: Default to showing all questions
   });
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -65,7 +67,7 @@ const SurveyStatistics = () => {
       // Fetch survey details, statistics, and responses in parallel
       const [surveyRes, statsRes, responsesRes] = await Promise.all([
         api.get(`/surveys/${id}`),
-        api.get(`/surveys/${id}/statistics`),
+        api.get(`/surveys/${id}/statistics?includeAllQuestions=true`),
         api.get(`/surveys/${id}/responses`),
       ]);
 
@@ -93,6 +95,7 @@ const SurveyStatistics = () => {
       status: 'all',
       dateFrom: null,
       dateTo: null,
+      questionDisplay: 'all', // NEW v1.6.3
     });
   };
 
@@ -164,6 +167,28 @@ const SurveyStatistics = () => {
 
     return true;
   });
+
+  // NEW v1.6.3: Filter questions based on includeInStatistics setting
+  const filteredQuestionStats = useMemo(() => {
+    if (!statistics) return [];
+
+    return statistics.questionStatistics.filter((questionStat) => {
+      const question = survey?.questions.find((q) => q.id === questionStat.questionId);
+      if (!question) return false;
+
+      // Apply includeInStatistics filter
+      switch (filters.questionDisplay) {
+        case 'all':
+          return true; // Show all questions
+        case 'included':
+          return question.includeInStatistics !== false; // Show only included (true or undefined)
+        case 'excluded':
+          return question.includeInStatistics === false; // Show only excluded
+        default:
+          return true;
+      }
+    });
+  }, [statistics, survey, filters.questionDisplay]);
 
 
   if (loading) {
@@ -299,11 +324,29 @@ const SurveyStatistics = () => {
           <Typography variant="h5" gutterBottom>
             Question-Level Statistics
           </Typography>
-          <QuestionStatistics
-            statistics={statistics}
-            survey={survey}
-            responses={filteredResponses}
-          />
+          {/* NEW v1.6.3: Show empty state or filtered question statistics */}
+          {filteredQuestionStats.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="h6" color="text.secondary">
+                No questions match the current filter
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                {filters.questionDisplay === 'excluded' &&
+                  'No questions are excluded from statistics in this survey'}
+                {filters.questionDisplay === 'included' &&
+                  'All questions are excluded from statistics in this survey'}
+              </Typography>
+            </Box>
+          ) : (
+            <QuestionStatistics
+              statistics={{
+                ...statistics,
+                questionStatistics: filteredQuestionStats,
+              }}
+              survey={survey}
+              responses={filteredResponses}
+            />
+          )}
         </Box>
 
         {/* Export Dialog */}
@@ -315,6 +358,8 @@ const SurveyStatistics = () => {
           completedCount={responses.filter(r => r.isComplete).length}
           incompleteCount={responses.filter(r => !r.isComplete).length}
           surveyTitle={survey.title}
+          totalQuestionCount={survey.questions?.length ?? 0}
+          statisticsQuestionCount={survey.questions?.filter(q => q.includeInStatistics !== false).length ?? 0}
         />
 
         {/* Success Snackbar */}

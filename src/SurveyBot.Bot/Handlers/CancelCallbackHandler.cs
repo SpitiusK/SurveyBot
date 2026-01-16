@@ -190,6 +190,104 @@ public class CancelCallbackHandler
         }
     }
 
+    /// <summary>
+    /// Handles immediate cancellation from inline button (no confirmation dialog).
+    /// Used for nav_cancel callback data.
+    /// </summary>
+    public async Task<bool> HandleImmediateCancelAsync(
+        CallbackQuery callbackQuery,
+        CancellationToken cancellationToken = default)
+    {
+        if (callbackQuery.Message == null || callbackQuery.From == null)
+        {
+            _logger.LogWarning("Immediate cancel callback with null message or user");
+            return false;
+        }
+
+        var userId = callbackQuery.From.Id;
+        var chatId = callbackQuery.Message.Chat.Id;
+
+        try
+        {
+            _logger.LogInformation(
+                "Processing immediate cancel from user {TelegramId}",
+                userId);
+
+            // Answer callback to remove loading state
+            await _botService.Client.AnswerCallbackQuery(
+                callbackQueryId: callbackQuery.Id,
+                text: "Survey cancelled",
+                cancellationToken: cancellationToken);
+
+            // Get current state
+            var state = await _stateManager.GetStateAsync(userId);
+
+            if (state == null || state.CurrentResponseId == null)
+            {
+                _logger.LogWarning(
+                    "User {TelegramId} cancelled but has no active survey",
+                    userId);
+
+                await _botService.Client.SendMessage(
+                    chatId: chatId,
+                    text: "❌ No active survey to cancel.\n\nUse /surveys to find available surveys.",
+                    cancellationToken: cancellationToken);
+                return true;
+            }
+
+            var responseId = state.CurrentResponseId.Value;
+
+            // Delete incomplete response from database
+            try
+            {
+                await _responseRepository.DeleteAsync(responseId);
+                _logger.LogInformation(
+                    "Deleted incomplete response {ResponseId} for user {TelegramId}",
+                    responseId,
+                    userId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to delete response {ResponseId} for user {TelegramId}",
+                    responseId,
+                    userId);
+                // Continue anyway - state will be cleared
+            }
+
+            // Clear conversation state
+            await _stateManager.CancelSurveyAsync(userId);
+            await _stateManager.ClearStateAsync(userId);
+
+            // Send cancellation confirmation message
+            await _botService.Client.SendMessage(
+                chatId: chatId,
+                text: "❌ Survey cancelled.\n\nUse /surveys to find available surveys.",
+                cancellationToken: cancellationToken);
+
+            _logger.LogInformation(
+                "Survey cancelled immediately for user {TelegramId}",
+                userId);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Error handling immediate cancel for user {TelegramId}",
+                userId);
+
+            await _botService.Client.SendMessage(
+                chatId: chatId,
+                text: "An error occurred while cancelling the survey. Please try again.",
+                cancellationToken: cancellationToken);
+
+            return false;
+        }
+    }
+
     #region Private Methods
 
     /// <summary>

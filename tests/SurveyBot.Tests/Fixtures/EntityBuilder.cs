@@ -53,7 +53,8 @@ public static class EntityBuilder
         bool isRequired = true,
         string? optionsJson = null,
         string? mediaContent = null,
-        NextQuestionDeterminant? defaultNext = null)
+        NextQuestionDeterminant? defaultNext = null,
+        bool includeInStatistics = true)
     {
         return Question.Create(
             surveyId,
@@ -63,7 +64,8 @@ public static class EntityBuilder
             isRequired,
             optionsJson,
             mediaContent,
-            defaultNext);
+            defaultNext,
+            includeInStatistics);
     }
 
     /// <summary>

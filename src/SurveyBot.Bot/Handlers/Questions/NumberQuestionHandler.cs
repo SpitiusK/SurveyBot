@@ -10,6 +10,7 @@ using SurveyBot.Core.ValueObjects.Answers;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace SurveyBot.Bot.Handlers.Questions;
 
@@ -57,18 +58,11 @@ public class NumberQuestionHandler : IQuestionHandler
         await _mediaHelper.SendQuestionMediaAsync(chatId, question, cancellationToken);
 
         var progressText = $"Question {currentIndex + 1} of {totalQuestions}";
-        var requiredText = question.IsRequired ? "(Required)" : "(Optional - reply /skip to skip)";
+        var requiredText = question.IsRequired ? "(Required)" : "(Optional)";
 
         // Parse number configuration for validation hints
         var (minValue, maxValue, decimalPlaces) = ParseNumberConfig(question);
         var validationHint = BuildValidationHint(minValue, maxValue, decimalPlaces);
-
-        // Build navigation help text
-        var navigationHelp = currentIndex > 0 ? "\n\nType /back to go to previous question" : "";
-        if (!question.IsRequired)
-        {
-            navigationHelp += "\nType /skip to skip this question";
-        }
 
         // Convert ReactQuill HTML to Telegram-compatible HTML
         var questionText = HtmlToTelegramConverter.Convert(question.QuestionText);
@@ -77,7 +71,10 @@ public class NumberQuestionHandler : IQuestionHandler
                       $"<b>{questionText}</b>\n\n" +
                       $"{requiredText}\n" +
                       $"{validationHint}\n" +
-                      $"Please enter a number:{navigationHelp}";
+                      $"Please enter a number:";
+
+        // Build inline keyboard with navigation buttons
+        var keyboard = BuildNavigationKeyboard(question, currentIndex);
 
         _logger.LogDebug(
             "Displaying number question {QuestionId} in chat {ChatId}",
@@ -88,6 +85,7 @@ public class NumberQuestionHandler : IQuestionHandler
             chatId: chatId,
             text: message,
             parseMode: ParseMode.Html,
+            replyMarkup: keyboard,
             cancellationToken: cancellationToken);
 
         return sentMessage.MessageId;
@@ -353,6 +351,37 @@ public class NumberQuestionHandler : IQuestionHandler
         if (decimalIndex < 0)
             return 0;
         return text.Length - decimalIndex - 1;
+    }
+
+    /// <summary>
+    /// Builds inline keyboard with Back, Skip, and Cancel navigation buttons.
+    /// </summary>
+    private InlineKeyboardMarkup BuildNavigationKeyboard(QuestionDto question, int currentIndex)
+    {
+        var navigationRow = new List<InlineKeyboardButton>();
+
+        // Back button (not on first question)
+        if (currentIndex > 0)
+        {
+            navigationRow.Add(InlineKeyboardButton.WithCallbackData(
+                text: "⬅️ Back",
+                callbackData: $"nav_back_q{question.Id}"));
+        }
+
+        // Skip button (optional questions only)
+        if (!question.IsRequired)
+        {
+            navigationRow.Add(InlineKeyboardButton.WithCallbackData(
+                text: "⏭ Skip",
+                callbackData: $"nav_skip_q{question.Id}"));
+        }
+
+        // Cancel button (always)
+        navigationRow.Add(InlineKeyboardButton.WithCallbackData(
+            text: "❌ Cancel",
+            callbackData: "nav_cancel"));
+
+        return new InlineKeyboardMarkup(new[] { navigationRow.ToArray() });
     }
 
     #endregion

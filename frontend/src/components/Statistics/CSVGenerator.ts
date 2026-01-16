@@ -1,10 +1,15 @@
 import type { Survey, Response, Answer, Question } from '../../types';
 import { QuestionType as QT } from '../../types';
+import { stripHtml } from '../../utils/stringUtils';
+import { encodeWindows1251 } from '../../utils/encodingUtils';
 
 export interface ExportOptions {
   includeMetadata: boolean;
   includeTimestamps: boolean;
   exportFormat: 'all' | 'completed' | 'incomplete';
+  questionFilter: 'all' | 'statistics_only';
+  delimiter: ',' | ';';  // CSV delimiter - semicolon recommended for Russian/European Excel
+  encoding: 'utf-8' | 'windows-1251';  // File encoding - Windows-1251 for Russian Excel
 }
 
 /**
@@ -13,6 +18,8 @@ export interface ExportOptions {
  */
 export class CSVGenerator {
   private static readonly CHUNK_SIZE = 500; // Process responses in chunks for large datasets
+  private static readonly UTF8_BOM = '\uFEFF'; // UTF-8 Byte Order Mark for Windows Excel compatibility
+  // Note: SEP_DIRECTIVE is now generated dynamically based on options.delimiter
 
   /**
    * Generate CSV content from survey responses
@@ -33,8 +40,9 @@ export class CSVGenerator {
     const headers = this.buildHeaders(survey, options);
     const rows = this.buildRows(survey, filteredResponses, options);
 
-    // Combine headers and rows
-    return [headers, ...rows].join('\n');
+    // Combine with sep directive (for Excel locale compatibility), headers, and rows
+    const sepDirective = `sep=${options.delimiter}\n`;
+    return sepDirective + [headers, ...rows].join('\n');
   }
 
   /**
@@ -46,7 +54,24 @@ export class CSVGenerator {
     options: ExportOptions
   ): Promise<void> {
     const csvContent = this.generateCSV(survey, responses, options);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+    let blob: Blob;
+    if (options.encoding === 'windows-1251') {
+      // Windows-1251 encoding for Russian Excel compatibility
+      const bytes = encodeWindows1251(csvContent);
+      blob = new Blob([bytes], { type: 'text/csv;charset=windows-1251' });
+    } else {
+      // UTF-8 with BOM for universal compatibility
+      const encoder = new TextEncoder();
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM as raw bytes
+      const contentBytes = encoder.encode(csvContent);
+      // Combine BOM and content bytes
+      const combinedBytes = new Uint8Array(bom.length + contentBytes.length);
+      combinedBytes.set(bom, 0);
+      combinedBytes.set(contentBytes, bom.length);
+      blob = new Blob([combinedBytes], { type: 'text/csv;charset=utf-8' });
+    }
+
     const url = URL.createObjectURL(blob);
 
     // Generate filename
@@ -106,8 +131,27 @@ export class CSVGenerator {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
 
-    const csvContent = chunks.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    // Add sep directive for Excel locale compatibility
+    const sepDirective = `sep=${options.delimiter}\n`;
+    const csvContent = sepDirective + chunks.join('\n');
+
+    let blob: Blob;
+    if (options.encoding === 'windows-1251') {
+      // Windows-1251 encoding for Russian Excel compatibility
+      const bytes = encodeWindows1251(csvContent);
+      blob = new Blob([bytes], { type: 'text/csv;charset=windows-1251' });
+    } else {
+      // UTF-8 with BOM for universal compatibility
+      const encoder = new TextEncoder();
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM as raw bytes
+      const contentBytes = encoder.encode(csvContent);
+      // Combine BOM and content bytes
+      const combinedBytes = new Uint8Array(bom.length + contentBytes.length);
+      combinedBytes.set(bom, 0);
+      combinedBytes.set(contentBytes, bom.length);
+      blob = new Blob([combinedBytes], { type: 'text/csv;charset=utf-8' });
+    }
+
     const url = URL.createObjectURL(blob);
     const filename = this.generateFilename(survey);
 
@@ -143,6 +187,19 @@ export class CSVGenerator {
   }
 
   /**
+   * Filter questions based on includeInStatistics flag
+   */
+  private static filterQuestions(
+    questions: Question[],
+    filter: 'all' | 'statistics_only'
+  ): Question[] {
+    if (filter === 'statistics_only') {
+      return questions.filter(q => q.includeInStatistics !== false);
+    }
+    return questions;
+  }
+
+  /**
    * Build CSV header row
    */
   private static buildHeaders(survey: Survey, options: ExportOptions): string {
@@ -158,13 +215,16 @@ export class CSVGenerator {
       headers.push('Started At', 'Submitted At');
     }
 
-    // Add question columns
-    survey.questions.forEach((question, index) => {
-      const columnName = this.sanitizeQuestionText(question.questionText, index);
+    // Filter questions based on option
+    const questions = this.filterQuestions(survey.questions, options.questionFilter);
+
+    // Add question columns (use original orderIndex to preserve survey question numbers)
+    questions.forEach((question) => {
+      const columnName = this.sanitizeQuestionText(question.questionText, question.orderIndex);
       headers.push(columnName);
     });
 
-    return this.escapeCSVRow(headers);
+    return this.escapeCSVRow(headers, options.delimiter);
   }
 
   /**
@@ -205,18 +265,22 @@ export class CSVGenerator {
       );
     }
 
-    // Add answers for each question
-    survey.questions.forEach(question => {
+    // Filter questions based on option
+    const questions = this.filterQuestions(survey.questions, options.questionFilter);
+
+    // Add answers for each filtered question
+    questions.forEach(question => {
       const answer = response.answers?.find(a => a.questionId === question.id);
       const answerValue = this.formatAnswer(question, answer);
       cells.push(answerValue);
     });
 
-    return this.escapeCSVRow(cells);
+    return this.escapeCSVRow(cells, options.delimiter);
   }
 
   /**
    * Format answer based on question type
+   * Supports all question types: Text, SingleChoice, MultipleChoice, Rating, Number, Date, Location
    */
   private static formatAnswer(question: Question, answer?: Answer): string {
     if (!answer) {
@@ -237,8 +301,18 @@ export class CSVGenerator {
         case QT.Rating:
           return this.formatRatingAnswer(answer);
 
+        case QT.Number:
+          return this.formatNumberAnswer(answer);
+
+        case QT.Date:
+          return this.formatDateAnswer(answer);
+
+        case QT.Location:
+          return this.formatLocationAnswer(answer);
+
         default:
-          return '';
+          // Fallback to displayValue for any unhandled types
+          return answer.displayValue || answer.answerText || '';
       }
     } catch (error) {
       console.error('Error formatting answer:', error);
@@ -263,39 +337,117 @@ export class CSVGenerator {
 
   /**
    * Format single choice answer
+   * Uses selectedOptions array from AnswerDto (first element for single choice)
    */
   private static formatSingleChoiceAnswer(answer: Answer): string {
-    if (answer.answerData && typeof answer.answerData === 'object') {
-      if ('selectedOption' in answer.answerData) {
-        return String(answer.answerData.selectedOption || '');
-      }
+    // Use selectedOptions array (first element for single choice)
+    if (answer.selectedOptions && answer.selectedOptions.length > 0) {
+      return String(answer.selectedOptions[0]);
+    }
+    // Fallback to displayValue if available
+    if (answer.displayValue) {
+      return answer.displayValue;
+    }
+    // Legacy fallback for answerText
+    if (answer.answerText) {
+      return answer.answerText;
     }
     return '';
   }
 
   /**
    * Format multiple choice answer
+   * Uses selectedOptions array from AnswerDto (joined with semicolons)
    */
   private static formatMultipleChoiceAnswer(answer: Answer): string {
-    if (answer.answerData && typeof answer.answerData === 'object') {
-      if ('selectedOptions' in answer.answerData) {
-        const options = answer.answerData.selectedOptions;
-        if (Array.isArray(options)) {
-          return options.join('; ');
-        }
-      }
+    // Use selectedOptions array directly
+    if (answer.selectedOptions && Array.isArray(answer.selectedOptions) && answer.selectedOptions.length > 0) {
+      return answer.selectedOptions.join('; ');
+    }
+    // Fallback to displayValue if available
+    if (answer.displayValue) {
+      return answer.displayValue;
     }
     return '';
   }
 
   /**
    * Format rating answer
+   * Uses ratingValue property from AnswerDto (numeric 1-5)
    */
   private static formatRatingAnswer(answer: Answer): string {
-    if (answer.answerData && typeof answer.answerData === 'object') {
-      if ('rating' in answer.answerData) {
-        return String(answer.answerData.rating || '');
+    // Use ratingValue property directly
+    if (answer.ratingValue !== null && answer.ratingValue !== undefined) {
+      return String(answer.ratingValue);
+    }
+    // Fallback to displayValue if available
+    if (answer.displayValue) {
+      return answer.displayValue;
+    }
+    // Legacy fallback for answerText
+    if (answer.answerText) {
+      return answer.answerText;
+    }
+    return '';
+  }
+
+  /**
+   * Format number answer
+   * Uses numberValue property from AnswerDto
+   */
+  private static formatNumberAnswer(answer: Answer): string {
+    if (answer.numberValue !== null && answer.numberValue !== undefined) {
+      return String(answer.numberValue);
+    }
+    if (answer.displayValue) {
+      return answer.displayValue;
+    }
+    if (answer.answerText) {
+      return answer.answerText;
+    }
+    return '';
+  }
+
+  /**
+   * Format date answer
+   * Uses dateValue property from AnswerDto, formats as DD.MM.YYYY
+   */
+  private static formatDateAnswer(answer: Answer): string {
+    if (answer.dateValue) {
+      try {
+        const date = new Date(answer.dateValue);
+        if (!isNaN(date.getTime())) {
+          // Format as DD.MM.YYYY (Russian/European format)
+          const day = date.getDate().toString().padStart(2, '0');
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}.${month}.${year}`;
+        }
+      } catch {
+        // Return raw value if parsing fails
+        return answer.dateValue;
       }
+    }
+    if (answer.displayValue) {
+      return answer.displayValue;
+    }
+    if (answer.answerText) {
+      return answer.answerText;
+    }
+    return '';
+  }
+
+  /**
+   * Format location answer
+   * Uses latitude/longitude properties from AnswerDto
+   */
+  private static formatLocationAnswer(answer: Answer): string {
+    if (answer.latitude !== null && answer.latitude !== undefined &&
+        answer.longitude !== null && answer.longitude !== undefined) {
+      return `${answer.latitude}, ${answer.longitude}`;
+    }
+    if (answer.displayValue) {
+      return answer.displayValue;
     }
     return '';
   }
@@ -318,13 +470,17 @@ export class CSVGenerator {
 
   /**
    * Sanitize question text for use as column header
+   * Strips HTML tags to prevent Excel encoding issues with <p> tags
    */
   private static sanitizeQuestionText(text: string, index: number): string {
+    // Strip HTML tags first (prevents Excel from ignoring UTF-8 BOM when it sees <p> tags)
+    const stripped = stripHtml(text);
+
     // Truncate long questions
     const maxLength = 50;
-    let sanitized = text.length > maxLength
-      ? text.substring(0, maxLength) + '...'
-      : text;
+    let sanitized = stripped.length > maxLength
+      ? stripped.substring(0, maxLength) + '...'
+      : stripped;
 
     // Add question number prefix
     sanitized = `Q${index + 1}: ${sanitized}`;
@@ -334,13 +490,15 @@ export class CSVGenerator {
 
   /**
    * Escape a single CSV cell
+   * @param cell - The cell content to escape
+   * @param delimiter - The delimiter being used (to check if it needs escaping)
    */
-  private static escapeCSVCell(cell: string): string {
+  private static escapeCSVCell(cell: string, delimiter: ',' | ';' = ','): string {
     // Convert to string if not already
     const str = String(cell);
 
-    // Check if escaping is needed
-    const needsEscaping = str.includes(',') ||
+    // Check if escaping is needed (include the delimiter in the check)
+    const needsEscaping = str.includes(delimiter) ||
                          str.includes('"') ||
                          str.includes('\n') ||
                          str.includes('\r');
@@ -358,9 +516,11 @@ export class CSVGenerator {
 
   /**
    * Escape an entire CSV row
+   * @param cells - Array of cell values
+   * @param delimiter - The delimiter to use between cells
    */
-  private static escapeCSVRow(cells: string[]): string {
-    return cells.map(cell => this.escapeCSVCell(cell)).join(',');
+  private static escapeCSVRow(cells: string[], delimiter: ',' | ';' = ','): string {
+    return cells.map(cell => this.escapeCSVCell(cell, delimiter)).join(delimiter);
   }
 
   /**

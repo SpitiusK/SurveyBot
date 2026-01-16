@@ -101,7 +101,8 @@ public class QuestionService : IQuestionService
             dto.IsRequired,
             optionsJson: null,  // Will be set below for choice questions
             mediaContent: null, // Will be set below if provided
-            dto.DefaultNext.ToValueObject());
+            dto.DefaultNext.ToValueObject(),
+            dto.IncludeInStatistics);
 
         // Handle options for choice-based questions
         if (dto.QuestionType == QuestionType.SingleChoice || dto.QuestionType == QuestionType.MultipleChoice)
@@ -211,6 +212,7 @@ public class QuestionService : IQuestionService
         question.SetQuestionText(dto.QuestionText);
         question.SetQuestionType(dto.QuestionType);
         question.SetIsRequired(dto.IsRequired);
+        question.SetIncludeInStatistics(dto.IncludeInStatistics);
 
         // Update options for choice-based questions
         if (dto.QuestionType == QuestionType.SingleChoice || dto.QuestionType == QuestionType.MultipleChoice)

@@ -29,6 +29,12 @@ public class UpdateQuestionDto
     public bool IsRequired { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether this question should be displayed in statistics.
+    /// If false, the question will be excluded from the frontend statistics dashboard.
+    /// </summary>
+    public bool IncludeInStatistics { get; set; }
+
+    /// <summary>
     /// Gets or sets the options for choice-based questions.
     /// Required for SingleChoice and MultipleChoice question types.
     /// </summary>

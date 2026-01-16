@@ -180,6 +180,15 @@ const QuestionCard: React.FC<QuestionCardProps> = ({
                   variant="outlined"
                 />
               )}
+              {/* NEW v1.6.3: Show indicator when question excluded from statistics */}
+              {question.includeInStatistics === false && (
+                <Chip
+                  label="Not in stats"
+                  size="small"
+                  color="default"
+                  variant="outlined"
+                />
+              )}
             </Stack>
 
             {/* Question Text */}

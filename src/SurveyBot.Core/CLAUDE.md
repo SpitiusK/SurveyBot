@@ -547,6 +547,7 @@ public class Question : BaseEntity
     public QuestionType QuestionType { get; set; }  // Text, SingleChoice, MultipleChoice, Rating
     public int OrderIndex { get; set; }             // 0-based, sequential
     public bool IsRequired { get; set; }
+    public bool IncludeInStatistics { get; set; }   // NEW v1.6.3: Include in frontend statistics (default: true)
     public string? OptionsJson { get; set; }        // JSONB: ["Option1", "Option2"] (legacy)
     public string? MediaContent { get; set; }       // JSONB: Multimedia metadata (NEW in v1.3.0)
 

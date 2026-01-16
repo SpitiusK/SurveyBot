@@ -30,6 +30,13 @@ public class CreateQuestionDto
     public bool IsRequired { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether this question should be displayed in statistics.
+    /// If false, the question will be excluded from the frontend statistics dashboard.
+    /// Defaults to true.
+    /// </summary>
+    public bool IncludeInStatistics { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the options for choice-based questions.
     /// Required for SingleChoice and MultipleChoice question types.
     /// Should be null or empty for Text and Rating questions.

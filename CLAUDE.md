@@ -1,6 +1,6 @@
 # SurveyBot - Project Documentation
 
-**Version**: 1.6.2 | **Framework**: .NET 8.0 | **Status**: Active Development
+**Version**: 1.6.3 | **Framework**: .NET 8.0 | **Status**: Active Development
 
 ---
 
@@ -233,7 +233,22 @@ SurveyBot implements 10 core design patterns for maintainability and scalability
 
 **See**: [Architecture Documentation](documentation/architecture/ARCHITECTURE.md) for detailed pattern descriptions.
 
-### Recent Changes (v1.5.x)
+### Recent Changes (v1.6.x)
+
+**v1.6.3 (IncludeInStatistics Feature - December 29, 2025)**:
+- **Question.IncludeInStatistics Property (CORE-003)**: Boolean flag to control question visibility in frontend statistics
+  - Default value: `true` (questions included in statistics by default)
+  - Setter method: `SetIncludeInStatistics(bool)` following DDD encapsulation pattern
+  - Factory method: `Question.Create()` updated with optional `includeInStatistics` parameter
+  - DTOs updated: QuestionDto, CreateQuestionDto, UpdateQuestionDto, CreateQuestionWithFlowDto
+  - EF Core: `include_in_statistics BOOLEAN NOT NULL DEFAULT TRUE` column added
+  - Migration: `AddIncludeInStatisticsToQuestion` sets existing questions to `true`
+- **Statistics Filtering**: SurveyService.CalculateQuestionStatisticsAsync now respects flag
+  - Questions with `IncludeInStatistics = false` excluded from QuestionStatistics list
+  - Empty list returned if all questions excluded (acceptable for MVP)
+- **Unit Tests**: 17 tests for Question entity + 4 tests for SurveyService filtering
+- **Integration Tests**: 4 tests for API endpoints (CreateQuestion, UpdateQuestion)
+- **Frontend Scope**: Checkbox in question editor labeled "Display in statistics"
 
 **v1.6.2 (Bug Fixes - December 2, 2025)**:
 - **SurveyCommandHandler Cache Invalidation (BOT-FIX-001)**: Fixed false "Survey Updated" alerts
@@ -798,21 +813,22 @@ documentation/
 
 ## Summary for AI Assistants
 
-**SurveyBot v1.6.0** is a .NET 8.0 Telegram bot with React admin panel following Clean Architecture and DDD principles with comprehensive value object implementation and atomic survey update capabilities.
+**SurveyBot v1.6.3** is a .NET 8.0 Telegram bot with React admin panel following Clean Architecture and DDD principles with comprehensive value object implementation and atomic survey update capabilities.
 
 **Key Points**:
-1. **Version**: v1.6.0 (Atomic survey updates) - Single-call survey replacement with index-based flow
+1. **Version**: v1.6.3 (IncludeInStatistics feature) - Question visibility control in frontend statistics
 2. **Architecture**: Clean Architecture with 10 design patterns, ZERO-dependency core
-3. **NEW in v1.6.0**: Atomic survey updates with single API call, index-based flow transformation
-4. **NEW in v1.5.0**: Private setters, factory methods, AnswerValue polymorphic hierarchy
-5. **Features v1.4.x**: Conditional branching, cycle detection (DFS), value objects, owned types
-6. **Config files**: Base (appsettings.json) + Development (appsettings.Development.json) overrides
-7. **Bot modes**: Polling (local dev) vs Webhook (prod with HTTPS)
-8. **Database**: PostgreSQL via Docker, EF Core 9.0 with owned type migrations
-9. **Auth**: JWT Bearer with Telegram-based login
-10. **Survey codes**: 6-char alphanumeric (Base36 via SurveyCodeGenerator)
-11. **File paths**: Always use absolute paths (e.g., C:\Users\User\Desktop\SurveyBot\...)
-12. **Documentation**: Centralized in `documentation/` + layer-specific CLAUDE.md files
+3. **NEW in v1.6.3**: Question.IncludeInStatistics property with statistics filtering
+4. **NEW in v1.6.0**: Atomic survey updates with single API call, index-based flow transformation
+5. **NEW in v1.5.0**: Private setters, factory methods, AnswerValue polymorphic hierarchy
+6. **Features v1.4.x**: Conditional branching, cycle detection (DFS), value objects, owned types
+7. **Config files**: Base (appsettings.json) + Development (appsettings.Development.json) overrides
+8. **Bot modes**: Polling (local dev) vs Webhook (prod with HTTPS)
+9. **Database**: PostgreSQL via Docker, EF Core 9.0 with owned type migrations
+10. **Auth**: JWT Bearer with Telegram-based login
+11. **Survey codes**: 6-char alphanumeric (Base36 via SurveyCodeGenerator)
+12. **File paths**: Always use absolute paths (e.g., C:\Users\User\Desktop\SurveyBot\...)
+13. **Documentation**: Centralized in `documentation/` + layer-specific CLAUDE.md files
 
 **Architectural Highlights v1.5.0**:
 - **7 Entities**: User, Survey, Question, QuestionOption, Response, Answer, MediaFile (all with private setters + factory methods)
@@ -873,4 +889,4 @@ documentation/
 
 ---
 
-**Last Updated**: 2025-12-02 | **Version**: 1.6.2 | **Target Framework**: .NET 8.0
+**Last Updated**: 2025-12-29 | **Version**: 1.6.3 | **Target Framework**: .NET 8.0

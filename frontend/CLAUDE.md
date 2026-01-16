@@ -5,7 +5,7 @@
 **Layer**: Presentation Layer (React SPA)
 **Framework**: React 19.2.0 + TypeScript 5.9.3 + Vite 7.2.2
 **UI Library**: Material-UI 6.5.0
-**Last Updated**: 2025-11-28
+**Last Updated**: 2025-12-29
 
 ---
 
@@ -23,6 +23,25 @@ The SurveyBot Frontend is a React-based Single Page Application (SPA) providing 
 ---
 
 ## Recent Changes & Bug Fixes
+
+### v1.6.3 - Include in Statistics Feature (2025-12-29)
+
+**Feature**: Added "Display in statistics" checkbox to question editor, allowing survey creators to control which questions appear in the statistics dashboard.
+
+**Files Changed**:
+- `src/types/index.ts` - Added `includeInStatistics` property to Question, QuestionDraft, CreateQuestionDto, UpdateQuestionDto, CreateQuestionWithFlowDto interfaces
+- `src/schemas/questionSchemas.ts` - Added `includeInStatistics` field to baseQuestionSchema, questionDraftSchema, questionEditorFormSchema (default: true)
+- `src/components/SurveyBuilder/QuestionEditor.tsx` - Added Switch toggle after "Required question"
+- `src/components/SurveyBuilder/ReviewStep.tsx` - Updated DTO transformations to include `includeInStatistics`
+- `src/components/SurveyBuilder/QuestionCard.tsx` - Added "Not in stats" indicator chip
+
+**UI Location**: The checkbox appears in the QuestionEditor dialog, directly below the "Required question" toggle.
+
+**Default Behavior**: All questions are included in statistics by default (checked). Unchecking will exclude the question from the statistics dashboard while still collecting responses.
+
+**Backend Requirement**: Requires SurveyBot.API v1.6.3+ with `IncludeInStatistics` property support.
+
+---
 
 ### v1.5.1 - Survey Publish Validation Fix (2025-11-28)
 
@@ -1102,6 +1121,6 @@ For comprehensive project documentation, see the **centralized documentation fol
 
 **End of Frontend Documentation**
 
-**Last Updated**: 2025-11-28 | **Version**: 1.5.1
+**Last Updated**: 2025-12-29 | **Version**: 1.6.3
 
 [← Back to Main Documentation](../CLAUDE.md)

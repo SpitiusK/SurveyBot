@@ -73,6 +73,13 @@ public class QuestionConfiguration : IEntityTypeConfiguration<Question>
             .IsRequired()
             .HasDefaultValue(true);
 
+        // IncludeInStatistics
+        builder.Property(q => q.IncludeInStatistics)
+            .HasColumnName("include_in_statistics")
+            .IsRequired()
+            .HasDefaultValue(true)
+            .HasComment("Whether to include this question in statistics calculations");
+
         // OptionsJson - stored as JSONB in PostgreSQL
         builder.Property(q => q.OptionsJson)
             .HasColumnName("options_json")

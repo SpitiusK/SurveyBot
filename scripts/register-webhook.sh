@@ -48,6 +48,16 @@ get_ngrok_url() {
         sed 's/"public_url":"//'
 }
 
+# Function to get ngrok tunnel URL for the frontend
+get_frontend_url() {
+    # Query ngrok API for the specific "frontend" tunnel
+    # The tunnel name is "frontend" as defined in ngrok.yml
+    curl -s "$NGROK_API_URL/api/tunnels/frontend" | \
+        grep -o '"public_url":"https://[^"]*' | \
+        head -1 | \
+        sed 's/"public_url":"//'
+}
+
 # Wait for ngrok to be ready
 echo "Waiting for ngrok to start..."
 RETRIES=0
@@ -120,14 +130,21 @@ if echo "$REGISTER_RESPONSE" | grep -q '"ok":true'; then
     echo "Your bot is now configured to receive updates at:"
     echo "  $WEBHOOK_URL"
     echo ""
-    echo "Frontend (if ngrok tunnel enabled):"
-    # Try to get frontend URL
-    FRONTEND_URL=$(curl -s "$NGROK_API_URL/api/tunnels" | \
-        grep -o '"public_url":"https://[^"]*' | \
-        grep "frontend" | \
-        head -1 | \
-        sed 's/"public_url":"//' || echo "Not available")
-    echo "  $FRONTEND_URL"
+
+    # Get frontend URL using the dedicated function
+    FRONTEND_URL=$(get_frontend_url 2>/dev/null || echo "")
+    if [ -z "$FRONTEND_URL" ] || [ "$FRONTEND_URL" = "null" ]; then
+        FRONTEND_URL="Not available (tunnel may not be running)"
+    fi
+
+    echo "============================================"
+    echo "Access URLs"
+    echo "============================================"
+    echo "  API (Webhook):  $NGROK_URL"
+    echo "  Frontend:       $FRONTEND_URL"
+    echo ""
+    echo "To access the admin panel, open the Frontend URL in your browser."
+    echo "============================================"
     echo ""
 else
     echo ""
@@ -140,4 +157,5 @@ fi
 
 # Keep container running to allow viewing logs
 echo "Webhook registration complete. Container will exit now."
-echo "To view ngrok URLs, run: docker-compose logs ngrok"
+echo "To view ngrok URLs anytime, run: docker-compose logs webhook-registrar"
+echo "Or open ngrok dashboard: http://localhost:4040"
